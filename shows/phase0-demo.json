@@ -1,0 +1,55 @@
+{
+  "contractVersion": 1,
+  "showId": "phase0-demo",
+  "name": "Phase 0 demo (as data)",
+  "assets": ["ambient.wav", "whisper.wav", "chime.wav"],
+  "machine": {
+    "id": "phase0",
+    "initial": "lobby",
+    "states": {
+      "lobby": {
+        "entry": [
+          { "type": "output", "command": "stopAudio", "params": { "fadeMs": 500 } },
+          { "type": "output", "command": "showPage",
+            "params": { "page": "waiting", "props": { "title": "Lobby", "subtitle": "Waiting to begin" } } }
+        ],
+        "on": { "START": "act1" }
+      },
+      "act1": {
+        "entry": [
+          { "type": "output", "command": "playAudio",
+            "params": { "assetId": "ambient.wav", "loop": true, "gain": 0.5 }, "sync": "scheduled" },
+          { "type": "output", "command": "showPage",
+            "params": { "page": "audioPlayer", "props": { "title": "Act 1", "subtitle": "ambient bed" } } }
+        ],
+        "on": { "NEXT": "act2", "RESET": "lobby" }
+      },
+      "act2": {
+        "entry": [
+          { "type": "output", "command": "playAudio",
+            "params": { "assetId": "whisper.wav", "gain": 0.9 }, "sync": "scheduled" },
+          { "type": "output", "command": "showPage",
+            "params": { "page": "audioPlayer", "props": { "title": "Act 2", "subtitle": "the whisper" } } }
+        ],
+        "on": { "NEXT": "finale", "BACK": "act1", "RESET": "lobby" }
+      },
+      "finale": {
+        "entry": [
+          { "type": "output", "command": "stopAudio", "params": { "fadeMs": 500 } },
+          { "type": "output", "command": "playAudio", "params": { "assetId": "chime.wav" }, "sync": "scheduled" },
+          { "type": "output", "command": "showPage",
+            "params": { "page": "text", "props": { "title": "Finale" } } }
+        ],
+        "on": { "NEXT": "ended", "BACK": "act2", "RESET": "lobby" }
+      },
+      "ended": {
+        "entry": [
+          { "type": "output", "command": "stopAudio", "params": {} },
+          { "type": "output", "command": "showPage",
+            "params": { "page": "waiting", "props": { "title": "Show ended" } } }
+        ],
+        "on": { "RESET": "lobby" }
+      }
+    }
+  }
+}

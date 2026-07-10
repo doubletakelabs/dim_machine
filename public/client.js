@@ -1,38 +1,43 @@
-// DIM Machine — Phase 0 phone cue player.
-// Responsibilities (spec §5.3): clock sync, asset preload, scheduled cue
-// execution via Web Audio, telemetry, snapshot-based resume on reconnect.
+// DIM Machine — Phase 1 phone cue player.
+// Clock sync, asset preload (audio + video), scheduled cue execution,
+// interactive pages (pages.js), input promotion, snapshot resume.
 'use strict';
 
 const $ = (id) => document.getElementById(id);
 
+// Shared surface for pages.js: input emission + display-variable store.
+window.DIM = {
+  vars: {},
+  emit(type, payload) {
+    sendMsg({ type: 'input', event: { type, payload: payload ?? {} } });
+  },
+};
+
 // ---------------------------------------------------------------------------
-// Session token: localStorage + cookie (spec §7.1 belt-and-suspenders)
+// Session token (spec §7.1)
 // ---------------------------------------------------------------------------
+// `?u=<n>` namespaces the token so multiple tabs on one browser act as
+// separate phones (local testing only; real devices don't need it).
+const TOKEN_KEY = 'dim.token' + (new URLSearchParams(location.search).get('u') ?? '');
 function getToken() {
-  const ls = localStorage.getItem('dim.token');
+  const ls = localStorage.getItem(TOKEN_KEY);
   if (ls) return ls;
-  const m = document.cookie.match(/(?:^|;\s*)dim\.token=([^;]+)/);
+  const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${TOKEN_KEY}=([^;]+)`));
   return m ? m[1] : null;
 }
 function storeToken(t) {
-  localStorage.setItem('dim.token', t);
-  document.cookie = `dim.token=${t}; max-age=43200; path=/; samesite=lax`;
+  localStorage.setItem(TOKEN_KEY, t);
+  document.cookie = `${TOKEN_KEY}=${t}; max-age=43200; path=/; samesite=lax`;
 }
 
 // ---------------------------------------------------------------------------
-// Clock sync: NTP-style over the WebSocket. Keep the lowest-RTT samples,
-// take the median offset, smooth changes.
+// Clock sync (NTP-style, lowest-RTT median, smoothed)
 // ---------------------------------------------------------------------------
 const clock = {
-  samples: [],      // { offset, rtt }
-  offset: 0,        // serverTime ≈ Date.now() + offset
-  rtt: 0,
-  jitter: 0,
-  synced: false,
+  samples: [], offset: 0, rtt: 0, jitter: 0, synced: false,
   addSample(t0, server, t3) {
     const rtt = t3 - t0;
-    const offset = server + rtt / 2 - t3;
-    this.samples.push({ offset, rtt });
+    this.samples.push({ offset: server + rtt / 2 - t3, rtt });
     if (this.samples.length > 40) this.samples.shift();
     const best = [...this.samples].sort((a, b) => a.rtt - b.rtt)
       .slice(0, Math.max(3, Math.floor(this.samples.length / 2)));
@@ -49,33 +54,44 @@ const clock = {
 };
 
 // ---------------------------------------------------------------------------
-// Audio: preload + decode all assets; schedule against the AudioContext clock.
+// Assets: audio decoded to buffers, video fetched to blob URLs
 // ---------------------------------------------------------------------------
 let ctx = null;
-const buffers = new Map();   // assetId → AudioBuffer
-const playing = new Map();   // assetId → { source, gainNode }
+const audioBuffers = new Map();
+const videoBlobs = new Map();
+const playing = new Map(); // assetId → { source, gainNode }
 let joined = false;
+let assetList = [];
+
+const isVideoAsset = (id) => /\.(mp4|webm|mov|m4v)$/i.test(id);
 
 async function preload(assets) {
+  const missing = assets.filter((id) =>
+    isVideoAsset(id) ? !videoBlobs.has(id) : !audioBuffers.has(id));
+  if (!missing.length) return;
   $('loading').style.display = 'block';
-  await Promise.all(assets.map(async (id) => {
-    if (buffers.has(id)) return;
-    const res = await fetch(`assets/${id}`);
-    buffers.set(id, await ctx.decodeAudioData(await res.arrayBuffer()));
+  await Promise.all(missing.map(async (id) => {
+    try {
+      const res = await fetch(`assets/${id}`);
+      if (!res.ok) throw new Error(res.status);
+      if (isVideoAsset(id)) videoBlobs.set(id, URL.createObjectURL(await res.blob()));
+      else audioBuffers.set(id, await ctx.decodeAudioData(await res.arrayBuffer()));
+    } catch (e) { console.warn('asset failed:', id, e); }
   }));
   $('loading').style.display = 'none';
 }
 
-// Map a server timestamp to an AudioContext time.
 function ctxTimeFor(serverTs) {
-  const deltaMs = clock.toLocal(serverTs) - Date.now();
-  return ctx.currentTime + deltaMs / 1000;
+  return ctx.currentTime + (clock.toLocal(serverTs) - Date.now()) / 1000;
 }
 
+// ---------------------------------------------------------------------------
+// Cue execution
+// ---------------------------------------------------------------------------
 function playAudio(cue, { seekIntoLoop = false } = {}) {
-  const buffer = buffers.get(cue.assetId);
+  const buffer = audioBuffers.get(cue.assetId);
   if (!buffer || !ctx) return;
-  stopAudio(cue.assetId, 0); // one source per asset
+  stopAudio(cue.assetId, 0);
   const source = ctx.createBufferSource();
   source.buffer = buffer;
   source.loop = !!cue.loop;
@@ -89,13 +105,11 @@ function playAudio(cue, { seekIntoLoop = false } = {}) {
     source.start(Math.max(when, ctx.currentTime));
     reportCueAt(cue, when);
   } else if (cue.loop && seekIntoLoop) {
-    // Join-in-progress (spec §7.2.4): land where every other device is.
-    const elapsed = ((nowServer - cue.startAt) / 1000) % buffer.duration;
-    source.start(ctx.currentTime, elapsed);
-  } else if (!cue.loop && nowServer - cue.startAt < 500) {
-    source.start(); // marginally late one-shot: play immediately
+    source.start(ctx.currentTime, ((nowServer - cue.startAt) / 1000) % buffer.duration);
+  } else if (nowServer - cue.startAt < 500) {
+    source.start();
   } else {
-    return; // stale — skip (fallback: skip)
+    return; // stale one-shot: skip
   }
   playing.set(cue.assetId, { source, gainNode });
 }
@@ -106,7 +120,7 @@ function stopAudio(assetId, fadeMs = 0) {
     const p = playing.get(id);
     if (!p) continue;
     playing.delete(id);
-    if (fadeMs > 0) {
+    if (fadeMs > 0 && ctx) {
       p.gainNode.gain.setTargetAtTime(0, ctx.currentTime, fadeMs / 3000);
       setTimeout(() => { try { p.source.stop(); } catch {} }, fadeMs + 100);
     } else {
@@ -115,58 +129,116 @@ function stopAudio(assetId, fadeMs = 0) {
   }
 }
 
-// Report actual-vs-scheduled start so the operator can see drift (spec §6.6).
-// For Web Audio the schedule is sample-accurate; the meaningful residual is
-// how far the AudioContext-mapped start landed from the target wall time.
+function playVideo(cue, { joinInProgress = false } = {}) {
+  const src = videoBlobs.get(cue.assetId);
+  if (!src) return;
+  const overlay = $('videoOverlay');
+  const video = overlay.querySelector('video');
+  video.src = src;
+  video.loop = !!cue.loop;
+  overlay.style.display = 'flex';
+  const begin = () => {
+    if (joinInProgress && video.duration) {
+      const elapsed = (clock.serverNow() - cue.startAt) / 1000;
+      video.currentTime = cue.loop ? elapsed % video.duration : Math.min(elapsed, video.duration);
+    }
+    video.play().catch((e) => console.warn('video play failed', e));
+  };
+  const delay = clock.toLocal(cue.startAt) - Date.now();
+  if (delay > 20) setTimeout(begin, delay);
+  else begin();
+  video.onended = cue.loop ? null : () => {
+    hideVideo();
+    window.DIM.emit('video.ended', { assetId: cue.assetId });
+  };
+}
+
+function hideVideo() {
+  const overlay = $('videoOverlay');
+  const video = overlay.querySelector('video');
+  video.pause();
+  video.removeAttribute('src');
+  overlay.style.display = 'none';
+}
+
+function showPage(cue) {
+  hideVideo();
+  currentPage = { page: cue.page, props: cue.props ?? {} };
+  window.DIM_PAGES.render($('page'), currentPage.page, currentPage.props);
+}
+let currentPage = null;
+
+function setVar(key, value) {
+  window.DIM.vars[key] = value;
+  if (currentPage) window.DIM_PAGES.render($('page'), currentPage.page, currentPage.props);
+}
+
+function haptic(pattern) {
+  try { navigator.vibrate?.(pattern); } catch {}
+}
+
 function reportCueAt(cue, ctxWhen) {
   const targetLocal = clock.toLocal(cue.startAt);
-  const checkDelay = Math.max(0, targetLocal - Date.now());
   setTimeout(() => {
     const actualLocal = Date.now() + (ctxWhen - ctx.currentTime) * 1000;
     const drift = actualLocal - targetLocal;
     $('drift').textContent = `${drift.toFixed(1)}ms`;
     sendMsg({ type: 'cueReport', cueId: cue.cueId, targetAt: cue.startAt, actualAt: cue.startAt + drift });
-  }, checkDelay + 50);
+  }, Math.max(0, targetLocal - Date.now()) + 50);
 }
 
-// Visual flash at startAt, driven by a rAF loop on the corrected clock.
 function scheduleFlash(cue) {
   const el = $('flash');
-  function tick() {
+  (function tick() {
     const remaining = clock.toLocal(cue.startAt) - Date.now();
-    if (remaining > 0) { requestAnimationFrame(tick); return; }
-    if (remaining < -500) return; // stale
+    if (remaining > 0) return requestAnimationFrame(tick);
+    if (remaining < -500) return;
     el.style.transition = 'none';
     el.style.opacity = '1';
-    const actual = Date.now();
-    sendMsg({ type: 'cueReport', cueId: cue.cueId, targetAt: cue.startAt, actualAt: actual + clock.offset });
-    setTimeout(() => {
-      el.style.transition = 'opacity 400ms';
-      el.style.opacity = '0';
-    }, 120);
-  }
-  requestAnimationFrame(tick);
+    sendMsg({ type: 'cueReport', cueId: cue.cueId, targetAt: cue.startAt, actualAt: Date.now() + clock.offset });
+    setTimeout(() => { el.style.transition = 'opacity 400ms'; el.style.opacity = '0'; }, 120);
+  })();
 }
 
 function runCue(cue, opts = {}) {
   switch (cue.kind) {
     case 'audio': playAudio(cue, opts); break;
     case 'stopAudio': stopAudio(cue.assetId ?? '*', cue.fadeMs ?? 0); break;
+    case 'video': playVideo(cue, { joinInProgress: !!opts.seekIntoLoop }); break;
+    case 'page': showPage(cue); break;
+    case 'haptic': haptic(cue.pattern ?? [200]); break;
+    case 'setVar': setVar(cue.key, cue.value); break;
     case 'flash': scheduleFlash(cue); break;
     case 'synctest': scheduleFlash(cue); playAudio({ ...cue, kind: 'audio', assetId: 'click.wav' }); break;
   }
 }
 
 // ---------------------------------------------------------------------------
-// WebSocket with reconnect + snapshot resync
+// Shake detection (throttled; iOS needs permission, requested on Join)
+// ---------------------------------------------------------------------------
+let lastShake = 0;
+function enableShake() {
+  window.addEventListener('devicemotion', (e) => {
+    const a = e.accelerationIncludingGravity;
+    if (!a) return;
+    const mag = Math.hypot(a.x ?? 0, a.y ?? 0, a.z ?? 0);
+    if (mag > 25 && Date.now() - lastShake > 1000) {
+      lastShake = Date.now();
+      window.DIM.emit('shake');
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// WebSocket + snapshot resync
 // ---------------------------------------------------------------------------
 let ws = null;
 let reconnectDelay = 500;
 let pingTimer = null;
+let pendingSnapshot = null;
+let lastState = null;
 
-function sendMsg(obj) {
-  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
-}
+function sendMsg(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -176,7 +248,6 @@ function connect() {
     reconnectDelay = 500;
     setConn(true);
     sendMsg({ type: 'hello', token: getToken() });
-    // Clock sync: burst of 8 pings, then one every 4 s.
     clearInterval(pingTimer);
     let burst = 8;
     const ping = () => sendMsg({ type: 'ping', t0: Date.now() });
@@ -190,18 +261,22 @@ function connect() {
       case 'welcome':
         storeToken(msg.token);
         $('label').textContent = msg.label;
-        window.dimAssets = msg.assets;
+        assetList = msg.assets ?? [];
         applySnapshot(msg.snapshot);
+        break;
+      case 'assets':
+        assetList = msg.assets ?? [];
+        if (joined) await preload(assetList);
         break;
       case 'pong':
         clock.addSample(msg.t0, msg.server, Date.now());
         $('offset').textContent = `${clock.offset.toFixed(1)}ms`;
         $('rtt').textContent = `${clock.rtt.toFixed(0)}ms`;
-        $('jitter').textContent = `${clock.jitter.toFixed(1)}ms`;
         sendMsg({ type: 'telemetry', offset: Math.round(clock.offset * 10) / 10, rtt: Math.round(clock.rtt), jitter: Math.round(clock.jitter * 10) / 10 });
         break;
       case 'state':
-        setStateName(msg.state);
+        lastState = msg.state;
+        $('stateName').textContent = msg.state ?? '';
         break;
       case 'cue':
         if (joined) runCue(msg.cue);
@@ -218,18 +293,18 @@ function connect() {
   ws.onerror = () => ws.close();
 }
 
-let pendingSnapshot = null;
 async function applySnapshot(snap) {
-  setStateName(snap.state);
+  lastState = snap.state;
+  $('stateName').textContent = snap.state ?? '';
   if (!joined) { pendingSnapshot = snap; return; }
-  await preload(window.dimAssets ?? []);
-  for (const cue of snap.cues) runCue(cue, { seekIntoLoop: true });
+  await preload(assetList);
+  restoreFromSnapshot(snap);
 }
 
-let lastState = null;
-function setStateName(state) {
-  lastState = state;
-  $('stateName').textContent = joined ? state : 'DIM MACHINE';
+function restoreFromSnapshot(snap) {
+  Object.assign(window.DIM.vars, snap.displayVars ?? {});
+  if (snap.page) showPage({ kind: 'page', ...snap.page });
+  for (const cue of snap.cues ?? []) runCue(cue, { seekIntoLoop: true });
 }
 
 function setConn(ok) {
@@ -238,20 +313,25 @@ function setConn(ok) {
 }
 
 // ---------------------------------------------------------------------------
-// Join: the user gesture that unlocks audio (iOS requirement) + preload
+// Join: user gesture unlocks audio + motion permission, then preload
 // ---------------------------------------------------------------------------
 $('join').addEventListener('click', async () => {
   $('join').disabled = true;
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   await ctx.resume();
-  await preload(window.dimAssets ?? []);
+  try {
+    if (typeof DeviceMotionEvent?.requestPermission === 'function')
+      await DeviceMotionEvent.requestPermission();
+  } catch {}
+  enableShake();
+  await preload(assetList);
   joined = true;
-  $('join').style.display = 'none';
-  if (lastState) setStateName(lastState);
+  $('joinScreen').style.display = 'none';
+  window.DIM_PAGES.render($('page'), 'waiting', { title: 'Waiting for the show…' });
   if (pendingSnapshot) {
     const snap = pendingSnapshot;
     pendingSnapshot = null;
-    for (const cue of snap.cues) runCue(cue, { seekIntoLoop: true });
+    restoreFromSnapshot(snap);
   }
 });
 

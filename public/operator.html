@@ -6,47 +6,60 @@
   <title>DIM Operator</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, system-ui, sans-serif; background: #101018; color: #e8e8f0; padding: 20px; }
-    h1 { font-size: 18px; margin-bottom: 4px; }
+    body { font-family: -apple-system, system-ui, sans-serif; background: #101018; color: #e8e8f0; padding: 20px; max-width: 1100px; margin: 0 auto; }
+    h1 { font-size: 18px; margin-bottom: 12px; }
     h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #8888a0; margin: 22px 0 8px; }
-    #showState { font-size: 26px; font-weight: 700; text-transform: uppercase; color: #6c5ce7; }
     button {
       background: #23233a; color: #e8e8f0; border: 1px solid #34345a; border-radius: 8px;
       padding: 9px 16px; font-size: 14px; margin: 3px; cursor: pointer;
     }
     button:hover { background: #2e2e4d; }
     button.primary { background: #6c5ce7; border-color: #6c5ce7; }
+    button.danger { background: #3a1e26; border-color: #7a2e3d; }
     table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
     th, td { text-align: left; padding: 6px 12px 6px 0; border-bottom: 1px solid #1e1e2e; }
     th { color: #8888a0; font-weight: 500; }
     .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #e74c3c; margin-right: 6px; }
     .dot.ok { background: #2ecc71; }
-    #log { background: #0b0b12; border: 1px solid #1e1e2e; border-radius: 8px; padding: 10px; height: 180px; overflow-y: auto; font: 12px/1.5 ui-monospace, monospace; color: #9a9ab0; }
-    select { background: #23233a; color: #e8e8f0; border: 1px solid #34345a; border-radius: 8px; padding: 8px; font-size: 14px; }
-    .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    #log { background: #0b0b12; border: 1px solid #1e1e2e; border-radius: 8px; padding: 10px; height: 200px; overflow-y: auto; font: 12px/1.5 ui-monospace, monospace; color: #9a9ab0; }
+    select, input[type=text] { background: #23233a; color: #e8e8f0; border: 1px solid #34345a; border-radius: 8px; padding: 8px; font-size: 14px; }
+    .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
     .warn { color: #f39c12; }
+    .pill { background: #23233a; border-radius: 999px; padding: 4px 12px; font-size: 12px; color: #b8b8cc; }
+    .pill b { color: #6c5ce7; }
+    .state { color: #6c5ce7; font-weight: 600; }
   </style>
 </head>
 <body>
   <h1>DIM Machine — Operator</h1>
-  <div>Show state: <span id="showState">–</span></div>
 
-  <h2>Show machine</h2>
-  <div id="eventButtons" class="row"></div>
-
-  <h2>Manual cues</h2>
+  <h2>Show</h2>
   <div class="row">
-    <select id="target"><option value="all">All phones</option></select>
+    <select id="showFile"></select>
+    <button onclick="send({type:'loadShow', file: $('showFile').value})">Load</button>
+    <button class="primary" id="startBtn" onclick="send({type:'startShow'})">▶ Start</button>
+    <button class="danger" onclick="send({type:'stopShow'})">■ Stop</button>
+    <span class="pill" id="showInfo">no show loaded</span>
+    <span class="pill" id="globalsInfo" style="display:none"></span>
+  </div>
+
+  <h2>Events → <select id="target" style="font-size:13px"><option value="all">All phones</option></select></h2>
+  <div id="eventButtons" class="row"></div>
+  <div class="row">
+    <input type="text" id="customEvent" placeholder="custom event name" />
+    <button onclick="if($('customEvent').value) send({type:'sendEvent', event:$('customEvent').value, target:$('target').value})">Send</button>
+  </div>
+
+  <h2>Test cues</h2>
+  <div class="row">
     <button class="primary" onclick="pushCue({kind:'synctest', leadTimeMs:2000})">⚡ Sync test (flash + click)</button>
     <button onclick="pushCue({kind:'audio', assetId:'chime.wav', leadTimeMs:2000})">Chime</button>
-    <button onclick="pushCue({kind:'audio', assetId:'whisper.wav', leadTimeMs:2000})">Whisper</button>
-    <button onclick="pushCue({kind:'audio', assetId:'ambient.wav', loop:true, gain:0.5, leadTimeMs:2000})">Ambient loop</button>
     <button onclick="pushCue({kind:'stopAudio', assetId:'*', fadeMs:800, leadTimeMs:0})">■ Stop all audio</button>
   </div>
 
   <h2>Devices</h2>
   <table>
-    <thead><tr><th></th><th>Device</th><th>Offset</th><th>RTT</th><th>Jitter</th><th>Last cue drift</th><th>Status</th></tr></thead>
+    <thead><tr><th></th><th>Device</th><th>State</th><th>Page</th><th>Role</th><th>Offset</th><th>RTT</th><th>Drift</th><th>Status</th></tr></thead>
     <tbody id="devices"></tbody>
   </table>
 
@@ -56,9 +69,11 @@
   <script>
     const $ = (id) => document.getElementById(id);
     let ws;
+    let roles = [];
 
     function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
     function pushCue(cue) { send({ type: 'pushCue', cue, target: $('target').value }); }
+    function setRole(token, role) { send({ type: 'setRole', token, role }); }
 
     function connect() {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -72,42 +87,65 @@
           const line = document.createElement('div');
           line.textContent = `${new Date(msg.at).toLocaleTimeString()}  ${msg.line}`;
           $('log').appendChild(line);
+          while ($('log').childElementCount > 400) $('log').firstChild.remove();
           $('log').scrollTop = $('log').scrollHeight;
         }
       };
     }
 
-    function renderRoster(msg) {
-      $('showState').textContent = msg.state;
+    function keepSelection(sel, options, first) {
+      const current = sel.value;
+      sel.innerHTML = (first ?? '') + options;
+      if ([...sel.options].some((o) => o.value === current)) sel.value = current;
+    }
 
-      const eb = $('eventButtons');
-      if (!eb.childElementCount) {
-        for (const ev of msg.events) {
+    let lastEventsKey = '';
+    function renderRoster(msg) {
+      // show picker + info
+      keepSelection($('showFile'), msg.shows.map((f) => `<option value="${f}">${f}</option>`).join(''));
+      const s = msg.show;
+      $('showInfo').innerHTML = s.loaded
+        ? `<b>${s.name}</b> · contract v${s.contractVersion} · ${s.running ? '<b>RUNNING</b>' : 'loaded'}`
+        : 'no show loaded';
+      const globals = Object.entries(s.globals ?? {});
+      $('globalsInfo').style.display = globals.length ? '' : 'none';
+      $('globalsInfo').innerHTML = globals.map(([k, v]) => `${k} = <b>${JSON.stringify(v)}</b>`).join(' · ');
+      roles = s.roles ?? [];
+
+      // event quick-buttons (rebuild only when the set changes)
+      const key = (s.events ?? []).join(',');
+      if (key !== lastEventsKey) {
+        lastEventsKey = key;
+        $('eventButtons').innerHTML = '';
+        for (const ev of s.events ?? []) {
           const b = document.createElement('button');
           b.textContent = ev;
-          if (ev === 'START' || ev === 'NEXT') b.className = 'primary';
-          b.onclick = () => send({ type: 'send', event: ev });
-          eb.appendChild(b);
+          b.onclick = () => send({ type: 'sendEvent', event: ev, target: $('target').value });
+          $('eventButtons').appendChild(b);
         }
       }
 
-      const sel = $('target');
-      const current = sel.value;
-      sel.innerHTML = '<option value="all">All phones</option>' +
-        msg.users.map((u) => `<option value="${u.token}">${u.label}</option>`).join('');
-      if ([...sel.options].some((o) => o.value === current)) sel.value = current;
+      keepSelection($('target'),
+        msg.users.map((u) => `<option value="${u.token}">${u.label}</option>`).join(''),
+        '<option value="all">All phones</option>');
 
       $('devices').innerHTML = msg.users.map((u) => {
         const t = u.telemetry;
-        const off = t ? `${t.offset}ms` : '–';
-        const rtt = t ? `${t.rtt}ms` : '–';
-        const jit = t ? `${t.jitter}ms` : '–';
-        const drift = t?.lastCueDriftMs != null ? `${t.lastCueDriftMs}ms` : '–';
-        const status = u.connected
-          ? 'online'
-          : `<span class="warn">offline ${(u.disconnectedForMs / 1000).toFixed(0)}s</span>`;
-        return `<tr><td><span class="dot ${u.connected ? 'ok' : ''}"></span></td>` +
-          `<td>${u.label}</td><td>${off}</td><td>${rtt}</td><td>${jit}</td><td>${drift}</td><td>${status}</td></tr>`;
+        const roleSel = `<select onchange="setRole('${u.token}', this.value)">` +
+          `<option value="">–</option>` +
+          roles.map((r) => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r}</option>`).join('') +
+          `</select>`;
+        return `<tr>
+          <td><span class="dot ${u.connected ? 'ok' : ''}"></span></td>
+          <td>${u.label}</td>
+          <td class="state">${u.state ?? '–'}</td>
+          <td>${u.page ?? '–'}</td>
+          <td>${roleSel}</td>
+          <td>${t ? t.offset + 'ms' : '–'}</td>
+          <td>${t ? t.rtt + 'ms' : '–'}</td>
+          <td>${t?.lastCueDriftMs != null ? t.lastCueDriftMs + 'ms' : '–'}</td>
+          <td>${u.connected ? 'online' : `<span class="warn">offline ${(u.disconnectedForMs / 1000).toFixed(0)}s</span>`}</td>
+        </tr>`;
       }).join('');
     }
 

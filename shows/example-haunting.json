@@ -1,0 +1,128 @@
+{
+  "contractVersion": 1,
+  "showId": "example-haunting",
+  "name": "The Haunting (contract demo)",
+  "assets": ["ambient.wav", "whisper.wav", "chime.wav"],
+  "roles": ["ghost"],
+  "globals": {
+    "enteredCount": { "type": "number", "initial": 0 },
+    "votesForExit": { "type": "number", "initial": 0 }
+  },
+  "inputBindings": {
+    "swipe.left": "revealClue"
+  },
+  "machine": {
+    "id": "haunting",
+    "initial": "waiting",
+    "on": {
+      "escape": "#haunting.finale"
+    },
+    "states": {
+      "waiting": {
+        "entry": [
+          { "type": "output", "command": "showPage",
+            "params": { "page": "waiting", "props": { "title": "The Haunting", "subtitle": "The show will begin shortly" } } }
+        ],
+        "on": { "START": "intro" }
+      },
+      "intro": {
+        "entry": [
+          { "type": "output", "command": "showPage",
+            "params": { "page": "text", "props": { "title": "It begins…", "body": "The lights dim. Something moves in the dark." } } },
+          { "type": "output", "command": "playAudio",
+            "params": { "assetId": "ambient.wav", "loop": true, "gain": 0.5 }, "sync": "scheduled" }
+        ],
+        "after": { "6000": { "target": "doorChoice" } }
+      },
+      "doorChoice": {
+        "entry": [
+          { "type": "output", "command": "showPage",
+            "params": { "page": "prompt", "props": {
+              "title": "A door creaks open.",
+              "question": "Do you step inside?",
+              "choices": [
+                { "id": "enter", "label": "Enter the room" },
+                { "id": "stay", "label": "Stay in the hall" }
+              ] } } }
+        ],
+        "on": {
+          "choice:enter": {
+            "target": "hallway",
+            "actions": [{ "type": "output", "command": "haptic", "params": { "pattern": [80, 40, 80] } }]
+          },
+          "choice:stay": "stayed"
+        }
+      },
+      "stayed": {
+        "entry": [
+          { "type": "output", "command": "showPage",
+            "params": { "page": "text", "props": {
+              "title": "You wait in the dark.",
+              "body": "${global.enteredCount} of the others have gone inside.",
+              "dismissible": true } } }
+        ],
+        "on": { "pageDismiss": "hallway" }
+      },
+      "hallway": {
+        "entry": [
+          { "type": "assign", "scope": "global", "key": "enteredCount", "value": "+1" },
+          { "type": "output", "command": "showPage",
+            "params": { "page": "gestureSurface", "props": { "hint": "swipe left to search the wall" } } }
+        ],
+        "on": {
+          "revealClue": {
+            "target": "clue",
+            "actions": [{ "type": "assign", "scope": "context", "key": "cluesFound", "value": "+1" }]
+          }
+        }
+      },
+      "clue": {
+        "entry": [
+          { "type": "output", "command": "playAudio", "params": { "assetId": "whisper.wav", "gain": 0.9 } },
+          { "type": "log", "message": "found the clue" },
+          { "type": "output", "command": "showPage",
+            "params": { "page": "text", "props": {
+              "title": "A whisper…",
+              "body": "\"Only together can you leave. Cast your vote.\"",
+              "buttons": [{ "id": "vote", "label": "Vote to escape" }] } } }
+        ],
+        "on": {
+          "button:vote": {
+            "target": "voted",
+            "actions": [{ "type": "assign", "scope": "global", "key": "votesForExit", "value": "+1" }]
+          }
+        }
+      },
+      "voted": {
+        "entry": [
+          { "type": "output", "command": "showPage",
+            "params": { "page": "text", "props": {
+              "title": "Your vote is cast.",
+              "body": "Votes to escape: ${global.votesForExit}" } } }
+        ],
+        "on": {
+          "global.changed": {
+            "guard": { "var": "global.votesForExit", "op": ">=", "value": 2 },
+            "actions": [{ "type": "sendTo", "target": "orchestrator", "event": "escape" }]
+          }
+        }
+      },
+      "finale": {
+        "entry": [
+          { "type": "output", "command": "stopAudio", "params": { "fadeMs": 800 } },
+          { "type": "output", "command": "playAudio", "params": { "assetId": "chime.wav" }, "sync": "scheduled" },
+          { "type": "output", "command": "haptic", "params": { "pattern": [100, 50, 100, 50, 300] } },
+          { "type": "output", "command": "showPage",
+            "params": { "page": "text", "props": { "title": "You escaped.", "body": "Together." } } }
+        ],
+        "after": { "10000": { "target": "end" } }
+      },
+      "end": {
+        "entry": [
+          { "type": "output", "command": "showPage",
+            "params": { "page": "waiting", "props": { "title": "Fin", "subtitle": "Thank you" } } }
+        ]
+      }
+    }
+  }
+}

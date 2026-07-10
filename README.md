@@ -1,11 +1,15 @@
-# DIM Machine — Phase 0
+# DIM Machine — Phase 1 (workshop platform)
 
-Proof of concept for the Interactive Theater Show-Control Platform
+Show-control runtime for the Interactive Theater Platform
 (spec: `Specs/Interactive Theater Platform Spec.md` in the Drive project folder).
 
-Phase 0 goal (spec §12): de-risk **clock sync + scheduled cueing** across ~5–10
-phones, with a hardcoded XState machine, a bare-bones operator panel, and just
-enough resilience to survive a page refresh.
+Phase 1 (spec §12): participant-authored **JSON statecharts drive real phones**
+— inputs (taps, swipes, choices, shake) become XState events; state actions
+become phone outputs (audio, video, pages, haptics). No location, no hardware,
+no TouchDesigner.
+
+The authoring-tool integration seam is **[CONTRACT.md](CONTRACT.md)** (I/O
+contract v1, frozen — additions only).
 
 ## Run
 
@@ -14,54 +18,65 @@ npm install
 npm start          # → http://localhost:4000
 ```
 
-- **Phones:** open `http://<machine-ip>:4000/` on each device (same WiFi), tap **Join Show**.
-  The tap is required — it's the user gesture that unlocks audio on iOS/Android.
-- **Operator:** open `http://<machine-ip>:4000/operator.html`.
+- **Phones:** `http://<machine-ip>:4000/` on each device (same WiFi) → tap **Join Show**
+  (unlocks audio + motion permission, preloads assets).
+- **Operator:** `http://<machine-ip>:4000/operator.html` → pick a show → **Load** → **▶ Start**.
+- Local multi-phone testing in one browser: add `?u=1`, `?u=2`, … to get separate sessions.
 
-Test audio (click / ambient loop / whisper / chime) is generated locally —
-regenerate with `npm run assets`.
+## Show definitions
 
-## What's implemented
+Drop `*.json` files (contract v1, see CONTRACT.md) into `shows/`. Assets they
+reference go in `public/assets/` (audio: wav/mp3…, video: mp4/webm). Included:
 
-| Spec item | Where |
-|---|---|
-| Hardcoded XState v5 show machine (`lobby → act1 → act2 → finale → ended`) | `server/machine.js` |
-| WebSocket transport + JSON protocol | `server/index.js`, `public/client.js` |
-| NTP-style clock sync (ping bursts, lowest-RTT median, smoothing) — §6.1 | `client.js` `clock` |
-| Scheduled cues: `startAt` server timestamp, 2 s default lead, Web Audio scheduling — §6.2–6.3 | `pushCue` / `playAudio` |
-| Asset preload + decode on join — §6.4 | `preload()` |
-| Late-cue policy: ≤500 ms late one-shots play immediately, older skip; loops join-in-progress (seek to `now − startAt`) — §7.2.4 | `playAudio` |
-| Session token (localStorage + cookie) → server rebinds the same user; snapshot resync on every (re)connect — §7.1, §7.2.3 | `hello` / `welcome` / `snapshotFor` |
-| Auto-reconnect with backoff | `client.js` `connect()` |
-| Manual cue panel: machine events, ad-hoc cues (all or per-phone), device telemetry (offset/RTT/jitter/cue drift), event log | `public/operator.html` |
-| Sync-skew instrumentation: **⚡ Sync test** flashes every screen + plays a click at the same `startAt`; each phone reports actual-vs-scheduled drift | `synctest` cue, `cueReport` |
+- `example-haunting.json` — exercises the whole contract: pages, choice
+  branching, input binding (`swipe.left → revealClue`), context + global
+  variables, `${global.…}` live interpolation on pages, a vote gated by a
+  guard (`votesForExit >= 2`), `sendTo` orchestrator advancing everyone,
+  scheduled audio, haptics, author `log` actions, timed (`after`) transitions.
+- `phase0-demo.json` — the Phase 0 hardcoded show, now as data.
 
-## Exit-criteria test procedure
+## Architecture
 
-1. **Sync skew ≤ 50 ms:** join 5–10 phones on venue-like WiFi, press **⚡ Sync test**.
-   Judge the flash/click alignment by eye/ear (a slow-mo phone video of the row of
-   screens gives a hard number), and check each device's reported cue drift plus
-   clock jitter in the Devices table. Local testing showed 0–2 ms drift.
-2. **Refresh recovery ≤ 2 s:** with the show in `act1` (ambient loop playing),
-   refresh a phone. It reconnects as the same user, re-taps Join (browser audio
-   gesture), and lands back in `act1` with the loop seeked to where every other
-   phone is.
+- `server/runtime.js` — **ShowRuntime**: validates a definition, spawns one
+  XState v5 actor per user, interprets the contract's action vocabulary
+  (`output` / `raise` / `sendTo` / `broadcast` / `assign` / `log`) and guards,
+  owns global variables (single owner, serialized writes — spec §3.4; writes
+  replicate as `setVar` to phones + `global.changed` into machines), and
+  produces per-user snapshots for reconnect resync.
+- `server/index.js` — WebSocket bridge: sessions (token → user, survives
+  refresh), clock-sync pongs, show loading from `shows/`, operator commands,
+  telemetry, Phase 0 sync-test cues.
+- `public/client.js` — phone cue player: NTP-style clock sync, asset preload
+  (audio buffers + video blobs), scheduled Web Audio cues with join-in-progress
+  loops, video overlay, haptics, display-variable store, snapshot resume.
+- `public/pages.js` — interactive page library (`waiting`, `blank`, `text`,
+  `prompt`, `gestureSurface`, `audioPlayer`, `videoPlayer`) emitting canonical
+  input events; drag *moves* stay page-local (contract §3), only committed
+  gestures are promoted.
+- `public/operator.html` — load/start/stop shows, per-device state/page/role,
+  event push (quick buttons harvested from the machine + custom), global
+  variable readout, telemetry, log.
 
-## Known Phase 0 limitations (deliberate)
+## Workshop-day flow
 
-- Sessions and show state are **in-memory** — a server restart resets the show
-  (clients auto-reconnect and resync to it). Event sourcing/crash recovery is Phase 2 (§10).
-- One shared show-level machine; per-user actors, roles, and JSON-loaded
-  definitions are Phase 1/2.
-- Cues already delivered to phones still fire if the show is RESET inside their
-  lead window (no cue cancellation yet).
-- Assets re-download on refresh (no service-worker cache yet — §7.2.6 is Phase 2).
-- No auth on the operator panel; anything on the LAN can drive the show.
+1. Participant exports a contract-v1 JSON from the authoring tool → drop in `shows/`.
+2. Operator: Load → Start. Late joiners enter at the machine's initial state.
+3. Phones respond to the participant's inputs/outputs live; operator can push
+   any event to one phone or all, and assign roles (used by `broadcast`).
 
-## Protocol sketch (will grow into the §5.5 contract in Phase 1)
+## Known limitations (deliberate, Phase 2 targets)
 
-Phone → server: `hello{token?}`, `ping{t0}`, `telemetry{offset,rtt,jitter}`, `cueReport{cueId,targetAt,actualAt}`
-Server → phone: `welcome{token,label,assets,snapshot}`, `pong{t0,server}`, `state{state}`, `cue{cue}`
-Cue: `{cueId, kind: audio|flash|stopAudio|synctest, assetId?, gain, loop, fadeMs, startAt}`
-Operator → server: `hello{role:'operator'}`, `send{event}`, `pushCue{cue, target:'all'|token}`
-Server → operator: `roster{users,state,events,assets}`, `log{line,at}`
+- In-memory only: server restart loses sessions and show state (event sourcing
+  + snapshots are Phase 2, spec §10).
+- One machine per user; no show-orchestrator statechart yet — `sendTo:
+  orchestrator` forwards the event to every user machine (documented in the
+  contract as Phase 1 behavior).
+- Roles are manual (operator dropdown); assignment strategies are Phase 2.
+- No auth on the operator panel; no asset cache service worker.
+- A show definition change requires re-Load + re-Start (no hot reload).
+
+## Sync testing (Phase 0 exit criteria still apply)
+
+Operator → **⚡ Sync test** flashes all screens + plays a click at the same
+`startAt`; per-device cue drift shows in the Devices table. Local measurements:
+0–2 ms. Validate on venue WiFi with real phones (target ≤ 50 ms).

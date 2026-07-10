@@ -1,149 +1,185 @@
-// DIM Machine — Phase 0 server.
-// Express serves the phone client + operator panel; ws carries the show protocol.
+// DIM Machine — Phase 1 server.
+// Loads contract-v1 show definitions (shows/*.json) into per-user XState
+// actors (ShowRuntime) and bridges phones/operator over WebSocket.
 //
-// Protocol (JSON messages):
-//   client → server: hello{token?}, ping{t0}, cueReport{cueId,targetAt,actualAt}
-//   server → client: welcome{token,userId,serverTime,assets,snapshot},
-//                    pong{t0,server}, cue{cue}, state{state}, snapshot{...}
-//   operator → server: hello{role:'operator'}, send{event}, pushCue{cue,target}
-//   server → operator: roster{users,state}, log{line}
+// Protocol:
+//   phone → server:  hello{token?}, ping{t0}, telemetry{...},
+//                    cueReport{cueId,targetAt,actualAt}, input{event:{type,payload}}
+//   server → phone:  welcome{token,label,serverTime,assets,snapshot},
+//                    pong{t0,server}, cue{cue}, state{state}, assets{assets}
+//   operator → server: hello{role:'operator'}, loadShow{file}, startShow, stopShow,
+//                      sendEvent{event,target}, setRole{token,role}, pushCue{cue,target}
+//   server → operator: roster{users,show,shows}, log{line,at}
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-import { createActor } from 'xstate';
-import { createShowMachine, STATE_CUES, OPERATOR_EVENTS } from './machine.js';
+import { dirname, join, basename } from 'node:path';
+import { ShowRuntime } from './runtime.js';
 
 const PORT = process.env.PORT || 4000;
-const ASSETS = ['click.wav', 'ambient.wav', 'whisper.wav', 'chime.wav'];
-const CUE_RETENTION_MS = 30_000; // non-loop cues stay "active" this long for late joiners
+const BASE_ASSETS = ['click.wav', 'ambient.wav', 'whisper.wav', 'chime.wav'];
+const CUE_RETENTION_MS = 30_000;
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const showsDir = join(root, 'shows');
+const assetsDir = join(root, 'public', 'assets');
+
 const app = express();
 app.use(express.static(join(root, 'public')));
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer });
 
 // ---------------------------------------------------------------------------
-// Sessions (Phase 0 resilience: token → user survives disconnect/refresh)
+// Sessions
 // ---------------------------------------------------------------------------
-const users = new Map(); // token → { userId, num, ws|null, connectedAt, disconnectedAt, telemetry }
-const operators = new Set(); // ws
+const users = new Map(); // token → { userId, num, ws, connectedAt, disconnectedAt, telemetry }
+const operators = new Set();
 let userCounter = 0;
+let loadedShowFile = null;
 
-// Active cues, kept for snapshot-on-reconnect. Loop cues stay until stopped;
-// one-shots are pruned after CUE_RETENTION_MS past startAt.
-let activeCues = []; // [{ cue, target }]
-
-function pruneCues() {
+// Operator-pushed broadcast cues (sync test etc.) kept for late resync.
+let globalCues = [];
+function pruneGlobalCues() {
   const now = Date.now();
-  activeCues = activeCues.filter(
-    (a) => a.cue.loop || now - a.cue.startAt < CUE_RETENTION_MS
-  );
+  globalCues = globalCues.filter((a) => a.cue.loop || now - a.cue.startAt < CUE_RETENTION_MS);
 }
 
 // ---------------------------------------------------------------------------
-// Show machine
+// Runtime
 // ---------------------------------------------------------------------------
-const machine = createShowMachine({
-  onStateCues: (state, cues) => {
-    for (const c of cues) pushCue(c, 'all');
+const runtime = new ShowRuntime({
+  sendCue: (token, cue) => sendToUser(token, { type: 'cue', cue }),
+  onUserState: (token, stateString) => {
+    sendToUser(token, { type: 'state', state: stateString });
+    scheduleRoster();
   },
-  onStopAll: () => {
-    activeCues = [];
-    pushCue({ kind: 'stopAudio', assetId: '*', fadeMs: 800, leadTimeMs: 0 }, 'all', { track: false });
-  },
+  log: opLog,
 });
-const show = createActor(machine);
-let currentState = 'lobby';
-show.subscribe((snap) => {
-  currentState = snap.value;
-  broadcast({ type: 'state', state: currentState }, 'phones');
-  sendRoster();
-  opLog(`state → ${currentState}`);
-});
-show.start();
 
-// ---------------------------------------------------------------------------
-// Cue dispatch
-// ---------------------------------------------------------------------------
-function pushCue(spec, target = 'all', { track = true } = {}) {
-  const cue = {
-    cueId: spec.cueId ?? randomUUID().slice(0, 8),
-    kind: spec.kind, // audio | flash | stopAudio | synctest
-    assetId: spec.assetId,
-    gain: spec.gain ?? 1,
-    loop: spec.loop ?? false,
-    fadeMs: spec.fadeMs ?? 0,
-    startAt: Date.now() + (spec.leadTimeMs ?? 2000),
-  };
-  if (cue.kind === 'stopAudio' && track) {
-    activeCues = activeCues.filter((a) => cue.assetId === '*' ? false : a.cue.assetId !== cue.assetId);
-  } else if (track && cue.kind !== 'stopAudio') {
-    pruneCues();
-    activeCues.push({ cue, target });
+function listShows() {
+  try {
+    return readdirSync(showsDir).filter((f) => f.endsWith('.json')).sort();
+  } catch { return []; }
+}
+
+function currentAssets() {
+  const showAssets = runtime.def?.assets ?? [];
+  return [...new Set([...BASE_ASSETS, ...showAssets])];
+}
+
+function loadShow(file) {
+  const path = join(showsDir, basename(file)); // basename: no path escape
+  let def;
+  try {
+    def = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (err) {
+    opLog(`load failed: ${err.message}`);
+    return;
   }
-  const msg = { type: 'cue', cue };
-  if (target === 'all') broadcast(msg, 'phones');
-  else sendToUser(target, msg);
-  opLog(`cue ${cue.kind}${cue.assetId ? ' ' + cue.assetId : ''} → ${target} @ +${spec.leadTimeMs ?? 2000}ms`);
-  return cue;
-}
-
-function snapshotFor(token) {
-  pruneCues();
-  const now = Date.now();
-  return {
-    state: currentState,
-    serverTime: now,
-    cues: activeCues
-      .filter((a) => a.target === 'all' || a.target === token)
-      .map((a) => a.cue)
-      .filter((c) => c.loop || c.startAt > now), // future one-shots + running loops
-  };
+  const { errors, warnings } = runtime.load(def);
+  for (const w of warnings) opLog(`⚠ ${w}`);
+  if (errors.length) {
+    for (const e of errors) opLog(`✗ ${e}`);
+    return;
+  }
+  loadedShowFile = basename(file);
+  for (const a of def.assets ?? [])
+    if (!existsSync(join(assetsDir, a))) opLog(`⚠ asset missing on disk: ${a}`);
+  broadcast({ type: 'assets', assets: currentAssets() }, 'phones');
+  sendRoster();
 }
 
 // ---------------------------------------------------------------------------
 // Wire helpers
 // ---------------------------------------------------------------------------
-function send(ws, obj) {
-  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
-}
+function send(ws, obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+function sendToUser(token, obj) { send(users.get(token)?.ws, obj); }
 function broadcast(obj, who) {
-  if (who === 'phones' || who === 'all')
-    for (const u of users.values()) send(u.ws, obj);
-  if (who === 'operators' || who === 'all')
-    for (const ws of operators) send(ws, obj);
-}
-function sendToUser(token, obj) {
-  const u = users.get(token);
-  if (u) send(u.ws, obj);
+  if (who === 'phones' || who === 'all') for (const u of users.values()) send(u.ws, obj);
+  if (who === 'operators' || who === 'all') for (const ws of operators) send(ws, obj);
 }
 function opLog(line) {
   broadcast({ type: 'log', line, at: Date.now() }, 'operators');
   console.log('[show]', line);
 }
 
+let rosterTimer = null;
+function scheduleRoster() { // debounce bursts of state changes
+  if (rosterTimer) return;
+  rosterTimer = setTimeout(() => { rosterTimer = null; sendRoster(); }, 60);
+}
 function sendRoster() {
-  const roster = [...users.entries()].map(([token, u]) => ({
-    token,
-    userId: u.userId,
-    label: `Phone ${u.num}`,
-    connected: !!u.ws,
-    disconnectedForMs: u.ws ? 0 : Date.now() - (u.disconnectedAt ?? Date.now()),
-    telemetry: u.telemetry ?? null,
-  }));
-  broadcast({ type: 'roster', users: roster, state: currentState, events: OPERATOR_EVENTS, assets: ASSETS }, 'operators');
+  const roster = [...users.entries()].map(([token, u]) => {
+    const ru = runtime.users.get(token);
+    return {
+      token,
+      label: `Phone ${u.num}`,
+      connected: !!u.ws,
+      disconnectedForMs: u.ws ? 0 : Date.now() - (u.disconnectedAt ?? Date.now()),
+      telemetry: u.telemetry ?? null,
+      state: ru?.stateString ?? null,
+      page: ru?.page?.page ?? null,
+      role: ru?.role ?? null,
+    };
+  });
+  broadcast({
+    type: 'roster',
+    users: roster,
+    show: { ...runtime.rosterInfo(), file: loadedShowFile, globals: runtime.globals },
+    shows: listShows(),
+  }, 'operators');
 }
 setInterval(sendRoster, 2000);
+
+function snapshotFor(token) {
+  pruneGlobalCues();
+  const now = Date.now();
+  const rs = runtime.getUserSnapshot(token);
+  return {
+    state: rs?.state ?? null,
+    page: rs?.page ?? null,
+    displayVars: rs?.displayVars ?? {},
+    serverTime: now,
+    cues: [
+      ...globalCues.map((a) => a.cue).filter((c) => c.loop || c.startAt > now),
+      ...(rs?.cues ?? []),
+    ],
+  };
+}
+
+// Operator ad-hoc cues (sync test / test tones) — Phase 0 feature, kept.
+function pushCue(spec, target = 'all') {
+  const cue = {
+    cueId: randomUUID().slice(0, 8),
+    kind: spec.kind,
+    assetId: spec.assetId,
+    gain: spec.gain ?? 1,
+    loop: spec.loop ?? false,
+    fadeMs: spec.fadeMs ?? 0,
+    startAt: Date.now() + (spec.leadTimeMs ?? 2000),
+  };
+  if (cue.kind === 'stopAudio') {
+    globalCues = globalCues.filter((a) => cue.assetId !== '*' && a.cue.assetId !== cue.assetId);
+  } else if (target === 'all') {
+    pruneGlobalCues();
+    globalCues.push({ cue });
+  }
+  const msg = { type: 'cue', cue };
+  if (target === 'all') broadcast(msg, 'phones');
+  else sendToUser(target, msg);
+  opLog(`operator cue ${cue.kind}${cue.assetId ? ' ' + cue.assetId : ''} → ${target === 'all' ? 'all' : label(target)}`);
+}
+
+const label = (token) => `Phone ${users.get(token)?.num ?? '?'}`;
 
 // ---------------------------------------------------------------------------
 // Connections
 // ---------------------------------------------------------------------------
 wss.on('connection', (ws) => {
-  let token = null; // set for phones
+  let token = null;
   let isOperator = false;
 
   ws.on('message', (raw) => {
@@ -159,7 +195,6 @@ wss.on('connection', (ws) => {
           opLog('operator connected');
           return;
         }
-        // Phone: rebind existing session or create one
         if (msg.token && users.has(msg.token)) {
           token = msg.token;
           const u = users.get(token);
@@ -169,21 +204,17 @@ wss.on('connection', (ws) => {
         } else {
           token = randomUUID();
           users.set(token, {
-            userId: `u-${++userCounter}`,
-            num: userCounter,
-            ws,
-            connectedAt: Date.now(),
-            telemetry: null,
+            userId: `u-${++userCounter}`, num: userCounter,
+            ws, connectedAt: Date.now(), telemetry: null,
           });
+          runtime.attachUser(token); // late joiner enters at initial state
         }
-        const u = users.get(token);
         send(ws, {
           type: 'welcome',
           token,
-          userId: u.userId,
-          label: `Phone ${u.num}`,
+          label: label(token),
           serverTime: Date.now(),
-          assets: ASSETS,
+          assets: currentAssets(),
           snapshot: snapshotFor(token),
         });
         sendRoster();
@@ -191,40 +222,55 @@ wss.on('connection', (ws) => {
       }
 
       case 'ping':
-        // Clock sync: echo t0, attach server receive time.
         send(ws, { type: 'pong', t0: msg.t0, server: Date.now() });
         return;
 
       case 'telemetry': {
-        if (!token) return;
         const u = users.get(token);
         if (u) u.telemetry = { offset: msg.offset, rtt: msg.rtt, jitter: msg.jitter, at: Date.now() };
         return;
       }
 
       case 'cueReport': {
-        if (!token) return;
         const u = users.get(token);
         const drift = msg.actualAt - msg.targetAt;
         if (u?.telemetry) u.telemetry.lastCueDriftMs = Math.round(drift * 10) / 10;
-        opLog(`Phone ${u?.num ?? '?'} cue ${msg.cueId}: drift ${drift.toFixed(1)}ms`);
+        return;
+      }
+
+      case 'input': {
+        if (!token || !msg.event?.type) return;
+        runtime.handleInput(token, msg.event.type, msg.event.payload);
         return;
       }
 
       // --- operator commands ---
-      case 'send': {
+      case 'loadShow': if (isOperator) loadShow(msg.file); return;
+      case 'startShow':
         if (!isOperator) return;
-        if (OPERATOR_EVENTS.includes(msg.event)) {
-          opLog(`operator event: ${msg.event}`);
-          show.send({ type: msg.event });
-        }
+        runtime.start([...users.keys()]);
+        sendRoster();
         return;
-      }
-      case 'pushCue': {
+      case 'stopShow':
         if (!isOperator) return;
-        pushCue(msg.cue, msg.target ?? 'all');
+        runtime.stop();
+        globalCues = [];
+        sendRoster();
         return;
-      }
+      case 'sendEvent':
+        if (!isOperator || !msg.event) return;
+        opLog(`operator event: ${msg.event} → ${msg.target === 'all' || !msg.target ? 'all' : label(msg.target)}`);
+        runtime.sendEvent(msg.target ?? 'all', msg.event, msg.payload);
+        return;
+      case 'setRole':
+        if (!isOperator) return;
+        runtime.setRole(msg.token, msg.role);
+        opLog(`${label(msg.token)} role → ${msg.role || '(none)'}`);
+        sendRoster();
+        return;
+      case 'pushCue':
+        if (isOperator) pushCue(msg.cue, msg.target ?? 'all');
+        return;
     }
   });
 
@@ -240,7 +286,8 @@ wss.on('connection', (ws) => {
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`DIM Machine Phase 0`);
+  console.log('DIM Machine Phase 1');
   console.log(`  phone client:   http://localhost:${PORT}/`);
   console.log(`  operator panel: http://localhost:${PORT}/operator.html`);
+  console.log(`  shows dir:      ${showsDir} (${listShows().join(', ') || 'empty'})`);
 });
