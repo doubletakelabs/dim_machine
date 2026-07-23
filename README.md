@@ -20,44 +20,47 @@ npm start          # → http://localhost:4000
 
 - **Phones:** `http://<machine-ip>:4000/` on each device (same WiFi) → tap **Join Show**
   (unlocks audio + motion permission, preloads assets).
+- **Custom pages dev kit:** **`custom-pages-kit/`** — standalone folder to share with collaborators (`npm install && npm start`). Guide: **`custom-pages-kit/CUSTOM-PAGES.md`**
 - **Operator:** `http://<machine-ip>:4000/operator.html` → pick a show → **Load** → **▶ Start**.
+- **Author:** `http://<machine-ip>:4000/author.html` → inspect/edit show JSON, rooms, input scopes.
 - Local multi-phone testing in one browser: add `?u=1`, `?u=2`, … to get separate sessions.
 
 ## Show definitions
 
-Drop `*.json` files (contract v1, see CONTRACT.md) into `shows/`. Assets they
-reference go in `public/assets/` (audio: wav/mp3…, video: mp4/webm). Included:
+Drop `*.json` files into `shows/`. Assets they reference go in `public/assets/`.
 
-- `example-haunting.json` — exercises the whole contract: pages, choice
-  branching, input binding (`swipe.left → revealClue`), context + global
-  variables, `${global.…}` live interpolation on pages, a vote gated by a
-  guard (`votesForExit >= 2`), `sendTo` orchestrator advancing everyone,
-  scheduled audio, haptics, author `log` actions, timed (`after`) transitions.
-- `phase0-demo.json` — the Phase 0 hardcoded show, now as data.
+**Contract v1** (flat machine per user): `example-haunting.json`, `phase0-demo.json`
+
+**Contract v2** (room actors — shared scene per physical room): `room-demo.json`
+
+See [CONTRACT.md](CONTRACT.md). Room-mode shows use `rooms` instead of a top-level `machine`.
 
 ## Architecture
 
-- `server/runtime.js` — **ShowRuntime**: validates a definition, spawns one
-  XState v5 actor per user, interprets the contract's action vocabulary
-  (`output` / `raise` / `sendTo` / `broadcast` / `assign` / `log`) and guards,
-  owns global variables (single owner, serialized writes — spec §3.4; writes
-  replicate as `setVar` to phones + `global.changed` into machines), and
-  produces per-user snapshots for reconnect resync.
-- `server/index.js` — WebSocket bridge: sessions (token → user, survives
-  refresh), clock-sync pongs, show loading from `shows/`, operator commands,
-  telemetry, Phase 0 sync-test cues.
+- `server/runtime.js` — **ShowRuntime**: contract v1 (one XState actor per user)
+  or **v2 room mode** (one actor per room + zone membership sync). Owns globals,
+  interprets the action vocabulary, fans room outputs to all members in a zone.
+- `server/index.js` — WebSocket bridge: sessions, clock sync, `assignZone` /
+  `startRoom` operator commands, show loading from `shows/`.
 - `public/client.js` — phone cue player: NTP-style clock sync, asset preload
   (audio buffers + video blobs), scheduled Web Audio cues with join-in-progress
   loops, video overlay, haptics, display-variable store, snapshot resume.
-- `public/pages.js` — interactive page library (`waiting`, `blank`, `text`,
-  `prompt`, `gestureSurface`, `audioPlayer`, `videoPlayer`) emitting canonical
-  input events; drag *moves* stay page-local (contract §3), only committed
-  gestures are promoted.
+- `public/pages.js` + `public/page-loader.js` — built-in pages + dynamic custom page loading.
+- `public/custom-pages/` — collaborator page folders (drop-in at show time).
+  Build and test in **`custom-pages-kit/`** before drop-in.
 - `public/operator.html` — load/start/stop shows, per-device state/page/role,
   event push (quick buttons harvested from the machine + custom), global
   variable readout, telemetry, log.
 
-## Workshop-day flow
+## Room-mode test flow (`room-demo.json`)
+
+1. Load → Start on the operator panel.
+2. Join phones — they auto-enter **Lobby** as role **guest** (via `defaultRoom` / `defaultRole`).
+3. Send `BEGIN` to **Room: Lobby** → all lobby phones advance together.
+4. Reassign a phone to **Gallery** to test room transfer + late-join sync.
+5. **Move all** → Gallery to shift everyone at once (optional "from room" filter).
+
+## Workshop-day flow (contract v1)
 
 1. Participant exports a contract-v1 JSON from the authoring tool → drop in `shows/`.
 2. Operator: Load → Start. Late joiners enter at the machine's initial state.

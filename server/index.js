@@ -1,36 +1,93 @@
-// DIM Machine — Phase 1 server.
+// DIM Machine — Phase 1 server (+ contract v2 room actors).
 // Loads contract-v1 show definitions (shows/*.json) into per-user XState
 // actors (ShowRuntime) and bridges phones/operator over WebSocket.
 //
 // Protocol:
 //   phone → server:  hello{token?}, ping{t0}, telemetry{...},
-//                    cueReport{cueId,targetAt,actualAt}, input{event:{type,payload}}
+//                    cueReport{cueId,targetAt,actualAt}, input{event:{type,payload}},
+//                    relay{channel,payload,persist?}
 //   server → phone:  welcome{token,label,serverTime,assets,snapshot},
-//                    pong{t0,server}, cue{cue}, state{state}, assets{assets}
+//                    pong{t0,server}, cue{cue}, state{state}, assets{assets},
+//                    relay{channel,from,payload,at,self}, relaySync{channels}
 //   operator → server: hello{role:'operator'}, loadShow{file}, startShow, stopShow,
-//                      sendEvent{event,target}, setRole{token,role}, pushCue{cue,target}
+//                      sendEvent{event,target}, setRole{token,role}, pushCue{cue,target},
+//                      moveAllToRoom{roomId,fromRoomId?}, forceRoomState{roomId,state}, startRoom{roomId}, clearOfflinePhones
 //   server → operator: roster{users,show,shows}, log{line,at}
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, basename } from 'node:path';
-import { ShowRuntime } from './runtime.js';
+import { ShowRuntime, validateDefinition } from './runtime.js';
+import * as relay from './relay.js';
 
 const PORT = process.env.PORT || 4000;
 const BASE_ASSETS = ['click.wav', 'ambient.wav', 'whisper.wav', 'chime.wav'];
 const CUE_RETENTION_MS = 30_000;
+const OFFLINE_HIDE_MS = 60_000;
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const showsDir = join(root, 'shows');
 const assetsDir = join(root, 'public', 'assets');
 
 const app = express();
+app.use(express.json({ limit: '1mb' }));
 app.use(express.static(join(root, 'public')));
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer });
+
+function showPath(file) {
+  return join(showsDir, basename(file));
+}
+
+const customPagesDir = join(root, 'public', 'custom-pages');
+
+function listCustomPages() {
+  try {
+    return readdirSync(customPagesDir)
+      .filter((name) => !name.startsWith('_'))
+      .filter((name) => existsSync(join(customPagesDir, name, 'page.js')))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+app.get('/api/custom-pages', (_req, res) => res.json(listCustomPages()));
+
+app.get('/api/shows', (_req, res) => res.json(listShows()));
+
+app.get('/api/shows/:file', (req, res) => {
+  const file = basename(req.params.file);
+  if (!file.endsWith('.json')) return res.status(400).json({ error: 'invalid file name' });
+  try {
+    res.json(JSON.parse(readFileSync(showPath(file), 'utf8')));
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+app.post('/api/shows/validate', (req, res) => {
+  const result = validateDefinition(req.body ?? {});
+  res.json(result);
+});
+
+app.post('/api/shows/:file', (req, res) => {
+  const file = basename(req.params.file);
+  if (!file.endsWith('.json')) return res.status(400).json({ error: 'invalid file name' });
+  const def = req.body;
+  if (!def || typeof def !== 'object') return res.status(400).json({ error: 'body must be JSON object' });
+  const result = validateDefinition(def);
+  if (result.errors.length) return res.status(400).json(result);
+  try {
+    writeFileSync(showPath(file), `${JSON.stringify(def, null, 2)}\n`);
+    res.json({ ok: true, warnings: result.warnings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Sessions
@@ -55,6 +112,11 @@ const runtime = new ShowRuntime({
   onUserState: (token, stateString) => {
     sendToUser(token, { type: 'state', state: stateString });
     scheduleRoster();
+  },
+  onRoomsChanged: () => scheduleRoster(),
+  onUserZoneChange: (token, newZone, prevZone) => {
+    if (prevZone) notifyRelayPeerLeft(token, prevZone);
+    if (newZone) sendRelaySync(token, newZone);
   },
   log: opLog,
 });
@@ -112,22 +174,33 @@ function scheduleRoster() { // debounce bursts of state changes
   rosterTimer = setTimeout(() => { rosterTimer = null; sendRoster(); }, 60);
 }
 function sendRoster() {
-  const roster = [...users.entries()].map(([token, u]) => {
+  const now = Date.now();
+  let hiddenOfflineCount = 0;
+  const roster = [];
+  for (const [token, u] of users.entries()) {
+    const offlineMs = u.ws ? 0 : now - (u.disconnectedAt ?? now);
+    if (!u.ws && offlineMs > OFFLINE_HIDE_MS) {
+      hiddenOfflineCount++;
+      continue;
+    }
     const ru = runtime.users.get(token);
-    return {
+    roster.push({
       token,
       label: `Phone ${u.num}`,
       connected: !!u.ws,
-      disconnectedForMs: u.ws ? 0 : Date.now() - (u.disconnectedAt ?? Date.now()),
+      disconnectedForMs: offlineMs,
       telemetry: u.telemetry ?? null,
       state: ru?.stateString ?? null,
+      zoneId: ru?.zoneId ?? null,
       page: ru?.page?.page ?? null,
       role: ru?.role ?? null,
-    };
-  });
+      availableEvents: runtime.eventsForUser(token),
+    });
+  }
   broadcast({
     type: 'roster',
     users: roster,
+    hiddenOfflineCount,
     show: { ...runtime.rosterInfo(), file: loadedShowFile, globals: runtime.globals },
     shows: listShows(),
   }, 'operators');
@@ -143,6 +216,7 @@ function snapshotFor(token) {
     page: rs?.page ?? null,
     displayVars: rs?.displayVars ?? {},
     serverTime: now,
+    relay: relay.syncForRoom(relay.audienceKey(runtime, token)),
     cues: [
       ...globalCues.map((a) => a.cue).filter((c) => c.loop || c.startAt > now),
       ...(rs?.cues ?? []),
@@ -174,6 +248,70 @@ function pushCue(spec, target = 'all') {
 }
 
 const label = (token) => `Phone ${users.get(token)?.num ?? '?'}`;
+
+function sendRelaySync(token, roomKey) {
+  sendToUser(token, { type: 'relaySync', channels: relay.syncForRoom(roomKey) });
+}
+
+function broadcastRelay(fromToken, envelope, audience) {
+  for (const t of audience) {
+    sendToUser(t, { ...envelope, self: t === fromToken });
+  }
+}
+
+function notifyRelayPeerLeft(token, roomKey) {
+  const u = users.get(token);
+  if (!u) return;
+  const from = relay.senderFrom(users, token, label);
+  const channels = relay.clearPeer(roomKey, u.userId);
+  if (!channels.length) return;
+  const at = Date.now();
+  const audience = relay.audienceTokens(runtime, users, token).filter((t) => t !== token);
+  for (const channel of channels) {
+    for (const t of audience) {
+      sendToUser(t, { type: 'relay', channel, from, payload: null, at, self: false });
+    }
+  }
+}
+
+function handleRelay(token, msg) {
+  if (!users.get(token)?.ws) return;
+  const { channel, payload, persist } = msg;
+  if (!relay.validateChannel(channel) || !relay.validatePayload(payload)) return;
+  if (!relay.checkRateLimit(token, channel)) return;
+
+  const roomKey = relay.audienceKey(runtime, token);
+  const from = relay.senderFrom(users, token, label);
+  const at = Date.now();
+  const envelope = { type: 'relay', channel, from, payload, at };
+
+  if (persist !== false && payload != null) {
+    relay.persistEntry(roomKey, channel, from.userId, { from, payload, at });
+  } else if (payload === null) {
+    relay.persistEntry(roomKey, channel, from.userId, null);
+  }
+
+  broadcastRelay(token, envelope, relay.audienceTokens(runtime, users, token));
+}
+
+function disconnectedForMs(u) {
+  return u.ws ? 0 : Date.now() - (u.disconnectedAt ?? Date.now());
+}
+
+function clearOfflinePhones() {
+  const removed = [];
+  for (const [token, u] of users.entries()) {
+    if (!u.ws && disconnectedForMs(u) > OFFLINE_HIDE_MS) {
+      runtime.removeUser(token);
+      notifyRelayPeerLeft(token, relay.audienceKey(runtime, token));
+      users.delete(token);
+      removed.push(label(token));
+    }
+  }
+  if (removed.length) opLog(`cleared offline: ${removed.join(', ')}`);
+  sendRoster();
+  return removed.length;
+}
 
 // ---------------------------------------------------------------------------
 // Connections
@@ -212,6 +350,7 @@ wss.on('connection', (ws) => {
         send(ws, {
           type: 'welcome',
           token,
+          userId: users.get(token).userId,
           label: label(token),
           serverTime: Date.now(),
           assets: currentAssets(),
@@ -243,6 +382,10 @@ wss.on('connection', (ws) => {
         runtime.handleInput(token, msg.event.type, msg.event.payload);
         return;
       }
+      case 'relay':
+        if (!token) return;
+        handleRelay(token, msg);
+        return;
 
       // --- operator commands ---
       case 'loadShow': if (isOperator) loadShow(msg.file); return;
@@ -268,6 +411,34 @@ wss.on('connection', (ws) => {
         opLog(`${label(msg.token)} role → ${msg.role || '(none)'}`);
         sendRoster();
         return;
+      case 'assignZone':
+        if (!isOperator) return;
+        if (msg.roomId) {
+          runtime.enterZone(msg.token, msg.roomId);
+          opLog(`${label(msg.token)} → room ${msg.roomId}`);
+        } else {
+          runtime.leaveZone(msg.token);
+        }
+        sendRoster();
+        return;
+      case 'moveAllToRoom':
+        if (!isOperator || !msg.roomId) return;
+        runtime.moveAllToRoom(msg.roomId, [...users.keys()], { fromRoomId: msg.fromRoomId || null });
+        sendRoster();
+        return;
+      case 'forceRoomState':
+        if (!isOperator || !msg.roomId || !msg.state) return;
+        runtime.forceRoomState(msg.roomId, msg.state);
+        sendRoster();
+        return;
+      case 'startRoom':
+        if (!isOperator || !msg.roomId) return;
+        runtime.startRoom(msg.roomId);
+        sendRoster();
+        return;
+      case 'clearOfflinePhones':
+        if (isOperator) clearOfflinePhones();
+        return;
       case 'pushCue':
         if (isOperator) pushCue(msg.cue, msg.target ?? 'all');
         return;
@@ -278,8 +449,10 @@ wss.on('connection', (ws) => {
     if (isOperator) { operators.delete(ws); return; }
     if (token && users.get(token)?.ws === ws) {
       const u = users.get(token);
+      const roomKey = relay.audienceKey(runtime, token);
       u.ws = null;
       u.disconnectedAt = Date.now();
+      notifyRelayPeerLeft(token, roomKey);
       sendRoster();
     }
   });
@@ -289,5 +462,6 @@ httpServer.listen(PORT, () => {
   console.log('DIM Machine Phase 1');
   console.log(`  phone client:   http://localhost:${PORT}/`);
   console.log(`  operator panel: http://localhost:${PORT}/operator.html`);
+  console.log(`  author:         http://localhost:${PORT}/author.html`);
   console.log(`  shows dir:      ${showsDir} (${listShows().join(', ') || 'empty'})`);
 });

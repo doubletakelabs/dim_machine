@@ -1,0 +1,109 @@
+{
+  "contractVersion": 2,
+  "showId": "room-demo",
+  "name": "Room Sync Demo",
+  "defaultRoom": "lobby",
+  "defaultRole": "guest",
+  "roles": ["guest"],
+  "assets": ["ambient.wav", "chime.wav"],
+  "rooms": {
+    "lobby": {
+      "name": "Lobby",
+      "startOn": "firstEnter",
+      "machine": {
+        "id": "lobby",
+        "initial": "waiting",
+        "states": {
+          "waiting": {
+            "entry": [
+              { "type": "output", "command": "showPage",
+                "params": { "page": "waiting", "props": { "title": "Lobby", "subtitle": "Gather here before the gallery opens" } } }
+            ],
+            "on": { "BEGIN": "briefing" }
+          },
+          "briefing": {
+            "entry": [
+              { "type": "output", "command": "showPage",
+                "params": { "page": "text", "props": {
+                  "title": "Welcome",
+                  "body": "When you're ready, the operator will send you to the Gallery. Everyone in the lobby sees this together.",
+                  "buttons": [{ "id": "ack", "label": "Got it" }]
+                } } }
+            ],
+            "on": {
+              "button:ack": {
+                "actions": [{ "type": "log", "message": "lobby acknowledged" }]
+              }
+            }
+          }
+        }
+      }
+    },
+    "gallery": {
+      "name": "Gallery",
+      "startOn": "firstEnter",
+      "machine": {
+        "id": "gallery",
+        "initial": "dark",
+        "states": {
+          "dark": {
+            "entry": [
+              { "type": "output", "command": "showPage",
+                "params": { "page": "text", "props": {
+                  "title": "Gallery — dark",
+                  "body": "The room is pitch black. Someone flip the switch?",
+                  "buttons": [{ "id": "lights", "label": "Flip the switch" }]
+                } } }
+            ],
+            "on": { "button:lights": "lit" }
+          },
+          "lit": {
+            "entry": [
+              { "type": "output", "command": "playAudio",
+                "params": { "assetId": "ambient.wav", "loop": true, "gain": 0.45 }, "sync": "scheduled" },
+              { "type": "output", "command": "showPage",
+                "params": { "page": "audioPlayer", "props": {
+                  "title": "Gallery — lit",
+                  "subtitle": "Ambient bed — synced for everyone in the room"
+                } } }
+            ],
+            "on": { "NEXT": "finale" }
+          },
+          "finale": {
+            "entry": [
+              { "type": "output", "command": "stopAudio", "params": { "fadeMs": 600 } },
+              { "type": "output", "command": "playAudio",
+                "params": { "assetId": "chime.wav" }, "sync": "scheduled" },
+              { "type": "output", "command": "showPage",
+                "params": { "page": "text", "props": { "title": "Gallery finale", "body": "The room exhales." } } }
+            ]
+          },
+          "cursors": {
+            "entry": [
+              { "type": "output", "command": "stopAudio", "params": { "fadeMs": 400 } },
+              { "type": "output", "command": "showPage",
+                "params": { "page": "cursorArena", "props": {
+                  "title": "Shared cursors",
+                  "hint": "Tap anywhere — everyone in this room sees your dot move"
+                } } }
+            ]
+          },
+          "sliders": {
+            "entry": [
+              { "type": "output", "command": "stopAudio", "params": { "fadeMs": 400 } },
+              { "type": "output", "command": "showPage",
+                "params": { "page": "sliderSync", "props": {
+                  "title": "Shared cursors",
+                  "hint": "Tap anywhere — everyone in this room sees your dot move"
+                } } }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "inputBindings": {
+    "button:lights": { "event": "button:lights", "scope": "room" },
+    "button:ack": { "event": "button:ack", "scope": "personal" }
+  }
+}

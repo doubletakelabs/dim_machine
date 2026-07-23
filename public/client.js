@@ -5,12 +5,88 @@
 
 const $ = (id) => document.getElementById(id);
 
-// Shared surface for pages.js: input emission + display-variable store.
+// Shared surface for pages.js: input emission + display-variable store + peer relay.
+const relayHandlers = new Map(); // channel → Set<fn>
+/** channel → userId → last relay msg */
+const relayCache = new Map();
+
+function rememberRelay(msg) {
+  if (!msg.channel || !msg.from) return;
+  if (!relayCache.has(msg.channel)) relayCache.set(msg.channel, new Map());
+  const peers = relayCache.get(msg.channel);
+  if (msg.payload == null) peers.delete(msg.from.userId);
+  else peers.set(msg.from.userId, msg);
+}
+
+function dispatchRelay(msg) {
+  rememberRelay(msg);
+  const handlers = relayHandlers.get(msg.channel);
+  if (!handlers?.size) return;
+  for (const fn of [...handlers]) {
+    try { fn(msg); } catch (err) { console.warn('relay handler error:', err); }
+  }
+}
+
+function replayChannel(channel, fn) {
+  for (const msg of relayCache.get(channel)?.values() ?? []) {
+    try {
+      fn({ ...msg, self: msg.from?.token === getToken() });
+    } catch (err) { console.warn('relay handler error:', err); }
+  }
+}
+
+function applyRelaySync(channels) {
+  for (const [channel, entries] of Object.entries(channels ?? {})) {
+    for (const entry of entries) {
+      dispatchRelay({
+        type: 'relay',
+        channel,
+        from: entry.from,
+        payload: entry.payload,
+        at: entry.at,
+        self: entry.from?.token === getToken(),
+      });
+    }
+  }
+}
+
+const pageLoaderApis = {
+  registerPage: window.DIM?.registerPage,
+  pageAsset: window.DIM?.pageAsset,
+};
+
 window.DIM = {
   vars: {},
+  self: { userId: null, label: null, token: null },
+  /** Promote an interaction to the show state machine (canonical input events). */
   emit(type, payload) {
     sendMsg({ type: 'input', event: { type, payload: payload ?? {} } });
   },
+  /**
+   * Peer relay — arbitrary channels + JSON payloads, room-scoped fan-out.
+   * Does not touch the state machine. See custom-pages-kit/CUSTOM-PAGES.md.
+   */
+  relay: {
+    send(channel, payload, opts = {}) {
+      sendMsg({
+        type: 'relay',
+        channel,
+        payload,
+        persist: opts.persist !== false,
+      });
+    },
+    on(channel, fn) {
+      if (!relayHandlers.has(channel)) relayHandlers.set(channel, new Set());
+      relayHandlers.get(channel).add(fn);
+      replayChannel(channel, fn);
+      return () => relayHandlers.get(channel)?.delete(fn);
+    },
+    off(channel, fn) {
+      relayHandlers.get(channel)?.delete(fn);
+    },
+  },
+  registerPage: pageLoaderApis.registerPage,
+  pageAsset: pageLoaderApis.pageAsset,
 };
 
 // ---------------------------------------------------------------------------
@@ -59,7 +135,8 @@ const clock = {
 let ctx = null;
 const audioBuffers = new Map();
 const videoBlobs = new Map();
-const playing = new Map(); // assetId → { source, gainNode }
+const playing = new Map(); // assetId → { source, gainNode, timer? }
+const stopping = new Map(); // assetId → same, while fading out
 let joined = false;
 let assetList = [];
 
@@ -115,17 +192,31 @@ function playAudio(cue, { seekIntoLoop = false } = {}) {
 }
 
 function stopAudio(assetId, fadeMs = 0) {
-  const targets = assetId === '*' ? [...playing.keys()] : [assetId];
-  for (const id of targets) {
-    const p = playing.get(id);
-    if (!p) continue;
-    playing.delete(id);
-    if (fadeMs > 0 && ctx) {
-      p.gainNode.gain.setTargetAtTime(0, ctx.currentTime, fadeMs / 3000);
-      setTimeout(() => { try { p.source.stop(); } catch {} }, fadeMs + 100);
-    } else {
-      try { p.source.stop(); } catch {}
-    }
+  const targets = assetId === '*'
+    ? [...new Set([...playing.keys(), ...stopping.keys()])]
+    : [assetId];
+  for (const id of targets) stopOneAudio(id, fadeMs);
+}
+
+function stopOneAudio(id, fadeMs) {
+  const p = playing.get(id) || stopping.get(id);
+  if (!p) return;
+  playing.delete(id);
+  if (p.timer) clearTimeout(p.timer);
+  const finish = () => {
+    try { p.source.stop(); } catch {}
+    try { p.source.disconnect(); } catch {}
+    try { p.gainNode.disconnect(); } catch {}
+    stopping.delete(id);
+  };
+  if (fadeMs > 0 && ctx) {
+    p.gainNode.gain.cancelScheduledValues(ctx.currentTime);
+    p.gainNode.gain.setValueAtTime(p.gainNode.gain.value, ctx.currentTime);
+    p.gainNode.gain.setTargetAtTime(0, ctx.currentTime, fadeMs / 3000);
+    p.timer = setTimeout(finish, fadeMs + 100);
+    stopping.set(id, p);
+  } else {
+    finish();
   }
 }
 
@@ -164,13 +255,13 @@ function hideVideo() {
 function showPage(cue) {
   hideVideo();
   currentPage = { page: cue.page, props: cue.props ?? {} };
-  window.DIM_PAGES.render($('page'), currentPage.page, currentPage.props);
+  return window.DIM_PAGES.render($('page'), currentPage.page, currentPage.props);
 }
 let currentPage = null;
 
 function setVar(key, value) {
   window.DIM.vars[key] = value;
-  if (currentPage) window.DIM_PAGES.render($('page'), currentPage.page, currentPage.props);
+  if (currentPage) return window.DIM_PAGES.render($('page'), currentPage.page, currentPage.props);
 }
 
 function haptic(pattern) {
@@ -260,6 +351,11 @@ function connect() {
     switch (msg.type) {
       case 'welcome':
         storeToken(msg.token);
+        window.DIM.self = {
+          userId: msg.userId ?? msg.token?.slice(0, 8),
+          label: msg.label,
+          token: msg.token,
+        };
         $('label').textContent = msg.label;
         assetList = msg.assets ?? [];
         applySnapshot(msg.snapshot);
@@ -281,6 +377,12 @@ function connect() {
       case 'cue':
         if (joined) runCue(msg.cue);
         break;
+      case 'relay':
+        dispatchRelay(msg);
+        break;
+      case 'relaySync':
+        if (joined) applyRelaySync(msg.channels);
+        break;
     }
   };
 
@@ -298,13 +400,18 @@ async function applySnapshot(snap) {
   $('stateName').textContent = snap.state ?? '';
   if (!joined) { pendingSnapshot = snap; return; }
   await preload(assetList);
-  restoreFromSnapshot(snap);
+  await restoreFromSnapshot(snap);
 }
 
 function restoreFromSnapshot(snap) {
   Object.assign(window.DIM.vars, snap.displayVars ?? {});
-  if (snap.page) showPage({ kind: 'page', ...snap.page });
-  for (const cue of snap.cues ?? []) runCue(cue, { seekIntoLoop: true });
+  const pagePromise = snap.page
+    ? showPage({ kind: 'page', ...snap.page })
+    : Promise.resolve();
+  return pagePromise.then(async () => {
+    for (const cue of snap.cues ?? []) runCue(cue, { seekIntoLoop: true });
+    applyRelaySync(snap.relay);
+  });
 }
 
 function setConn(ok) {
@@ -331,7 +438,7 @@ $('join').addEventListener('click', async () => {
   if (pendingSnapshot) {
     const snap = pendingSnapshot;
     pendingSnapshot = null;
-    restoreFromSnapshot(snap);
+    await restoreFromSnapshot(snap);
   }
 });
 

@@ -126,9 +126,37 @@
   };
 
   window.DIM_PAGES = {
-    render(el, page, props) {
-      const fn = renderers[page] ?? renderers.waiting;
-      fn(el, props ?? {});
+    async render(el, page, props) {
+      if (el._dimCleanup) {
+        el._dimCleanup();
+        el._dimCleanup = null;
+      }
+      const builtin = renderers[page];
+      if (builtin) {
+        window.DIM_PAGE_LOADER?.setActive(null);
+        el._dimCleanup = builtin(el, props ?? {}) ?? null;
+        return;
+      }
+      const customFn = await window.DIM_PAGE_LOADER?.load(page);
+      if (customFn) {
+        window.DIM_PAGE_LOADER.setActive(page);
+        loadCustomStyles(page);
+        el._dimCleanup = customFn(el, props ?? {}) ?? null;
+        return;
+      }
+      window.DIM_PAGE_LOADER?.setActive(null);
+      el._dimCleanup = renderers.waiting(el, props ?? {}) ?? null;
     },
   };
+
+  function loadCustomStyles(name) {
+    const id = `dim-custom-css-${name}`;
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = `/custom-pages/${encodeURIComponent(name)}/styles.css`;
+    link.onerror = () => link.remove();
+    document.head.appendChild(link);
+  }
 })();

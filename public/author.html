@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DIM Author</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, system-ui, sans-serif; background: #101018; color: #e8e8f0; min-height: 100vh; }
+    header { padding: 16px 20px; border-bottom: 1px solid #1e1e2e; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    header h1 { font-size: 18px; margin-right: auto; }
+    header a { color: #8888a0; font-size: 13px; text-decoration: none; }
+    header a:hover { color: #6c5ce7; }
+    button, select {
+      background: #23233a; color: #e8e8f0; border: 1px solid #34345a; border-radius: 8px;
+      padding: 8px 14px; font-size: 14px; cursor: pointer;
+    }
+    button:hover { background: #2e2e4d; }
+    button.primary { background: #6c5ce7; border-color: #6c5ce7; }
+    .layout { display: grid; grid-template-columns: 200px 1fr; min-height: calc(100vh - 57px); }
+    nav { border-right: 1px solid #1e1e2e; padding: 12px 0; }
+    nav button {
+      display: block; width: 100%; text-align: left; border: none; border-radius: 0;
+      background: transparent; padding: 10px 20px;
+    }
+    nav button.active { background: #23233a; color: #6c5ce7; }
+    main { padding: 20px 24px; overflow: auto; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #8888a0; margin: 0 0 12px; }
+    h3 { font-size: 15px; margin: 20px 0 8px; color: #c8c8dc; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-bottom: 20px; }
+    .card { background: #161622; border: 1px solid #1e1e2e; border-radius: 8px; padding: 12px; }
+    .card label { font-size: 11px; color: #8888a0; text-transform: uppercase; display: block; margin-bottom: 4px; }
+    .card .val { font-size: 14px; word-break: break-word; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; margin-bottom: 16px; }
+    th, td { text-align: left; padding: 8px 12px 8px 0; border-bottom: 1px solid #1e1e2e; vertical-align: top; }
+    th { color: #8888a0; font-weight: 500; }
+    .scope-room { color: #2ecc71; }
+    .scope-personal { color: #3498db; }
+    .scope-op { color: #8888a0; }
+    .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #23233a; }
+    .badge.room { background: #1a3d2e; color: #2ecc71; }
+    .badge.personal { background: #1a2a3d; color: #3498db; }
+    .room-block { background: #161622; border: 1px solid #1e1e2e; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+    .room-block h3 { margin-top: 0; }
+    .mermaid-wrap { background: #fff; border-radius: 8px; padding: 16px; margin: 12px 0; overflow: auto; }
+    .actions { font-family: ui-monospace, monospace; font-size: 12px; color: #9a9ab0; }
+    #jsonEditor {
+      width: 100%; min-height: 480px; background: #0b0b12; color: #c8c8dc;
+      border: 1px solid #1e1e2e; border-radius: 8px; padding: 12px;
+      font: 13px/1.5 ui-monospace, monospace; resize: vertical;
+    }
+    #validation { margin-top: 12px; font-size: 13px; }
+    .err { color: #e74c3c; }
+    .warn { color: #f39c12; }
+    .ok { color: #2ecc71; }
+    .state-name { color: #6c5ce7; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DIM Author</h1>
+    <select id="showFile"></select>
+    <button onclick="loadShow()">Load</button>
+    <button class="primary" onclick="saveShow()">Save</button>
+    <button onclick="validateCurrent()">Validate</button>
+    <a href="/operator.html">→ Operator</a>
+  </header>
+
+  <div class="layout">
+    <nav>
+      <button class="active" data-panel="overview">Overview</button>
+      <button data-panel="rooms">Rooms</button>
+      <button data-panel="inputs">Input bindings</button>
+      <button data-panel="json">JSON</button>
+    </nav>
+
+    <main>
+      <section id="panel-overview" class="panel active"></section>
+      <section id="panel-rooms" class="panel"></section>
+      <section id="panel-inputs" class="panel"></section>
+      <section id="panel-json" class="panel">
+        <h2>Edit JSON</h2>
+        <textarea id="jsonEditor" spellcheck="false"></textarea>
+        <div id="validation"></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const INPUT_EVENT = /^(tap|button:|choice:|swipe\.|drag\.|shake|pageDismiss|video\.ended)/;
+    let currentFile = null;
+    let showDef = null;
+
+    mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
+
+    document.querySelectorAll('nav button').forEach((btn) => {
+      btn.onclick = () => {
+        document.querySelectorAll('nav button').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
+        btn.classList.add('active');
+        $(`panel-${btn.dataset.panel}`).classList.add('active');
+      };
+    });
+
+    function actionSummary(a) {
+      if (!a || typeof a !== 'object') return String(a);
+      if (a.type === 'output') {
+        const p = a.params ?? {};
+        const arg = p.assetId ?? p.page ?? p.key ?? '';
+        const sched = a.sync === 'scheduled' ? ' (scheduled)' : '';
+        return `${a.command}(${arg})${sched}`;
+      }
+      if (a.type === 'assign') return `${a.scope}.${a.key} ${a.value}`;
+      if (a.type === 'log') return `log: ${a.message}`;
+      if (a.type === 'raise') return `raise(${a.event})`;
+      if (a.type === 'sendTo') return `sendTo ${a.target}: ${a.event}`;
+      return a.type;
+    }
+
+    function scopeForEvent(event) {
+      const raw = showDef?.inputBindings?.[event];
+      if (raw && typeof raw === 'object' && raw.scope) return raw.scope;
+      if (typeof raw === 'string') return showDef?.contractVersion >= 2 ? 'room' : 'user';
+      if (INPUT_EVENT.test(event)) return showDef?.contractVersion >= 2 ? 'room (default)' : 'user';
+      return 'operator';
+    }
+
+    function scopeBadge(scope) {
+      const cls = scope.startsWith('room') ? 'room' : scope === 'personal' ? 'personal' : '';
+      return cls ? `<span class="badge ${cls}">${scope}</span>` : `<span class="badge">${scope}</span>`;
+    }
+
+    function transitionTarget(t) {
+      if (typeof t === 'string') return t.replace(/^#.*\./, '');
+      if (Array.isArray(t)) return t.map(transitionTarget).join(' | ');
+      return t?.target?.replace(/^#.*\./, '') ?? '(actions only)';
+    }
+
+    function machineToMermaid(machine) {
+      const lines = ['stateDiagram-v2'];
+      if (machine.initial) lines.push(`  [*] --> ${sanitizeMermaidId(machine.initial)}`);
+      for (const [name, state] of Object.entries(machine.states ?? {})) {
+        const from = sanitizeMermaidId(name);
+        for (const [ev, t] of Object.entries(state.on ?? {})) {
+          const to = sanitizeMermaidId(transitionTarget(t));
+          if (to && to !== '(actions only)') lines.push(`  ${from} --> ${to}: ${ev.replace(/:/g, ' ')}`);
+        }
+        for (const [ms, t] of Object.entries(state.after ?? {})) {
+          const to = sanitizeMermaidId(transitionTarget(t));
+          if (to) lines.push(`  ${from} --> ${to}: after ${ms}ms`);
+        }
+      }
+      return lines.join('\n');
+    }
+
+    function sanitizeMermaidId(id) {
+      return String(id).replace(/[^a-zA-Z0-9_]/g, '_');
+    }
+
+    async function renderMermaid(el, source) {
+      el.innerHTML = '';
+      const id = `mmd-${Math.random().toString(36).slice(2, 9)}`;
+      try {
+        const { svg } = await mermaid.render(id, source);
+        el.innerHTML = svg;
+      } catch (err) {
+        el.innerHTML = `<pre class="err">${err.message}\n\n${source}</pre>`;
+      }
+    }
+
+    function renderOverview() {
+      const v2 = showDef.contractVersion >= 2 && showDef.rooms;
+      const fields = [
+        ['Show ID', showDef.showId],
+        ['Name', showDef.name],
+        ['Contract', `v${showDef.contractVersion}${v2 ? ' · room mode' : ''}`],
+        ['Default room', showDef.defaultRoom ?? '–'],
+        ['Default role', showDef.defaultRole ?? '–'],
+        ['Roles', (showDef.roles ?? []).join(', ') || '–'],
+        ['Assets', (showDef.assets ?? []).join(', ') || '–'],
+      ];
+      if (showDef.globals) {
+        fields.push(['Globals', Object.keys(showDef.globals).join(', ')]);
+      }
+      $('panel-overview').innerHTML = `
+        <h2>Overview</h2>
+        <div class="grid">${fields.map(([l, v]) =>
+          `<div class="card"><label>${l}</label><div class="val">${v ?? '–'}</div></div>`
+        ).join('')}</div>
+        <p style="color:#8888a0;font-size:13px">Phone input scope is defined in <b>Input bindings</b>, not inside room statecharts. Room <code>output</code> actions fan to all members.</p>
+      `;
+    }
+
+    function renderInputs() {
+      const rows = Object.entries(showDef.inputBindings ?? {});
+      $('panel-inputs').innerHTML = `
+        <h2>Input bindings</h2>
+        ${rows.length ? `<table>
+          <thead><tr><th>Phone emits</th><th>Machine event</th><th>Scope</th></tr></thead>
+          <tbody>${rows.map(([canonical, raw]) => {
+            const event = typeof raw === 'string' ? raw : (raw.event ?? canonical);
+            const scope = typeof raw === 'object' ? (raw.scope ?? 'room (default)') : (showDef.contractVersion >= 2 ? 'room (default)' : 'user');
+            return `<tr>
+              <td><code>${canonical}</code></td>
+              <td><code>${event}</code></td>
+              <td>${scopeBadge(scope)}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>` : '<p class="warn">No inputBindings — phone inputs use canonical names; v2 defaults to room scope.</p>'}
+      `;
+    }
+
+    async function renderRooms() {
+      const panel = $('panel-rooms');
+      if (!(showDef.contractVersion >= 2 && showDef.rooms)) {
+        panel.innerHTML = `<h2>Rooms</h2><p class="warn">Contract v1 — single top-level machine. See JSON tab or export to Stately.</p>`;
+        if (showDef.machine) {
+          panel.innerHTML += `<div class="room-block"><h3>Machine: ${showDef.machine.id ?? showDef.showId}</h3>
+            <div class="mermaid-wrap" id="mmd-v1"></div>${renderStateTable(showDef.machine)}</div>`;
+          await renderMermaid($('mmd-v1'), machineToMermaid(showDef.machine));
+        }
+        return;
+      }
+
+      panel.innerHTML = '<h2>Rooms</h2>' + Object.entries(showDef.rooms).map(([id, room], i) => `
+        <div class="room-block">
+          <h3>${room.name ?? id} <span style="color:#888;font-size:12px">${id}</span></h3>
+          <p style="font-size:12px;color:#888">startOn: ${room.startOn ?? 'firstEnter'}</p>
+          <div class="mermaid-wrap" id="mmd-${i}"></div>
+          ${renderStateTable(room.machine)}
+        </div>
+      `).join('');
+
+      let i = 0;
+      for (const room of Object.values(showDef.rooms)) {
+        await renderMermaid($(`mmd-${i}`), machineToMermaid(room.machine));
+        i++;
+      }
+    }
+
+    function renderStateTable(machine) {
+      let html = '<table><thead><tr><th>State</th><th>Entry</th><th>Transitions</th></tr></thead><tbody>';
+      for (const [name, state] of Object.entries(machine.states ?? {})) {
+        const entry = (Array.isArray(state.entry) ? state.entry : state.entry ? [state.entry] : [])
+          .map(actionSummary).join('<br>') || '–';
+        const trans = [
+          ...Object.entries(state.on ?? {}).map(([ev, t]) => {
+            const scope = scopeForEvent(ev);
+            const scopeCls = scope.startsWith('room') ? 'scope-room' : scope === 'personal' ? 'scope-personal' : 'scope-op';
+            return `<span class="${scopeCls}"><code>${ev}</code></span> → ${transitionTarget(t)} <small>(${scope})</small>`;
+          }),
+          ...Object.entries(state.after ?? {}).map(([ms, t]) =>
+            `<code>after ${ms}ms</code> → ${transitionTarget(t)} <small>(timer)</small>`),
+        ].join('<br>') || '–';
+        html += `<tr><td class="state-name">${name}${machine.initial === name ? ' ★' : ''}</td><td class="actions">${entry}</td><td>${trans}</td></tr>`;
+      }
+      html += '</tbody></table>';
+      return html;
+    }
+
+    function renderAll() {
+      if (!showDef) return;
+      renderOverview();
+      renderInputs();
+      renderRooms();
+      $('jsonEditor').value = JSON.stringify(showDef, null, 2);
+      validateCurrent();
+    }
+
+    async function fetchShows() {
+      const res = await fetch('/api/shows');
+      const files = await res.json();
+      $('showFile').innerHTML = files.map((f) => `<option value="${f}">${f}</option>`).join('');
+      if (files.length && !currentFile) currentFile = files[0];
+      if (currentFile) $('showFile').value = currentFile;
+    }
+
+    async function loadShow() {
+      currentFile = $('showFile').value;
+      if (!currentFile) return;
+      const res = await fetch(`/api/shows/${encodeURIComponent(currentFile)}`);
+      if (!res.ok) { alert('Load failed'); return; }
+      showDef = await res.json();
+      renderAll();
+    }
+
+    function parseEditor() {
+      try {
+        return { def: JSON.parse($('jsonEditor').value), error: null };
+      } catch (err) {
+        return { def: null, error: err.message };
+      }
+    }
+
+    async function validateCurrent() {
+      const { def, error } = parseEditor();
+      const el = $('validation');
+      if (error && $('panel-json').classList.contains('active')) {
+        el.innerHTML = `<span class="err">JSON parse error: ${error}</span>`;
+        return false;
+      }
+      const body = def ?? showDef;
+      if (!body) return false;
+      const res = await fetch('/api/shows/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const result = await res.json();
+      const parts = [];
+      if (result.errors?.length) parts.push(`<span class="err">${result.errors.join('<br>')}</span>`);
+      if (result.warnings?.length) parts.push(`<span class="warn">${result.warnings.join('<br>')}</span>`);
+      if (!result.errors?.length) parts.push('<span class="ok">Valid</span>');
+      el.innerHTML = parts.join('<br>');
+      return !result.errors?.length;
+    }
+
+    async function saveShow() {
+      const { def, error } = parseEditor();
+      if (error) { alert(`JSON error: ${error}`); return; }
+      showDef = def;
+      const res = await fetch(`/api/shows/${encodeURIComponent(currentFile)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(showDef),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        alert(`Save failed:\n${(result.errors ?? [result.error]).join('\n')}`);
+        $('validation').innerHTML = `<span class="err">${(result.errors ?? [result.error]).join('<br>')}</span>`;
+        return;
+      }
+      showDef = def;
+      renderAll();
+      alert(result.warnings?.length ? `Saved with warnings:\n${result.warnings.join('\n')}` : 'Saved.');
+    }
+
+    (async () => {
+      await fetchShows();
+      await loadShow();
+    })();
+  </script>
+</body>
+</html>

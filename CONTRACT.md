@@ -21,13 +21,14 @@ change. The show definition declares `"contractVersion": 1`.
   "globals": {                           // optional: orchestrator-owned shared variables
     "votesForExit": { "type": "number", "initial": 0 }
   },
-  "roles": ["ghost", "detective"],       // optional: assignable via operator; used by broadcast
+  "defaultRole": "guest",                // optional: auto-assign on join
+  "roles": ["guest", "ghost"],           // optional: assignable via operator; used by broadcast
   "assets": ["whispers.mp3", "intro.mp4"] // preloaded on phones; served from /assets/
 }
 ```
 
 One machine is spawned **per user** (Phase 1). Every user runs the same
-machine; roles are assigned manually by the operator and filter `broadcast`.
+machine; roles default to `defaultRole` or are set manually by the operator.
 
 ## 2. Machine JSON
 
@@ -148,8 +149,66 @@ All string props interpolate display variables with `${key}` (e.g.
 
 New page types are additive.
 
+## 6b. Peer relay (custom pages)
+
+Phones may send **`relay`** WebSocket messages for room-scoped (or show-wide)
+real-time fan-out **without** going through the state machine. Authors define
+channel names and JSON payload shapes in page code.
+
+- Phone → server: `{ type: "relay", channel, payload, persist? }`
+- Server → phone: `{ type: "relay", channel, from: { userId, label, token }, payload, at, self }`
+- Sync on join: `{ type: "relaySync", channels: { [channel]: [{ from, payload, at }] } }`
+
+Client API: `window.DIM.relay.send(channel, payload, opts?)`,
+`DIM.relay.on(channel, fn)`. Authoring guide: **`custom-pages-kit/CUSTOM-PAGES.md`**
+(standalone dev kit — share without this repo).
+
+Custom pages ship as folders under **`public/custom-pages/<pageName>/page.js`**
+(+ optional `styles.css` and assets). Loaded at runtime; folder name = `showPage`
+`params.page`. Preview locally via **`custom-pages-kit/`** (`npm start` →
+`page-preview.html`). List installed on show machine: `GET /api/custom-pages`.
+
 ## 7. Versioning
 
 The runtime rejects definitions whose `contractVersion` it doesn't support and
-reports the mismatch to the operator. Additions within v1 are backwards
-compatible; breaking changes bump to v2.
+reports the mismatch to the operator. Contract v1 remains supported. v2 adds
+rooms (see §8); breaking changes beyond additive fields bump the version.
+
+## 8. Contract v2 — room actors (additive)
+
+`"contractVersion": 2` shows define **rooms** instead of a top-level `machine`.
+Each room has its own statechart; the runtime spawns one XState actor per room.
+Users are assigned to rooms via `zone.enter` (future) or operator `assignZone`.
+
+```jsonc
+{
+  "contractVersion": 2,
+  "showId": "my-show",
+  "defaultRoom": "lobby",
+  "defaultRole": "guest",
+  "roles": ["guest"],
+  "rooms": {
+    "library": {
+      "name": "Library",
+      "startOn": "firstEnter",       // or "operatorOnly"
+      "machine": { /* statechart */ }
+    }
+  },
+  "inputBindings": {
+    "button:lights": { "event": "button:lights", "scope": "room" }
+  }
+}
+```
+
+- **Room cursor** — the room actor's state is authoritative; late entrants sync
+  to it on assignment (entry outputs replayed to that user only).
+- **Room holds when empty** — leaving a room does not rewind its cursor.
+- **`scope: "room"`** (default in v2) — input goes to the user's current room
+  actor and fans outputs to all members. `"scope": "personal"` reserved for
+  per-user machine actions (future).
+- **Operator** — `assignZone`, `moveAllToRoom`, `startRoom`, `sendEvent` with target `room:<id>`.
+- **`defaultRoom` / `defaultRole`** — applied automatically when a user joins a
+  running show (no manual operator assignment needed). Late joiners get the same
+  defaults, then sync to the room's current cursor.
+
+v1 shows (`contractVersion: 1`, top-level `machine`) continue to work unchanged.
