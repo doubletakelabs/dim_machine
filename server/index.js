@@ -1,18 +1,5 @@
-// DIM Machine — Phase 1 server (+ contract v2 room actors).
-// Loads contract-v1 show definitions (shows/*.json) into per-user XState
-// actors (ShowRuntime) and bridges phones/operator over WebSocket.
-//
-// Protocol:
-//   phone → server:  hello{token?}, ping{t0}, telemetry{...},
-//                    cueReport{cueId,targetAt,actualAt}, input{event:{type,payload}},
-//                    relay{channel,payload,persist?}
-//   server → phone:  welcome{token,label,serverTime,assets,snapshot},
-//                    pong{t0,server}, cue{cue}, state{state}, assets{assets},
-//                    relay{channel,from,payload,at,self}, relaySync{channels}
-//   operator → server: hello{role:'operator'}, loadShow{file}, startShow, stopShow,
-//                      sendEvent{event,target}, setRole{token,role}, pushCue{cue,target},
-//                      moveAllToRoom{roomId,fromRoomId?}, forceRoomState{roomId,state}, startRoom{roomId}, clearOfflinePhones
-//   server → operator: roster{users,show,shows}, log{line,at}
+// DIM Machine — v0.3 spatial runtime (Phase A).
+// WebSocket bridge for operator panel, simulated guests, and phones (Phase B+).
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'node:http';
@@ -20,20 +7,20 @@ import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, basename } from 'node:path';
-import { ShowRuntime, validateDefinition } from './runtime.js';
+import { SpatialRuntime, validateShowDefinition, ScaledClock } from './spatial/index.js';
 import * as relay from './relay.js';
 
 const PORT = process.env.PORT || 4000;
 const BASE_ASSETS = ['click.wav', 'ambient.wav', 'whisper.wav', 'chime.wav'];
-const CUE_RETENTION_MS = 30_000;
 const OFFLINE_HIDE_MS = 60_000;
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const showsDir = join(root, 'shows');
 const assetsDir = join(root, 'public', 'assets');
+const customPagesDir = join(root, 'public', 'custom-pages');
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '2mb' }));
 app.use(express.static(join(root, 'public')));
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer });
@@ -42,7 +29,13 @@ function showPath(file) {
   return join(showsDir, basename(file));
 }
 
-const customPagesDir = join(root, 'public', 'custom-pages');
+function listShows() {
+  try {
+    return readdirSync(showsDir).filter((f) => f.endsWith('.json')).sort();
+  } catch {
+    return [];
+  }
+}
 
 function listCustomPages() {
   try {
@@ -56,7 +49,6 @@ function listCustomPages() {
 }
 
 app.get('/api/custom-pages', (_req, res) => res.json(listCustomPages()));
-
 app.get('/api/shows', (_req, res) => res.json(listShows()));
 
 app.get('/api/shows/:file', (req, res) => {
@@ -70,8 +62,7 @@ app.get('/api/shows/:file', (req, res) => {
 });
 
 app.post('/api/shows/validate', (req, res) => {
-  const result = validateDefinition(req.body ?? {});
-  res.json(result);
+  res.json(validateShowDefinition(req.body ?? {}));
 });
 
 app.post('/api/shows/:file', (req, res) => {
@@ -79,7 +70,7 @@ app.post('/api/shows/:file', (req, res) => {
   if (!file.endsWith('.json')) return res.status(400).json({ error: 'invalid file name' });
   const def = req.body;
   if (!def || typeof def !== 'object') return res.status(400).json({ error: 'body must be JSON object' });
-  const result = validateDefinition(def);
+  const result = validateShowDefinition(def);
   if (result.errors.length) return res.status(400).json(result);
   try {
     writeFileSync(showPath(file), `${JSON.stringify(def, null, 2)}\n`);
@@ -89,51 +80,67 @@ app.post('/api/shows/:file', (req, res) => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// Sessions
-// ---------------------------------------------------------------------------
-const users = new Map(); // token → { userId, num, ws, connectedAt, disconnectedAt, telemetry }
-const operators = new Set();
-let userCounter = 0;
-let loadedShowFile = null;
-
-// Operator-pushed broadcast cues (sync test etc.) kept for late resync.
-let globalCues = [];
-function pruneGlobalCues() {
-  const now = Date.now();
-  globalCues = globalCues.filter((a) => a.cue.loop || now - a.cue.startAt < CUE_RETENTION_MS);
-}
-
-// ---------------------------------------------------------------------------
-// Runtime
-// ---------------------------------------------------------------------------
-const runtime = new ShowRuntime({
-  sendCue: (token, cue) => sendToUser(token, { type: 'cue', cue }),
-  onUserState: (token, stateString) => {
-    sendToUser(token, { type: 'state', state: stateString });
-    scheduleRoster();
-  },
-  onRoomsChanged: () => scheduleRoster(),
-  onUserZoneChange: (token, newZone, prevZone) => {
-    if (prevZone) notifyRelayPeerLeft(token, prevZone);
-    if (newZone) sendRelaySync(token, newZone);
-  },
-  log: opLog,
+/** Virtual walkthrough — set guest floor-plan position (Phase A1). */
+app.post('/api/spatial/position', (req, res) => {
+  const { guestId, token, x, y } = req.body ?? {};
+  const id = guestId ?? token;
+  if (!id || typeof x !== 'number' || typeof y !== 'number') {
+    return res.status(400).json({ error: 'guestId|token, x, y required' });
+  }
+  const ok = runtime.setVirtualPosition(id, x, y);
+  if (!ok) return res.status(400).json({ error: 'show not running or unknown guest' });
+  res.json({ ok: true, spatial: runtime.getOperatorSnapshot() });
 });
 
-function listShows() {
-  try {
-    return readdirSync(showsDir).filter((f) => f.endsWith('.json')).sort();
-  } catch { return []; }
-}
+app.post('/api/spatial/tier', (req, res) => {
+  const { guestId, token, roomId, occupancy } = req.body ?? {};
+  const id = guestId ?? token;
+  if (!id || !occupancy) {
+    return res.status(400).json({ error: 'guestId|token and occupancy required' });
+  }
+  const ok = runtime.setVirtualOccupancy(id, roomId ?? null, occupancy);
+  if (!ok) return res.status(400).json({ error: 'show not running or unknown guest' });
+  res.json({ ok: true, spatial: runtime.getOperatorSnapshot() });
+});
+
+app.post('/api/spatial/activate', (req, res) => {
+  const { guestId, token, roomId } = req.body ?? {};
+  const id = guestId ?? token;
+  if (!id || !roomId) {
+    return res.status(400).json({ error: 'guestId|token and roomId required' });
+  }
+  const result = runtime.requestActivation(id, roomId);
+  res.status(result.ok ? 200 : 409).json({ ...result, spatial: runtime.getOperatorSnapshot() });
+});
+
+// ---------------------------------------------------------------------------
+// Sessions — token → { guestId, label, ws, telemetry, ... }
+// ---------------------------------------------------------------------------
+const users = new Map();
+const operators = new Set();
+let loadedShowFile = null;
+
+// Test-mode clock: lets the panel run the show at 10x or pause it outright.
+// Must be left at 1x once Phase B schedules real audio against a shared clock.
+const showClock = new ScaledClock(1);
+
+const runtime = new SpatialRuntime({
+  clock: showClock,
+  log: opLog,
+  onStateChange: scheduleRoster,
+  onPositionChange: schedulePositions,
+  onOccupancy: (ev) => {
+    const who = runtime.guests.get(ev.guestId)?.label ?? ev.guestId;
+    opLog(`${who} → ${ev.roomId ?? '∅'} (${ev.occupancy})`);
+  },
+});
 
 function currentAssets() {
-  const showAssets = runtime.def?.assets ?? [];
-  return [...new Set([...BASE_ASSETS, ...showAssets])];
+  return [...BASE_ASSETS];
 }
 
 function loadShow(file) {
-  const path = join(showsDir, basename(file)); // basename: no path escape
+  const path = showPath(file);
   let def;
   try {
     def = JSON.parse(readFileSync(path, 'utf8'));
@@ -141,116 +148,142 @@ function loadShow(file) {
     opLog(`load failed: ${err.message}`);
     return;
   }
-  const { errors, warnings } = runtime.load(def);
-  for (const w of warnings) opLog(`⚠ ${w}`);
-  if (errors.length) {
-    for (const e of errors) opLog(`✗ ${e}`);
+  const result = runtime.load(def);
+  for (const w of result.warnings ?? []) opLog(`⚠ ${w}`);
+  if (!result.ok) {
+    for (const e of result.errors) opLog(`✗ ${e}`);
     return;
   }
   loadedShowFile = basename(file);
-  for (const a of def.assets ?? [])
-    if (!existsSync(join(assetsDir, a))) opLog(`⚠ asset missing on disk: ${a}`);
   broadcast({ type: 'assets', assets: currentAssets() }, 'phones');
   sendRoster();
 }
 
-// ---------------------------------------------------------------------------
-// Wire helpers
-// ---------------------------------------------------------------------------
-function send(ws, obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
-function sendToUser(token, obj) { send(users.get(token)?.ws, obj); }
-function broadcast(obj, who) {
-  if (who === 'phones' || who === 'all') for (const u of users.values()) send(u.ws, obj);
-  if (who === 'operators' || who === 'all') for (const ws of operators) send(ws, obj);
+function send(ws, obj) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
 }
+
+function sendToUser(token, obj) {
+  send(users.get(token)?.ws, obj);
+}
+
+function broadcast(obj, who) {
+  if (who === 'phones' || who === 'all') {
+    for (const u of users.values()) send(u.ws, obj);
+  }
+  if (who === 'operators' || who === 'all') {
+    for (const ws of operators) send(ws, obj);
+  }
+}
+
 function opLog(line) {
   broadcast({ type: 'log', line, at: Date.now() }, 'operators');
   console.log('[show]', line);
 }
 
-let rosterTimer = null;
-function scheduleRoster() { // debounce bursts of state changes
-  if (rosterTimer) return;
-  rosterTimer = setTimeout(() => { rosterTimer = null; sendRoster(); }, 60);
+/**
+ * Motion updates are pushed on their own channel, throttled to ~60ms. They
+ * carry only what moves a dot; the full roster stays on its slower cadence
+ * because it includes every guest's visit history and the recent event log.
+ */
+let positionsTimer = null;
+function schedulePositions() {
+  if (positionsTimer || rosterTimer) return;
+  positionsTimer = setTimeout(() => {
+    positionsTimer = null;
+    broadcast({ type: 'positions', guests: runtime.getPositionsSnapshot() }, 'operators');
+  }, 60);
 }
+
+let rosterTimer = null;
+function scheduleRoster() {
+  if (rosterTimer) return;
+  rosterTimer = setTimeout(() => {
+    rosterTimer = null;
+    sendRoster();
+  }, 60);
+}
+
 function sendRoster() {
   const now = Date.now();
-  let hiddenOfflineCount = 0;
-  const roster = [];
+  const rosterUsers = [];
   for (const [token, u] of users.entries()) {
     const offlineMs = u.ws ? 0 : now - (u.disconnectedAt ?? now);
-    if (!u.ws && offlineMs > OFFLINE_HIDE_MS) {
-      hiddenOfflineCount++;
-      continue;
-    }
-    const ru = runtime.users.get(token);
-    roster.push({
+    if (!u.ws && offlineMs > OFFLINE_HIDE_MS) continue;
+    const guest = runtime.getGuestByToken(token);
+    rosterUsers.push({
       token,
-      label: `Phone ${u.num}`,
+      guestId: u.guestId,
+      label: u.label,
       connected: !!u.ws,
       disconnectedForMs: offlineMs,
       telemetry: u.telemetry ?? null,
-      state: ru?.stateString ?? null,
-      zoneId: ru?.zoneId ?? null,
-      page: ru?.page?.page ?? null,
-      role: ru?.role ?? null,
-      availableEvents: runtime.eventsForUser(token),
+      pathId: guest?.pathId ?? null,
+      phaseId: guest?.phaseId ?? null,
+      adherence: guest?.adherence ?? null,
+      roomId: guest?.roomId ?? null,
+      occupancy: guest?.occupancy ?? null,
     });
   }
+
   broadcast({
     type: 'roster',
-    users: roster,
-    hiddenOfflineCount,
-    show: { ...runtime.rosterInfo(), file: loadedShowFile, globals: runtime.globals },
+    users: rosterUsers,
+    spatial: runtime.getOperatorSnapshot(),
+    show: { ...runtime.rosterInfo(), file: loadedShowFile },
     shows: listShows(),
   }, 'operators');
 }
+
 setInterval(sendRoster, 2000);
 
-function snapshotFor(token) {
-  pruneGlobalCues();
-  const now = Date.now();
-  const rs = runtime.getUserSnapshot(token);
+function label(token) {
+  return users.get(token)?.label ?? '?';
+}
+
+function phoneSnapshot(token) {
+  const guest = runtime.getGuestByToken(token);
   return {
-    state: rs?.state ?? null,
-    page: rs?.page ?? null,
-    displayVars: rs?.displayVars ?? {},
-    serverTime: now,
+    serverTime: Date.now(),
+    spatial: guest
+      ? {
+          pathId: guest.pathId,
+          phaseId: guest.phaseId,
+          adherence: guest.adherence,
+          roomId: guest.roomId,
+          occupancy: guest.occupancy,
+        }
+      : null,
     relay: relay.syncForRoom(relay.audienceKey(runtime, token)),
-    cues: [
-      ...globalCues.map((a) => a.cue).filter((c) => c.loop || c.startAt > now),
-      ...(rs?.cues ?? []),
-    ],
+    displayVars: Object.fromEntries(
+      Object.entries(runtime.globals).map(([k, v]) => [`global.${k}`, v]),
+    ),
   };
 }
 
-// Operator ad-hoc cues (sync test / test tones) — Phase 0 feature, kept.
-function pushCue(spec, target = 'all') {
-  const cue = {
-    cueId: randomUUID().slice(0, 8),
-    kind: spec.kind,
-    assetId: spec.assetId,
-    gain: spec.gain ?? 1,
-    loop: spec.loop ?? false,
-    fadeMs: spec.fadeMs ?? 0,
-    startAt: Date.now() + (spec.leadTimeMs ?? 2000),
-  };
-  if (cue.kind === 'stopAudio') {
-    globalCues = globalCues.filter((a) => cue.assetId !== '*' && a.cue.assetId !== cue.assetId);
-  } else if (target === 'all') {
-    pruneGlobalCues();
-    globalCues.push({ cue });
+function ensurePhoneSession(token) {
+  if (token && runtime.getGuestByToken(token)) {
+    const u = users.get(token);
+    if (u) return { token, ...u };
   }
-  const msg = { type: 'cue', cue };
-  if (target === 'all') broadcast(msg, 'phones');
-  else sendToUser(target, msg);
-  opLog(`operator cue ${cue.kind}${cue.assetId ? ' ' + cue.assetId : ''} → ${target === 'all' ? 'all' : label(target)}`);
+  const spawned = runtime.spawnGuest();
+  if (!spawned) return null;
+  users.set(spawned.token, {
+    guestId: spawned.guestId,
+    label: spawned.label,
+    ws: null,
+    telemetry: null,
+    connectedAt: Date.now(),
+    disconnectedAt: null,
+  });
+  return { token: spawned.token, ...users.get(spawned.token) };
 }
 
-const label = (token) => `Phone ${users.get(token)?.num ?? '?'}`;
-
-function sendRelaySync(token, roomKey) {
-  sendToUser(token, { type: 'relaySync', channels: relay.syncForRoom(roomKey) });
+function sendRelaySync(token) {
+  sendToUser(token, {
+    type: 'relaySync',
+    channels: relay.syncForRoom(relay.audienceKey(runtime, token)),
+  });
 }
 
 function broadcastRelay(fromToken, envelope, audience) {
@@ -259,11 +292,12 @@ function broadcastRelay(fromToken, envelope, audience) {
   }
 }
 
-function notifyRelayPeerLeft(token, roomKey) {
+function notifyRelayPeerLeft(token) {
   const u = users.get(token);
   if (!u) return;
   const from = relay.senderFrom(users, token, label);
-  const channels = relay.clearPeer(roomKey, u.userId);
+  const roomKey = relay.audienceKey(runtime, token);
+  const channels = relay.clearPeer(roomKey, u.guestId);
   if (!channels.length) return;
   const at = Date.now();
   const audience = relay.audienceTokens(runtime, users, token).filter((t) => t !== token);
@@ -286,27 +320,25 @@ function handleRelay(token, msg) {
   const envelope = { type: 'relay', channel, from, payload, at };
 
   if (persist !== false && payload != null) {
-    relay.persistEntry(roomKey, channel, from.userId, { from, payload, at });
+    relay.persistEntry(roomKey, channel, from.guestId, { from, payload, at });
   } else if (payload === null) {
-    relay.persistEntry(roomKey, channel, from.userId, null);
+    relay.persistEntry(roomKey, channel, from.guestId, null);
   }
 
   broadcastRelay(token, envelope, relay.audienceTokens(runtime, users, token));
 }
 
-function disconnectedForMs(u) {
-  return u.ws ? 0 : Date.now() - (u.disconnectedAt ?? Date.now());
-}
-
 function clearOfflinePhones() {
   const removed = [];
   for (const [token, u] of users.entries()) {
-    if (!u.ws && disconnectedForMs(u) > OFFLINE_HIDE_MS) {
-      runtime.removeUser(token);
-      notifyRelayPeerLeft(token, relay.audienceKey(runtime, token));
-      users.delete(token);
-      removed.push(label(token));
-    }
+    if (u.ws) continue;
+    const offlineMs = Date.now() - (u.disconnectedAt ?? Date.now());
+    if (offlineMs <= OFFLINE_HIDE_MS) continue;
+    const guest = runtime.getGuestByToken(token);
+    if (guest) runtime.removeGuest(guest.guestId);
+    notifyRelayPeerLeft(token);
+    users.delete(token);
+    removed.push(u.label);
   }
   if (removed.length) opLog(`cleared offline: ${removed.join(', ')}`);
   sendRoster();
@@ -314,7 +346,7 @@ function clearOfflinePhones() {
 }
 
 // ---------------------------------------------------------------------------
-// Connections
+// WebSocket
 // ---------------------------------------------------------------------------
 wss.on('connection', (ws) => {
   let token = null;
@@ -322,7 +354,11 @@ wss.on('connection', (ws) => {
 
   ws.on('message', (raw) => {
     let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return;
+    }
 
     switch (msg.type) {
       case 'hello': {
@@ -333,29 +369,51 @@ wss.on('connection', (ws) => {
           opLog('operator connected');
           return;
         }
-        if (msg.token && users.has(msg.token)) {
+
+        if (msg.token && runtime.getGuestByToken(msg.token)) {
           token = msg.token;
-          const u = users.get(token);
-          if (u.ws && u.ws !== ws) { try { u.ws.close(); } catch {} }
+          let u = users.get(token);
+          if (!u) {
+            const p = runtime.getGuestByToken(token);
+            u = {
+              guestId: p.guestId,
+              label: p.label,
+              ws: null,
+              telemetry: null,
+              connectedAt: Date.now(),
+              disconnectedAt: null,
+            };
+            users.set(token, u);
+          }
+          if (u.ws && u.ws !== ws) {
+            try { u.ws.close(); } catch {}
+          }
           u.ws = ws;
           u.disconnectedAt = null;
+          const p = runtime.getGuestByToken(token);
+          if (p) {
+            p.connected = true;
+            runtime.coordinator?.setConnected(p.guestId, true);
+            runtime.coordinator?.touchLocation(p.guestId);
+          }
         } else {
-          token = randomUUID();
-          users.set(token, {
-            userId: `u-${++userCounter}`, num: userCounter,
-            ws, connectedAt: Date.now(), telemetry: null,
-          });
-          runtime.attachUser(token); // late joiner enters at initial state
+          const session = ensurePhoneSession(null);
+          if (!session) return;
+          token = session.token;
+          const u = users.get(token);
+          u.ws = ws;
         }
+
         send(ws, {
           type: 'welcome',
           token,
-          userId: users.get(token).userId,
+          guestId: users.get(token).guestId,
           label: label(token),
           serverTime: Date.now(),
           assets: currentAssets(),
-          snapshot: snapshotFor(token),
+          snapshot: phoneSnapshot(token),
         });
+        sendRelaySync(token);
         sendRoster();
         return;
       }
@@ -366,102 +424,177 @@ wss.on('connection', (ws) => {
 
       case 'telemetry': {
         const u = users.get(token);
-        if (u) u.telemetry = { offset: msg.offset, rtt: msg.rtt, jitter: msg.jitter, at: Date.now() };
+        if (u) {
+          u.telemetry = {
+            offset: msg.offset,
+            rtt: msg.rtt,
+            jitter: msg.jitter,
+            at: Date.now(),
+          };
+        }
         return;
       }
 
-      case 'cueReport': {
-        const u = users.get(token);
-        const drift = msg.actualAt - msg.targetAt;
-        if (u?.telemetry) u.telemetry.lastCueDriftMs = Math.round(drift * 10) / 10;
-        return;
-      }
-
-      case 'input': {
-        if (!token || !msg.event?.type) return;
-        runtime.handleInput(token, msg.event.type, msg.event.payload);
-        return;
-      }
       case 'relay':
         if (!token) return;
         handleRelay(token, msg);
         return;
 
-      // --- operator commands ---
-      case 'loadShow': if (isOperator) loadShow(msg.file); return;
+      case 'loadShow':
+        if (isOperator) loadShow(msg.file);
+        return;
+
       case 'startShow':
         if (!isOperator) return;
-        runtime.start([...users.keys()]);
+        runtime.start();
         sendRoster();
         return;
+
       case 'stopShow':
         if (!isOperator) return;
         runtime.stop();
-        globalCues = [];
         sendRoster();
         return;
-      case 'sendEvent':
-        if (!isOperator || !msg.event) return;
-        opLog(`operator event: ${msg.event} → ${msg.target === 'all' || !msg.target ? 'all' : label(msg.target)}`);
-        runtime.sendEvent(msg.target ?? 'all', msg.event, msg.payload);
-        return;
-      case 'setRole':
+
+      case 'setTimeScale': {
         if (!isOperator) return;
-        runtime.setRole(msg.token, msg.role);
-        opLog(`${label(msg.token)} role → ${msg.role || '(none)'}`);
+        const rate = runtime.setTimeScale(Number(msg.rate));
+        if (rate != null) opLog(rate === 0 ? 'time paused' : `time scale ${rate}x`);
         sendRoster();
         return;
-      case 'assignZone':
+      }
+
+      case 'configureWalkthrough': {
         if (!isOperator) return;
-        if (msg.roomId) {
-          runtime.enterZone(msg.token, msg.roomId);
-          opLog(`${label(msg.token)} → room ${msg.roomId}`);
-        } else {
-          runtime.leaveZone(msg.token);
+        runtime.walkthrough?.configure(msg.config ?? {});
+        opLog(`walk settings: ${JSON.stringify(msg.config ?? {})}`);
+        sendRoster();
+        return;
+      }
+
+      case 'startWalkthrough': {
+        if (!isOperator) return;
+        runtime.walkthrough?.configure(msg.config ?? {});
+        runtime.walkthrough?.start(msg.guestIds);
+        opLog('walkthrough started');
+        sendRoster();
+        return;
+      }
+
+      case 'stopWalkthrough': {
+        if (!isOperator) return;
+        runtime.walkthrough?.stop(msg.guestIds);
+        opLog('walkthrough stopped');
+        sendRoster();
+        return;
+      }
+
+      case 'sendRoomEvent': {
+        if (!isOperator) return;
+        if (runtime.sendRoomEvent(msg.roomId, msg.event)) {
+          opLog(`${msg.roomId} ← ${msg.event}`);
+          sendRoster();
         }
+        return;
+      }
+
+      case 'removeGuest': {
+        if (!isOperator) return;
+        if (runtime.removeGuest(msg.guestId)) sendRoster();
+        return;
+      }
+
+      case 'spawnGuest': {
+        if (!isOperator) return;
+        const count = Math.min(Math.max(1, Number(msg.count) || 1), 60);
+        const spawnedIds = [];
+        for (let i = 0; i < count; i++) {
+          const spawned = runtime.spawnGuest({ label: count === 1 ? msg.label : undefined });
+          if (!spawned) break;
+          users.set(spawned.token, {
+            guestId: spawned.guestId,
+            label: spawned.label,
+            ws: null,
+            telemetry: null,
+            connectedAt: Date.now(),
+            disconnectedAt: null,
+          });
+          spawnedIds.push(spawned.guestId);
+        }
+        if (!spawnedIds.length) return;
+        opLog(spawnedIds.length === 1
+          ? `spawned 1 guest`
+          : `spawned ${spawnedIds.length} guests`);
+        if (msg.walk) runtime.walkthrough?.start(spawnedIds);
         sendRoster();
         return;
-      case 'moveAllToRoom':
+      }
+
+      case 'setVirtualPosition': {
+        if (!isOperator) return;
+        const id = msg.guestId ?? msg.token;
+        if (!id || typeof msg.x !== 'number' || typeof msg.y !== 'number') return;
+        if (runtime.setVirtualPosition(id, msg.x, msg.y)) sendRoster();
+        return;
+      }
+
+      case 'setVirtualOccupancy': {
+        if (!isOperator) return;
+        const id = msg.guestId ?? msg.token;
+        if (!id || !msg.occupancy) return;
+        if (runtime.setVirtualOccupancy(id, msg.roomId ?? null, msg.occupancy)) sendRoster();
+        return;
+      }
+
+      case 'requestActivation': {
+        if (!isOperator) return;
+        const id = msg.guestId ?? msg.token;
+        if (!id || !msg.roomId) return;
+        const result = runtime.requestActivation(id, msg.roomId);
+        opLog(`activate ${msg.roomId} ← ${id}: ${result.ok ? result.state : result.reason}`);
+        sendRoster();
+        return;
+      }
+
+      case 'releaseRoomLock': {
         if (!isOperator || !msg.roomId) return;
-        runtime.moveAllToRoom(msg.roomId, [...users.keys()], { fromRoomId: msg.fromRoomId || null });
+        runtime.releaseRoomLock(msg.roomId, msg.guestId ?? null);
         sendRoster();
         return;
-      case 'forceRoomState':
-        if (!isOperator || !msg.roomId || !msg.state) return;
-        runtime.forceRoomState(msg.roomId, msg.state);
-        sendRoster();
-        return;
-      case 'startRoom':
-        if (!isOperator || !msg.roomId) return;
-        runtime.startRoom(msg.roomId);
-        sendRoster();
-        return;
+      }
+
       case 'clearOfflinePhones':
         if (isOperator) clearOfflinePhones();
         return;
-      case 'pushCue':
-        if (isOperator) pushCue(msg.cue, msg.target ?? 'all');
-        return;
+
+      default:
+        break;
     }
   });
 
   ws.on('close', () => {
-    if (isOperator) { operators.delete(ws); return; }
+    if (isOperator) {
+      operators.delete(ws);
+      return;
+    }
     if (token && users.get(token)?.ws === ws) {
       const u = users.get(token);
-      const roomKey = relay.audienceKey(runtime, token);
       u.ws = null;
       u.disconnectedAt = Date.now();
-      notifyRelayPeerLeft(token, roomKey);
+      const p = runtime.getGuestByToken(token);
+      if (p) {
+        p.connected = false;
+        runtime.coordinator?.setConnected(p.guestId, false);
+      }
+      notifyRelayPeerLeft(token);
       sendRoster();
     }
   });
 });
 
 httpServer.listen(PORT, () => {
-  console.log('DIM Machine Phase 1');
+  console.log('DIM Machine — spatial runtime (v0.3 Phase A)');
   console.log(`  phone client:   http://localhost:${PORT}/`);
   console.log(`  operator panel: http://localhost:${PORT}/operator.html`);
-  console.log(`  author:         http://localhost:${PORT}/author.html`);
   console.log(`  shows dir:      ${showsDir} (${listShows().join(', ') || 'empty'})`);
 });
