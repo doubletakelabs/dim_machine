@@ -1,323 +1,792 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DIM Operator</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, system-ui, sans-serif; background: #101018; color: #e8e8f0; padding: 20px; max-width: 1100px; margin: 0 auto; }
-    h1 { font-size: 18px; margin-bottom: 12px; }
-    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #8888a0; margin: 22px 0 8px; }
-    button {
-      background: #23233a; color: #e8e8f0; border: 1px solid #34345a; border-radius: 8px;
-      padding: 9px 16px; font-size: 14px; margin: 3px; cursor: pointer;
-    }
-    button:hover { background: #2e2e4d; }
-    button.primary { background: #6c5ce7; border-color: #6c5ce7; }
-    button.danger { background: #3a1e26; border-color: #7a2e3d; }
-    button.small { padding: 4px 10px; font-size: 12px; }
-    table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
-    th, td { text-align: left; padding: 6px 12px 6px 0; border-bottom: 1px solid #1e1e2e; }
-    th { color: #8888a0; font-weight: 500; }
-    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #e74c3c; margin-right: 6px; }
-    .dot.ok { background: #2ecc71; }
-    #log { background: #0b0b12; border: 1px solid #1e1e2e; border-radius: 8px; padding: 10px; height: 200px; overflow-y: auto; font: 12px/1.5 ui-monospace, monospace; color: #9a9ab0; }
-    select, input[type=text] { background: #23233a; color: #e8e8f0; border: 1px solid #34345a; border-radius: 8px; padding: 8px; font-size: 14px; }
-    .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
-    .warn { color: #f39c12; }
-    .pill { background: #23233a; border-radius: 999px; padding: 4px 12px; font-size: 12px; color: #b8b8cc; }
-    .pill b { color: #6c5ce7; }
-    .state { color: #6c5ce7; font-weight: 600; }
-    .room-id { color: #2ecc71; font-size: 12px; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DIM Machine — test panel</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f26; --line: #2c3038; --ink: #e7e9ee;
+    --dim: #8b93a3; --accent: #6ea8fe;
+    --idle: #3a4150; --active: #2f8f5b; --settling: #b8860b; --locked: #6ea8fe;
+    --ok: #58c98a; --warn: #e0a758; --bad: #e0685f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 13px/1.45 ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  h1 { font-size: 14px; margin: 0 12px 0 0; font-weight: 600; }
+  h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--dim); margin: 0 0 8px; font-weight: 600;
+  }
+  button, select, input {
+    background: #262a33; color: var(--ink); border: 1px solid var(--line);
+    border-radius: 5px; padding: 5px 9px; font: inherit;
+  }
+  button { cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: #2b4a7a; border-color: #3b62a0; }
+  button.tiny { padding: 2px 7px; font-size: 11px; }
+  .pill {
+    padding: 3px 8px; border-radius: 999px; background: #262a33;
+    color: var(--dim); font-size: 11px; white-space: nowrap;
+  }
+  .spacer { flex: 1; }
+  main { display: grid; grid-template-columns: 1fr 330px; gap: 12px; padding: 12px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px; margin-bottom: 12px;
+  }
+  #plan { width: 100%; height: auto; display: block; border-radius: 6px; background: #101216; }
+  .zone { stroke: #55606f; stroke-width: 1.5; cursor: pointer; }
+  .zone.idle { fill: var(--idle); fill-opacity: .55; }
+  .zone.active { fill: var(--active); fill-opacity: .55; }
+  .zone.settling { fill: var(--settling); fill-opacity: .55; }
+  .zone.selected { stroke: var(--accent); stroke-width: 2.5; }
+  .roomLabel { fill: #dfe4ec; font-size: 11px; font-weight: 600; pointer-events: none; }
+  .roomMeta { fill: #aab3c2; font-size: 9px; pointer-events: none; }
+  .guest { cursor: grab; }
+  .guest:active { cursor: grabbing; }
+  .guestLabel { fill: #cfd6e2; font-size: 9px; pointer-events: none; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 500; font-size: 11px; }
+  tr.sel td { background: #232936; }
+  tbody tr { cursor: pointer; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
+  dt { color: var(--dim); }
+  dd { margin: 0; word-break: break-word; }
+  #log {
+    height: 150px; overflow-y: auto; font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; color: #b6bece;
+  }
+  #log div { padding: 1px 0; border-bottom: 1px solid #22262e; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .muted { color: var(--dim); }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+</style>
 </head>
 <body>
-  <h1>DIM Machine — Operator</h1>
-  <a href="/author.html" style="float:right;color:#8888a0;font-size:13px;text-decoration:none">Author →</a>
 
-  <h2>Show</h2>
-  <div class="row">
-    <select id="showFile"></select>
-    <button onclick="send({type:'loadShow', file: $('showFile').value})">Load</button>
-    <button class="primary" id="startBtn" onclick="send({type:'startShow'})">▶ Start</button>
-    <button class="danger" onclick="send({type:'stopShow'})">■ Stop</button>
-    <span class="pill" id="showInfo">no show loaded</span>
-    <span class="pill" id="globalsInfo" style="display:none"></span>
-  </div>
+<header>
+  <h1>DIM Machine <span class="muted" style="font-weight:400">test panel</span></h1>
+  <select id="showFile"></select>
+  <button id="loadBtn">Load</button>
+  <button class="primary" id="startBtn">▶ Start</button>
+  <button id="stopBtn">■ Stop</button>
+  <span class="spacer"></span>
+  <span class="pill" id="clockInfo" style="font-family:ui-monospace,Menlo,monospace">—</span>
+  <span class="pill" id="showInfo">no show</span>
+  <span class="pill" id="connInfo">connecting…</span>
+</header>
 
-  <div id="roomsSection" style="display:none">
-    <h2>Rooms</h2>
-    <div class="row" id="moveAllRow" style="margin-bottom:10px">
-      <span style="color:#8888a0;font-size:13px">Move everyone</span>
-      <select id="moveAllFrom" style="font-size:13px">
-        <option value="">from any room</option>
-      </select>
-      <span style="color:#8888a0">→</span>
-      <select id="moveAllTo" style="font-size:13px"></select>
-      <button class="primary" onclick="moveAllToRoom()">Move all</button>
+<main>
+  <div>
+    <div class="card">
+      <div class="row" style="margin-bottom:10px">
+        <h2 style="margin:0">Floor plan</h2>
+        <span class="spacer"></span>
+        <span class="pill">time</span>
+        <button class="tiny" data-rate="0">❚❚</button>
+        <button class="tiny" data-rate="1">1×</button>
+        <button class="tiny" data-rate="5">5×</button>
+        <button class="tiny" data-rate="20">20×</button>
+        <span class="pill" id="rateInfo">1×</span>
+      </div>
+      <svg id="plan" preserveAspectRatio="xMidYMid meet"></svg>
+      <p class="muted" style="margin:8px 0 0">
+        Drag a guest to move them. Click a room or guest to inspect it.
+      </p>
     </div>
-    <table>
-      <thead><tr><th>Room</th><th>State</th><th>Members</th><th>Force state</th><th>Events</th></tr></thead>
-      <tbody id="rooms"></tbody>
-    </table>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:10px">
+        <h2 style="margin:0">Guests</h2>
+        <span class="spacer"></span>
+        <input id="spawnCount" type="number" value="1" min="1" max="60" style="width:60px" />
+        <button id="spawnBtn">+ Spawn</button>
+        <button id="spawnWalkBtn">+ Spawn &amp; walk</button>
+        <button id="walkAllBtn">Walk all</button>
+        <button id="stopWalkBtn">Stop walking</button>
+      </div>
+      <div class="row" style="margin-bottom:10px">
+        <span class="pill">walk</span>
+        <label class="muted">speed <input id="walkSpeed" type="number" min="10" max="600" step="10" style="width:64px" /></label>
+        <label class="muted">dwell pad <input id="walkDwell" type="number" min="0" max="30000" step="500" style="width:74px" />ms</label>
+        <button class="tiny" id="applyWalkBtn">Apply</button>
+        <span class="pill" id="walkNote">dwell = room's seen threshold + pad</span>
+      </div>
+      <table>
+        <thead><tr><th>Guest</th><th>Path</th><th>Room</th><th>Doing</th><th>Last entry</th><th></th></tr></thead>
+        <tbody id="guests"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Log</h2>
+      <div id="log"></div>
+    </div>
   </div>
 
-  <h2>Events → <select id="target" style="font-size:13px"><option value="all">All phones</option></select></h2>
-  <p class="pill" id="eventContext" style="margin-bottom:8px">Select a target to see available events</p>
-  <div id="eventButtons" class="row"></div>
-  <div class="row">
-    <input type="text" id="customEvent" placeholder="custom event name" />
-    <button onclick="if($('customEvent').value) send({type:'sendEvent', event:$('customEvent').value, target:$('target').value})">Send</button>
+  <div>
+    <div class="card"><h2>Rooms</h2><tbody><table id="roomsTable"><tbody id="rooms"></tbody></table></tbody></div>
+    <div class="card"><h2>Inspector</h2><div id="inspector" class="muted">Nothing selected.</div></div>
+    <div class="card"><h2>Room output (stub)</h2><div id="outputs" class="muted">—</div></div>
   </div>
+</main>
 
-  <h2>Test cues</h2>
-  <div class="row">
-    <button class="primary" onclick="pushCue({kind:'synctest', leadTimeMs:2000})">⚡ Sync test (flash + click)</button>
-    <button onclick="pushCue({kind:'audio', assetId:'chime.wav', leadTimeMs:2000})">Chime</button>
-    <button onclick="pushCue({kind:'stopAudio', assetId:'*', fadeMs:800, leadTimeMs:0})">■ Stop all audio</button>
-  </div>
+<script>
+const $ = (id) => document.getElementById(id);
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
-  <h2>Devices <span class="pill" id="hiddenOffline" style="display:none"></span></h2>
-  <div class="row" id="offlineActions" style="display:none">
-    <button onclick="clearOffline()">Clear hidden offline phones</button>
-  </div>
-  <table>
-    <thead><tr><th></th><th>Device</th><th>Room</th><th>State</th><th>Page</th><th>Role</th><th>Offset</th><th>Drift</th><th>Status</th></tr></thead>
-    <tbody id="devices"></tbody>
-  </table>
+let ws = null;
+let snap = null;          // latest spatial snapshot
+let showMeta = null;
+let selection = null;     // { kind: 'room' | 'guest', id }
+let clockAt = { server: null, received: 0 };
+/** guestId → { target, drawn, node } — the tween state for each dot. */
+const dots = new Map();
+let dragging = null;      // { guestId, pointerId }
 
-  <h2>Log</h2>
-  <div id="log"></div>
+// ---------------------------------------------------------------- transport
 
-  <script>
-    const $ = (id) => document.getElementById(id);
-    let ws;
-    let roles = [];
-    let roomDefs = [];
-    let roomMode = false;
-    let lastRoster = null;
-    let lastRoomDefsKey = '';
-    let lastRoomsKey = '';
+function send(obj) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+}
 
-    function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
-    function pushCue(cue) { send({ type: 'pushCue', cue, target: $('target').value }); }
-    function setRole(token, role) { send({ type: 'setRole', token, role }); }
-    function assignZone(token, roomId) { send({ type: 'assignZone', token, roomId: roomId || null }); }
-    function forceRoomState(roomId) {
-      const sel = document.querySelector(`select[data-force-room="${roomId}"]`);
-      if (!sel?.value) return;
-      send({ type: 'forceRoomState', roomId, state: sel.value });
+function connect() {
+  ws = new WebSocket(`ws://${location.host}`);
+  ws.onopen = () => {
+    $('connInfo').textContent = 'connected';
+    send({ type: 'hello', role: 'operator' });
+  };
+  ws.onclose = () => {
+    $('connInfo').textContent = 'reconnecting…';
+    setTimeout(connect, 1000);
+  };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'roster') onRoster(msg);
+    else if (msg.type === 'positions') onPositions(msg);
+    else if (msg.type === 'log') appendLog(msg.line);
+  };
+}
+
+/**
+ * Motion-only update. Retargets the dots without touching the DOM anywhere
+ * else — re-rendering the tables and inspector at motion rate is what makes a
+ * panel feel heavy.
+ */
+function onPositions(msg) {
+  const fanned = msg.guests ?? [];
+  for (const g of fanned) {
+    const dot = dots.get(g.guestId);
+    if (!dot) continue;
+    if (g.position) dot.target = { x: g.position.x, y: g.position.y };
+    dot.pending = g.pending ?? null;
+    dot.serverNow = g.now ?? null;
+    dot.receivedAt = Date.now();
+  }
+  // Keep the roster copy in step so a later full render starts from the truth.
+  for (const g of snap?.guests ?? []) {
+    const fresh = fanned.find((x) => x.guestId === g.guestId);
+    if (fresh) {
+      g.position = fresh.position;
+      g.roomId = fresh.roomId;
+      g.occupancy = fresh.occupancy;
+      g.pending = fresh.pending ?? null;
     }
-    function moveAllToRoom() {
-      const roomId = $('moveAllTo').value;
-      if (!roomId) return;
-      send({ type: 'moveAllToRoom', roomId, fromRoomId: $('moveAllFrom').value || null });
+  }
+  const doing = describeAllIntents();
+  if (doing !== lastDoing) { lastDoing = doing; renderGuests(); }
+}
+
+let lastDoing = '';
+function describeAllIntents() {
+  return (snap?.guests ?? []).map((g) => `${g.guestId}:${g.roomId}:${g.pending?.roomId ?? ''}`).join('|');
+}
+
+function onRoster(msg) {
+  snap = msg.spatial;
+  showMeta = msg.show;
+  clockAt = { server: snap?.clock ?? null, received: Date.now() };
+  // The roster carries pending confirmations under the coordinator; fold them
+  // onto the guests so both channels shape a guest the same way.
+  for (const g of snap?.guests ?? []) {
+    g.pending = snap.coordinator?.occupancy?.[g.guestId]?.pending ?? null;
+    g.now = snap.clock?.now ?? null;
+  }
+  fillShows(msg.shows, msg.show?.file);
+  syncWalkInputs();
+  render();
+}
+
+/** Don't fight the operator while they are typing a new value. */
+function syncWalkInputs() {
+  const cfg = snap?.walkthrough?.config;
+  if (!cfg) return;
+  if (document.activeElement !== $('walkSpeed')) $('walkSpeed').value = cfg.speed;
+  if (document.activeElement !== $('walkDwell')) $('walkDwell').value = cfg.dwellPadMs;
+}
+
+/**
+ * The roster arrives every couple of seconds, so the clock is extrapolated
+ * locally between pushes — otherwise it would visibly stutter, and at 20x it
+ * would look broken.
+ */
+function renderClock() {
+  const el = $('clockInfo');
+  const c = clockAt.server;
+  if (!c || c.elapsedMs == null) { el.textContent = '—'; return; }
+  const elapsed = c.elapsedMs + (Date.now() - clockAt.received) * (c.rate ?? 1);
+  el.textContent = `${formatDuration(elapsed)}${c.rate === 0 ? ' ❚❚' : c.rate !== 1 ? ` ${c.rate}×` : ''}`;
+  el.style.color = c.rate === 0 ? 'var(--warn)' : c.rate > 1 ? 'var(--accent)' : '';
+}
+
+function formatDuration(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = String(Math.floor(total / 60)).padStart(2, '0');
+  const sec = String(total % 60).padStart(2, '0');
+  return `${m}:${sec}`;
+}
+
+setInterval(renderClock, 200);
+
+function appendLog(line) {
+  const el = document.createElement('div');
+  el.textContent = line;
+  if (/✗|failed|refused/i.test(line)) el.className = 'bad';
+  else if (/⚠|not on their path/i.test(line)) el.className = 'warn';
+  else if (/activated|started/i.test(line)) el.className = 'ok';
+  const log = $('log');
+  log.appendChild(el);
+  while (log.childElementCount > 200) log.removeChild(log.firstChild);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ------------------------------------------------------------------- header
+
+function fillShows(shows, current) {
+  const sel = $('showFile');
+  if (sel.dataset.filled !== String(shows?.length)) {
+    sel.innerHTML = (shows ?? []).map((f) => `<option>${f}</option>`).join('');
+    sel.dataset.filled = String(shows?.length);
+  }
+  if (current) sel.value = current;
+}
+
+$('loadBtn').onclick = () => send({ type: 'loadShow', file: $('showFile').value });
+$('startBtn').onclick = () => send({ type: 'startShow' });
+$('stopBtn').onclick = () => send({ type: 'stopShow' });
+$('spawnBtn').onclick = () => send({ type: 'spawnGuest', count: +$('spawnCount').value });
+$('spawnWalkBtn').onclick = () => send({ type: 'spawnGuest', count: +$('spawnCount').value, walk: true });
+$('walkAllBtn').onclick = () => send({ type: 'startWalkthrough' });
+$('stopWalkBtn').onclick = () => send({ type: 'stopWalkthrough' });
+$('applyWalkBtn').onclick = () => send({
+  type: 'configureWalkthrough',
+  config: { speed: +$('walkSpeed').value, dwellPadMs: +$('walkDwell').value },
+});
+for (const btn of document.querySelectorAll('[data-rate]')) {
+  btn.onclick = () => send({ type: 'setTimeScale', rate: +btn.dataset.rate });
+}
+
+// --------------------------------------------------------------- floor plan
+
+/** Screen coords → floor-plan coords, so a drag lands where the pointer is. */
+function planPoint(evt) {
+  const svg = $('plan');
+  const pt = svg.createSVGPoint();
+  pt.x = evt.clientX;
+  pt.y = evt.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+function viewBox() {
+  const fp = snap?.floorPlan;
+  if (fp?.width && fp?.height) return { x: 0, y: 0, w: fp.width, h: fp.height };
+  const e = fp?.extent;
+  if (!e) return { x: 0, y: 0, w: 100, h: 100 };
+  const pad = 40;
+  return { x: e.minX - pad, y: e.minY - pad, w: e.width + pad * 2, h: e.height + pad * 2 };
+}
+
+function roomStateClass(state) {
+  const root = String(state ?? 'idle').split('.')[0];
+  if (root === 'active' || root === 'activating') return 'active';
+  if (root === 'settling') return 'settling';
+  return 'idle';
+}
+
+function renderPlan() {
+  const svg = $('plan');
+  const vb = viewBox();
+  svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  svg.innerHTML = '';
+
+  const fp = snap?.floorPlan;
+  if (fp?.image) {
+    const img = document.createElementNS(SVG_NS, 'image');
+    img.setAttribute('href', `/assets/${fp.image}`);
+    img.setAttribute('x', 0); img.setAttribute('y', 0);
+    img.setAttribute('width', fp.width ?? vb.w);
+    img.setAttribute('height', fp.height ?? vb.h);
+    img.setAttribute('opacity', '0.5');
+    svg.appendChild(img);
+  }
+
+  const rooms = new Map((snap?.rooms ?? []).map((r) => [r.roomId, r]));
+
+  // Zones, coloured by the state of the room that owns them. Several zones of
+  // one room share a colour — that is the multi-zone model made visible.
+  for (const [zoneId, zone] of Object.entries(snap?.zones ?? {})) {
+    if (!zone.polygon?.length) continue;
+    const room = rooms.get(zone.roomId);
+    const poly = document.createElementNS(SVG_NS, 'polygon');
+    poly.setAttribute('points', zone.polygon.map((p) => p.join(',')).join(' '));
+    poly.setAttribute('class', `zone ${roomStateClass(room?.state)}`
+      + (selection?.kind === 'room' && selection.id === zone.roomId ? ' selected' : ''));
+    poly.onclick = () => { selection = { kind: 'room', id: zone.roomId }; render(); };
+    poly.appendChild(title(`${zone.roomId} · zone ${zoneId}`));
+    svg.appendChild(poly);
+  }
+
+  for (const room of snap?.rooms ?? []) {
+    const zones = Object.values(snap?.zones ?? {}).filter((z) => z.roomId === room.roomId);
+    const label = zones[0]?.label ?? centroidOf(zones[0]?.polygon);
+    if (!label) continue;
+    svg.appendChild(text(label[0], label[1] - 4, room.name, 'roomLabel'));
+    const bits = [room.state];
+    if (room.lockHolder) bits.push(`🔒 ${guestName(room.lockHolder)}`);
+    if (room.resetInMs != null) bits.push(`${Math.ceil(room.resetInMs / 1000)}s`);
+    svg.appendChild(text(label[0], label[1] + 9, bits.join(' · '), 'roomMeta'));
+  }
+
+  // The selected guest's route, drawn in order. `goldenPath` is an ordered
+  // list, so this is literally where the tour audio will lead them.
+  const routed = selection?.kind === 'guest'
+    ? (snap?.guests ?? []).find((g) => g.guestId === selection.id)
+    : null;
+  if (routed) {
+    const stops = pathRooms(routed.pathId)
+      .map((roomId) => rooms.get(roomId))
+      .filter((r) => r?.centre);
+    if (stops.length > 1) {
+      const line = document.createElementNS(SVG_NS, 'polyline');
+      line.setAttribute('points', stops.map((r) => r.centre.join(',')).join(' '));
+      line.setAttribute('fill', 'none');
+      line.setAttribute('stroke', '#6ea8fe');
+      line.setAttribute('stroke-width', '2');
+      line.setAttribute('stroke-dasharray', '6 5');
+      line.setAttribute('opacity', '0.7');
+      svg.appendChild(line);
     }
-    function startRoom(roomId) { send({ type: 'startRoom', roomId }); }
-    function sendRoomEvent(roomId, ev) { send({ type: 'sendEvent', event: ev, target: `room:${roomId}` }); }
-    function clearOffline() { send({ type: 'clearOfflinePhones' }); }
+    stops.forEach((room, i) => {
+      const seen = routed.visitHistory?.[room.roomId]?.seen;
+      const marker = document.createElementNS(SVG_NS, 'circle');
+      marker.setAttribute('cx', room.centre[0]);
+      marker.setAttribute('cy', room.centre[1]);
+      marker.setAttribute('r', 13);
+      marker.setAttribute('fill', seen ? '#6ea8fe' : 'none');
+      marker.setAttribute('fill-opacity', '0.25');
+      marker.setAttribute('stroke', '#6ea8fe');
+      marker.setAttribute('stroke-width', '2');
+      svg.appendChild(marker);
+      svg.appendChild(text(room.centre[0], room.centre[1] - 18, `${i + 1}`, 'roomMeta'));
+    });
+  }
 
-    function connect() {
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      ws = new WebSocket(`${proto}://${location.host}`);
-      ws.onopen = () => send({ type: 'hello', role: 'operator' });
-      ws.onclose = () => setTimeout(connect, 1000);
-      ws.onmessage = (e) => {
-        const msg = JSON.parse(e.data);
-        if (msg.type === 'roster') renderRoster(msg);
-        if (msg.type === 'log') {
-          const line = document.createElement('div');
-          line.textContent = `${new Date(msg.at).toLocaleTimeString()}  ${msg.line}`;
-          $('log').appendChild(line);
-          while ($('log').childElementCount > 400) $('log').firstChild.remove();
-          $('log').scrollTop = $('log').scrollHeight;
-        }
-      };
+  // Dots are kept as live nodes rather than rebuilt, so the animation loop can
+  // move them every frame without touching anything else.
+  const seen = new Set();
+  for (const guest of snap?.guests ?? []) {
+    if (!guest.position) continue;
+    seen.add(guest.guestId);
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('class', 'guest');
+    const dot = document.createElementNS(SVG_NS, 'circle');
+    dot.setAttribute('r', 8);
+    dot.setAttribute('fill', outcomeColour(guest.lastEntry));
+    dot.setAttribute('stroke', selection?.kind === 'guest' && selection.id === guest.guestId
+      ? '#6ea8fe' : '#0d0f13');
+    dot.setAttribute('stroke-width', guest.walking ? 3 : 2);
+    // Progress ring for a confirmation in flight — the gap between the dot
+    // being inside and the room reacting is a real 1.5s, and without this it
+    // reads as the panel having frozen.
+    const ring = document.createElementNS(SVG_NS, 'circle');
+    ring.setAttribute('r', 12);
+    ring.setAttribute('fill', 'none');
+    ring.setAttribute('stroke', '#6ea8fe');
+    ring.setAttribute('stroke-width', '2.5');
+    ring.setAttribute('stroke-linecap', 'round');
+    ring.setAttribute('opacity', '0');
+    const label = text(0, 0, guest.label, 'guestLabel');
+    g.appendChild(ring);
+    g.appendChild(dot);
+    g.appendChild(label);
+    g.appendChild(title(`${guest.label} · ${guest.pathId}\n${describeEntry(guest.lastEntry)}`));
+    g.onpointerdown = (evt) => {
+      selection = { kind: 'guest', id: guest.guestId };
+      dragging = { guestId: guest.guestId, pointerId: evt.pointerId };
+      $('plan').setPointerCapture(evt.pointerId);
+      evt.preventDefault();
+      render();
+    };
+    svg.appendChild(g);
+
+    const previous = dots.get(guest.guestId);
+    const at = { x: guest.position.x, y: guest.position.y };
+    dots.set(guest.guestId, {
+      node: dot,
+      ring,
+      label,
+      pending: guest.pending ?? previous?.pending ?? null,
+      serverNow: previous?.serverNow ?? null,
+      receivedAt: previous?.receivedAt ?? Date.now(),
+      target: at,
+      // Carry the drawn position across a re-render so the dot does not jump
+      // back to the server value mid-tween.
+      drawn: previous?.drawn ?? at,
+    });
+  }
+  for (const guestId of [...dots.keys()]) {
+    if (!seen.has(guestId)) dots.delete(guestId);
+  }
+  paintDots();
+}
+
+/**
+ * Ease each dot toward its last reported point.
+ *
+ * Positions arrive at roughly 16Hz at best, and less when the show is paused or
+ * the network hiccups. Drawing them raw reads as stuttering, so the dot chases
+ * its target every frame instead. Large jumps — an operator dragging, or a
+ * teleport — snap rather than glide, because easing a teleport looks like a bug.
+ */
+function stepDots() {
+  for (const dot of dots.values()) {
+    const dx = dot.target.x - dot.drawn.x;
+    const dy = dot.target.y - dot.drawn.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance < 0.4) dot.drawn = { ...dot.target };
+    else if (distance > 120) dot.drawn = { ...dot.target };
+    else dot.drawn = { x: dot.drawn.x + dx * 0.25, y: dot.drawn.y + dy * 0.25 };
+  }
+  paintDots();
+  requestAnimationFrame(stepDots);
+}
+
+const RING = 2 * Math.PI * 12;
+
+function paintDots() {
+  for (const dot of dots.values()) {
+    dot.node.setAttribute('cx', dot.drawn.x);
+    dot.node.setAttribute('cy', dot.drawn.y);
+    dot.label.setAttribute('x', dot.drawn.x);
+    dot.label.setAttribute('y', dot.drawn.y - 12);
+    if (!dot.ring) continue;
+    const progress = pendingProgress(dot);
+    if (progress == null) {
+      dot.ring.setAttribute('opacity', '0');
+      continue;
     }
+    dot.ring.setAttribute('cx', dot.drawn.x);
+    dot.ring.setAttribute('cy', dot.drawn.y);
+    dot.ring.setAttribute('opacity', '0.95');
+    dot.ring.setAttribute('stroke-dasharray', `${RING}`);
+    dot.ring.setAttribute('stroke-dashoffset', `${RING * (1 - progress)}`);
+    dot.ring.setAttribute('transform', `rotate(-90 ${dot.drawn.x} ${dot.drawn.y})`);
+  }
+}
 
-    function eventsForTarget(msg) {
-      const target = $('target').value;
-      const s = msg.show;
-      if (roomMode && target.startsWith('room:')) {
-        const roomId = target.slice(5);
-        const room = (s.rooms ?? []).find((r) => r.id === roomId);
-        if (!room) return { events: [], context: roomId };
-        if (!room.started) return { events: [], context: `${room.name} · not started` };
-        return {
-          events: room.availableEvents ?? [],
-          context: `${room.name} · ${room.state}`,
-        };
-      }
-      if (roomMode && target === 'all') {
-        const started = (s.rooms ?? []).filter((r) => r.started);
-        if (started.length === 1) {
-          const room = started[0];
-          return {
-            events: room.availableEvents ?? [],
-            context: `${room.name} · ${room.state} (only started room)`,
-          };
-        }
-        return { events: [], context: 'Select a room to see its current events' };
-      }
-      const user = msg.users.find((u) => u.token === target);
-      if (user) {
-        if (roomMode && user.zoneId) {
-          const room = (s.rooms ?? []).find((r) => r.id === user.zoneId);
-          return {
-            events: room?.availableEvents ?? user.availableEvents ?? [],
-            context: room ? `${room.name} · ${room.state}` : user.state ?? user.label,
-          };
-        }
-        return {
-          events: user.availableEvents ?? [],
-          context: user.state ?? user.label,
-        };
-      }
-      if (!roomMode && target === 'all') {
-        const u = msg.users.find((u) => u.connected) ?? msg.users[0];
-        return {
-          events: u?.availableEvents ?? [],
-          context: u ? `all phones · ${u.state ?? '?'}` : 'no phones connected',
-        };
-      }
-      return { events: [], context: 'Select a target' };
+/** 0–1 through the confirmation hold, extrapolated on the show clock. */
+function pendingProgress(dot) {
+  const p = dot.pending;
+  if (!p || !p.holdMs || dot.serverNow == null) return null;
+  const rate = clockAt.server?.rate ?? 1;
+  const showNow = dot.serverNow + (Date.now() - dot.receivedAt) * rate;
+  const progress = (showNow - p.startedAt) / p.holdMs;
+  if (progress < 0 || progress > 1.15) return null;
+  return Math.min(1, progress);
+}
+
+requestAnimationFrame(stepDots);
+
+$('plan').addEventListener('pointermove', (evt) => {
+  if (!dragging || evt.pointerId !== dragging.pointerId) return;
+  const pt = planPoint(evt);
+  send({ type: 'setVirtualPosition', guestId: dragging.guestId, x: pt.x, y: pt.y });
+});
+$('plan').addEventListener('pointerup', (evt) => {
+  if (dragging?.pointerId === evt.pointerId) {
+    $('plan').releasePointerCapture(evt.pointerId);
+    dragging = null;
+  }
+});
+
+function text(x, y, content, cls, anchor = 'middle') {
+  const el = document.createElementNS(SVG_NS, 'text');
+  el.setAttribute('x', x); el.setAttribute('y', y);
+  el.setAttribute('class', cls); el.setAttribute('text-anchor', anchor);
+  el.textContent = content;
+  return el;
+}
+
+function title(content) {
+  const el = document.createElementNS(SVG_NS, 'title');
+  el.textContent = content;
+  return el;
+}
+
+function centroidOf(polygon) {
+  if (!polygon?.length) return null;
+  const sum = polygon.reduce((a, [x, y]) => [a[0] + x, a[1] + y], [0, 0]);
+  return [sum[0] / polygon.length, sum[1] / polygon.length];
+}
+
+function outcomeColour(entry) {
+  switch (entry?.outcome) {
+    case 'activated': case 'alreadyActive': case 'inherited': return '#58c98a';
+    case 'ineligible': return '#e0a758';
+    case 'refused': return '#e0685f';
+    default: return '#7f8899';
+  }
+}
+
+/**
+ * What the walker is doing and when it will next move — the answer to "why is
+ * this guest just standing there".
+ */
+function describeIntent(guest) {
+  // A confirmation in flight outranks everything else — it is the reason the
+  // room has not reacted yet.
+  const p = guest.pending;
+  if (p) {
+    return p.occupancy === 'inside'
+      ? `entering ${p.roomId}…`
+      : `leaving ${guest.roomId ?? ''}…`;
+  }
+  const intent = guest.intent;
+  if (!intent) return guest.walking ? 'starting…' : '—';
+  const secs = intent.movesInMs != null ? `${Math.ceil(intent.movesInMs / 1000)}s` : null;
+  if (intent.phase === 'walking') return `→ ${intent.targetRoomId ?? '?'}`;
+  if (intent.phase === 'dwelling') return `dwelling · moves in ${secs}`;
+  if (intent.phase === 'done') return 'path complete';
+  return 'idle';
+}
+
+function describeEntry(entry) {
+  if (!entry) return 'not in a room';
+  if (entry.outcome === 'ineligible') return `${entry.roomId}: not theirs (${entry.policy})`;
+  if (entry.outcome === 'refused') return `${entry.roomId}: refused (${entry.reason})`;
+  if (entry.outcome === 'inherited') return `${entry.roomId}: inherited the room`;
+  return `${entry.roomId}: ${entry.outcome}`;
+}
+
+const shortId = (id) => String(id ?? '').replace(/^u-/, '').slice(0, 6);
+
+/**
+ * Always name a guest the way the guest list names them.
+ *
+ * Rooms and locks only ever carry ids, so without this the panel says
+ * "Guest 3" in one table and "aba3d3" in the next and nothing joins them up.
+ * Falls back to the short id for a guest who has since left.
+ */
+function guestName(guestId) {
+  if (!guestId) return null;
+  const guest = (snap?.guests ?? []).find((g) => g.guestId === guestId);
+  return guest ? guest.label : shortId(guestId);
+}
+
+/** Colour-matched to the dot, so a name in a table points at a dot on the plan. */
+function guestChip(guestId) {
+  if (!guestId) return '—';
+  const guest = (snap?.guests ?? []).find((g) => g.guestId === guestId);
+  const colour = guest ? outcomeColour(guest.lastEntry) : '#7f8899';
+  return `<span style="color:${colour}">●</span> ${guestName(guestId)}`;
+}
+
+/** The ordered room list for a path id, from the show definition. */
+function pathRooms(pathId) {
+  return showMeta?.paths?.[pathId]?.rooms ?? [];
+}
+
+function pathGuidance(pathId) {
+  return showMeta?.paths?.[pathId]?.guidance ?? 'goldenPath';
+}
+
+/**
+ * The route as a list of stops with progress. `goldenPath` is ordered, so the
+ * first unseen room is where the guest is being led next.
+ */
+function routeFor(guest) {
+  const rooms = pathRooms(guest.pathId);
+  let nextFound = false;
+  return rooms.map((roomId) => {
+    const visit = guest.visitHistory?.[roomId];
+    const here = guest.roomId === roomId;
+    const seen = !!visit?.seen;
+    const next = !seen && !here && !nextFound;
+    if (next) nextFound = true;
+    return { roomId, seen, here, next, visits: visit?.visits ?? 0 };
+  });
+}
+
+// ----------------------------------------------------------------- listings
+
+function renderGuests() {
+  const rows = (snap?.guests ?? []).map((g) => `
+    <tr class="${selection?.kind === 'guest' && selection.id === g.guestId ? 'sel' : ''}"
+        data-guest="${g.guestId}">
+      <td>
+        <span style="color:${outcomeColour(g.lastEntry)}">●</span>
+        ${g.label}${g.walking ? ' <span class="muted">▸</span>' : ''}
+        <br><span class="muted" style="font-size:10px;font-family:ui-monospace,Menlo,monospace">${g.guestId}</span>
+      </td>
+      <td class="muted" title="${pathRooms(g.pathId).join(' → ')}">${g.pathId}<br><span style="font-size:10px">${pathRooms(g.pathId).join(' → ')}</span></td>
+      <td>${g.roomId ?? '<span class="muted">—</span>'}</td>
+      <td class="muted">${describeIntent(g)}</td>
+      <td style="color:${outcomeColour(g.lastEntry)}">${describeEntry(g.lastEntry)}</td>
+      <td><button class="tiny" data-remove="${g.guestId}">×</button></td>
+    </tr>`).join('');
+  $('guests').innerHTML = rows || '<tr><td colspan="6" class="muted">No guests yet.</td></tr>';
+
+  for (const tr of $('guests').querySelectorAll('[data-guest]')) {
+    tr.onclick = (e) => {
+      if (e.target.dataset.remove) return;
+      selection = { kind: 'guest', id: tr.dataset.guest };
+      render();
+    };
+  }
+  for (const btn of $('guests').querySelectorAll('[data-remove]')) {
+    btn.onclick = () => send({ type: 'removeGuest', guestId: btn.dataset.remove });
+  }
+}
+
+function renderRooms() {
+  $('rooms').innerHTML = (snap?.rooms ?? []).map((r) => `
+    <tr class="${selection?.kind === 'room' && selection.id === r.roomId ? 'sel' : ''}"
+        data-room="${r.roomId}">
+      <td>${r.name}</td>
+      <td class="muted">${r.state}</td>
+      <td>${r.occupantCount || ''}</td>
+      <td class="muted" style="font-size:11px">${r.lockHolder ? guestName(r.lockHolder) : ''}</td>
+    </tr>`).join('') || '<tr><td class="muted">No show loaded.</td></tr>';
+  for (const tr of $('rooms').querySelectorAll('[data-room]')) {
+    tr.onclick = () => { selection = { kind: 'room', id: tr.dataset.room }; render(); };
+  }
+}
+
+function renderInspector() {
+  const el = $('inspector');
+  if (!selection) { el.className = 'muted'; el.textContent = 'Nothing selected.'; return; }
+  el.className = '';
+
+  if (selection.kind === 'room') {
+    const room = (snap?.rooms ?? []).find((r) => r.roomId === selection.id);
+    if (!room) { el.textContent = 'Room not found.'; return; }
+    el.innerHTML = `
+      <dl>
+        <dt>Room</dt><dd>${room.name}</dd>
+        <dt>State</dt><dd>${room.state}</dd>
+        <dt>Exit</dt><dd>${room.exitPolicy ?? '—'}</dd>
+        <dt>Reset in</dt><dd>${room.resetInMs != null ? `${Math.ceil(room.resetInMs / 1000)}s` : '—'}</dd>
+        <dt>Lock</dt><dd>${guestChip(room.lockHolder)}</dd>
+        <dt>Last holder</dt><dd>${room.lastHolder ? guestChip(room.lastHolder) : '—'}</dd>
+        <dt>Inside</dt><dd>${room.occupants?.map(guestChip).join('<br>') || '—'}</dd>
+        <dt>Running for</dt><dd>${room.eligibleOccupants?.length
+          ? room.eligibleOccupants.map(guestChip).join('<br>')
+          : '<span class="muted">nobody</span>'}</dd>
+        <dt>Last refusal</dt><dd>${room.lastRefuse
+          ? `${guestName(room.lastRefuse.guestId)} — ${room.lastRefuse.reason}` : '—'}</dd>
+      </dl>
+      <div class="row" style="margin-top:10px">
+        ${['ACTIVATE', 'RELEASE', 'RESET', 'DONE'].map((ev) =>
+          `<button class="tiny" data-ev="${ev}">${ev}</button>`).join('')}
+        <button class="tiny" data-unlock="1">Release lock</button>
+      </div>`;
+    for (const btn of el.querySelectorAll('[data-ev]')) {
+      btn.onclick = () => send({ type: 'sendRoomEvent', roomId: room.roomId, event: btn.dataset.ev });
     }
+    el.querySelector('[data-unlock]').onclick =
+      () => send({ type: 'releaseRoomLock', roomId: room.roomId });
+    return;
+  }
 
-    function renderEventButtons(msg) {
-      const { events, context } = eventsForTarget(msg);
-      $('eventContext').textContent = context;
-      $('eventButtons').innerHTML = '';
-      if (!events.length) {
-        const hint = document.createElement('span');
-        hint.className = 'warn';
-        hint.textContent = 'No operator events from this state';
-        $('eventButtons').appendChild(hint);
-        return;
-      }
-      for (const ev of events) {
-        const b = document.createElement('button');
-        b.textContent = ev;
-        b.onclick = () => send({ type: 'sendEvent', event: ev, target: $('target').value });
-        $('eventButtons').appendChild(b);
-      }
-    }
+  const guest = (snap?.guests ?? []).find((g) => g.guestId === selection.id);
+  if (!guest) { el.textContent = 'Guest not found.'; return; }
+  const visits = Object.values(guest.visitHistory ?? {});
+  const route = routeFor(guest);
+  el.innerHTML = `
+    <dl>
+      <dt>Guest</dt><dd><span style="color:${outcomeColour(guest.lastEntry)}">●</span> ${guest.label}</dd>
+      <dt>ID</dt><dd style="font-family:ui-monospace,Menlo,monospace;font-size:11px">${guest.guestId}</dd>
+      <dt>Path</dt><dd>${guest.pathId} <span class="muted">· ${pathGuidance(guest.pathId)}</span></dd>
+      <dt>Phase</dt><dd>${guest.phaseId}</dd>
+      <dt>Adherence</dt><dd>${guest.adherence} (${guest.adherenceScore})</dd>
+      <dt>Eligible</dt><dd>${guest.eligibleRooms?.join(', ') || '—'}</dd>
+      <dt>In room</dt><dd>${guest.roomId ?? '—'}${guest.zoneId ? ` (${guest.zoneId})` : ''}</dd>
+      <dt>Last entry</dt><dd style="color:${outcomeColour(guest.lastEntry)}">${describeEntry(guest.lastEntry)}</dd>
+      <dt>Walking</dt><dd>${guest.walking ? describeIntent(guest) : 'no'}</dd>
+    </dl>
+    <h2 style="margin-top:12px">Route</h2>
+    ${route.length ? `<ol style="margin:0;padding-left:20px">${route.map((stop) => `
+      <li style="color:${stop.here ? '#58c98a' : stop.seen ? '#8b93a3' : '#e7e9ee'}">
+        ${stop.roomId}
+        ${stop.here ? '<span class="muted">· here</span>' : ''}
+        ${stop.seen ? '<span class="muted">· seen</span>' : ''}
+        ${stop.next ? '<span style="color:#6ea8fe">· next</span>' : ''}
+      </li>`).join('')}</ol>`
+      : '<p class="muted">This path has no rooms.</p>'}
 
-    function keepSelection(sel, options, first) {
-      const current = sel.value;
-      sel.innerHTML = (first ?? '') + options;
-      if ([...sel.options].some((o) => o.value === current)) sel.value = current;
-    }
+    <h2 style="margin-top:12px">Visits</h2>
+    ${visits.length ? `<table><thead><tr><th>Room</th><th>Visits</th><th>Dwell</th><th>Seen</th><th>Mine</th></tr></thead><tbody>
+      ${visits.map((v) => `<tr>
+        <td>${v.roomId}</td><td>${v.visits}</td>
+        <td>${Math.round((v.totalDwellMs ?? 0) / 1000)}s</td>
+        <td>${v.seen ? '✓' : ''}</td><td>${v.activatedByMe ? '✓' : ''}</td>
+      </tr>`).join('')}
+    </tbody></table>` : '<p class="muted">No rooms entered yet.</p>'}
+    <div class="row" style="margin-top:10px">
+      <button class="tiny" data-walk="1">Walk</button>
+      <button class="tiny" data-nowalk="1">Stop</button>
+    </div>`;
+  el.querySelector('[data-walk]').onclick =
+    () => send({ type: 'startWalkthrough', guestIds: [guest.guestId] });
+  el.querySelector('[data-nowalk]').onclick =
+    () => send({ type: 'stopWalkthrough', guestIds: [guest.guestId] });
+}
 
-    function renderRoster(msg) {
-      lastRoster = msg;
-      keepSelection($('showFile'), (msg.shows ?? []).map((f) => `<option value="${f}">${f}</option>`).join(''));
-      const s = msg.show ?? {};
-      roomMode = !!s.roomMode;
-      roomDefs = s.roomDefs ?? [];
-      $('roomsSection').style.display = roomMode ? '' : 'none';
-      if (!roomMode) lastRoomDefsKey = '';
-      const roomDefsKey = roomDefs.map((r) => r.id).join(',');
-      if (roomMode && roomDefsKey !== lastRoomDefsKey) {
-        lastRoomDefsKey = roomDefsKey;
-        const roomOpts = roomDefs.map((r) => `<option value="${r.id}">${r.name}</option>`).join('');
-        keepSelection($('moveAllTo'), roomOpts);
-        keepSelection($('moveAllFrom'), roomOpts, '<option value="">from any room</option>');
-      }
+function renderOutputs() {
+  const outs = (snap?.outputLog ?? []).slice(-8).reverse();
+  $('outputs').innerHTML = outs.length
+    ? outs.map((o) => `<div class="muted">${o.roomId} → ${o.state}</div>`).join('')
+    : '<span class="muted">—</span>';
+}
 
-      $('showInfo').innerHTML = s.loaded
-        ? `<b>${s.name}</b> · contract v${s.contractVersion}${roomMode ? ' · <b>rooms</b>' : ''} · ${s.running ? '<b>RUNNING</b>' : 'loaded'}`
-        : 'no show loaded';
-      const globals = Object.entries(s.globals ?? {});
-      $('globalsInfo').style.display = globals.length ? '' : 'none';
-      $('globalsInfo').innerHTML = globals.map(([k, v]) => `${k} = <b>${JSON.stringify(v)}</b>`).join(' · ');
-      roles = s.roles ?? [];
+function render() {
+  $('showInfo').textContent = showMeta?.loaded
+    ? `${showMeta.name} · ${showMeta.running ? 'running' : 'stopped'} · ${showMeta.roomCount} rooms`
+    : 'no show';
+  $('rateInfo').textContent = snap?.timeScale === 0 ? 'paused' : `${snap?.timeScale ?? 1}×`;
+  $('startBtn').disabled = !showMeta?.loaded || showMeta?.running;
+  $('stopBtn').disabled = !showMeta?.running;
+  renderClock();
+  renderPlan();
+  renderRooms();
+  renderGuests();
+  renderInspector();
+  renderOutputs();
+}
 
-      const hidden = msg.hiddenOfflineCount ?? 0;
-      $('hiddenOffline').style.display = hidden ? '' : 'none';
-      $('hiddenOffline').textContent = hidden ? `${hidden} offline >60s (hidden)` : '';
-      $('offlineActions').style.display = hidden ? '' : 'none';
-
-      // event target: all phones, each device, each room
-      let targetOpts = '<option value="all">' + (roomMode ? 'All started rooms' : 'All phones') + '</option>';
-      if (roomMode) {
-        for (const r of s.rooms ?? [])
-          targetOpts += `<option value="room:${r.id}">Room: ${r.name}${r.state ? ` (${r.state})` : ''}</option>`;
-      }
-      targetOpts += msg.users.map((u) => `<option value="${u.token}">${u.label}${u.state ? ` · ${u.state}` : ''}</option>`).join('');
-      keepSelection($('target'), targetOpts);
-
-      renderEventButtons(msg);
-
-      if (roomMode) {
-        const roomsKey = (s.rooms ?? []).map((r) =>
-          `${r.id}:${r.state}:${r.members}:${(r.availableEvents ?? []).join(',')}:${(r.stateNames ?? []).join(',')}`
-        ).join('|');
-        if (roomsKey !== lastRoomsKey) {
-          lastRoomsKey = roomsKey;
-          const savedForce = {};
-          document.querySelectorAll('select[data-force-room]').forEach((sel) => {
-            savedForce[sel.dataset.forceRoom] = sel.value;
-          });
-        $('rooms').innerHTML = (s.rooms ?? []).map((r) => {
-          const evBtns = (r.availableEvents ?? []).map((ev) =>
-            `<button class="small" onclick="sendRoomEvent('${r.id}','${ev}')">${ev}</button>`
-          ).join('');
-          const stateOpts = (r.stateNames ?? []).map((st) =>
-            `<option value="${st}" ${r.state === st ? 'selected' : ''}>${st}</option>`
-          ).join('');
-          const forceState = (r.stateNames ?? []).length
-            ? `<select data-force-room="${r.id}" class="small" style="font-size:12px;padding:4px">${stateOpts}</select>
-               <button class="small" onclick="forceRoomState('${r.id}')">Set</button>`
-            : '–';
-          return `<tr>
-            <td><b>${r.name}</b> <span class="room-id">${r.id}</span></td>
-            <td class="state">${r.started ? (r.state ?? '…') : '<span class="warn">idle</span>'}</td>
-            <td>${r.members}</td>
-            <td>${forceState}</td>
-            <td>
-              ${!r.started && r.startOn === 'operatorOnly' ? `<button class="small primary" onclick="startRoom('${r.id}')">Start room</button>` : ''}
-              ${evBtns}
-            </td>
-          </tr>`;
-        }).join('');
-          document.querySelectorAll('select[data-force-room]').forEach((sel) => {
-            const saved = savedForce[sel.dataset.forceRoom];
-            if (saved && [...sel.options].some((o) => o.value === saved)) sel.value = saved;
-          });
-        }
-      } else lastRoomsKey = '';
-
-      const roomOptions = roomDefs.map((r) => `<option value="${r.id}">${r.name}</option>`).join('');
-
-      $('devices').innerHTML = msg.users.map((u) => {
-        const t = u.telemetry;
-        const zoneSel = roomMode
-          ? `<select onchange="assignZone('${u.token}', this.value)">` +
-            `<option value="">–</option>` +
-            roomDefs.map((r) => `<option value="${r.id}" ${u.zoneId === r.id ? 'selected' : ''}>${r.name}</option>`).join('') +
-            `</select>`
-          : '–';
-        const roleSel = `<select onchange="setRole('${u.token}', this.value)">` +
-          `<option value="">–</option>` +
-          roles.map((r) => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r}</option>`).join('') +
-          `</select>`;
-        return `<tr>
-          <td><span class="dot ${u.connected ? 'ok' : ''}"></span></td>
-          <td>${u.label}</td>
-          <td>${zoneSel}</td>
-          <td class="state">${u.state ?? '–'}</td>
-          <td>${u.page ?? '–'}</td>
-          <td>${roleSel}</td>
-          <td>${t ? t.offset + 'ms' : '–'}</td>
-          <td>${t?.lastCueDriftMs != null ? t.lastCueDriftMs + 'ms' : '–'}</td>
-          <td>${u.connected ? 'online' : `<span class="warn">offline ${(u.disconnectedForMs / 1000).toFixed(0)}s</span>`}</td>
-        </tr>`;
-      }).join('');
-    }
-
-    connect();
-    $('target').addEventListener('change', () => { if (lastRoster) renderEventButtons(lastRoster); });
-  </script>
+connect();
+</script>
 </body>
 </html>
