@@ -1,8 +1,8 @@
 # Interactive Theater Show-Control Platform — Technical Specification
 
-**Version:** 0.1 (Planning Draft)
+**Version:** 0.2 (Implementation draft)
 **Date:** July 2026
-**Status:** Pre-implementation specification
+**Status:** Phase 0 complete; Phase 1 workshop platform implemented in-repo (`dim_machine`). Contract v2 room mode and custom pages shipped ahead of original phasing. See §15.
 
 ---
 
@@ -76,11 +76,11 @@ This document specifies a distributed show-control platform for interactive, loc
 |---|---|---|
 | Backend runtime | Node.js + **JavaScript** | Ecosystem alignment with XState, web clients, and GUI tooling; team is fluent in JS. (Optional JSDoc type hints available without adopting TypeScript or a build step) |
 | State machine engine | **XState v5** | SCXML-style statecharts: hierarchy, parallel regions, actors, serializable definitions; a plain-JavaScript library (TypeScript optional), proven in prior prototypes |
-| Phone transport | WebSocket (Socket.IO or native ws + custom reconnect layer) | Works identically in web and native clients |
+| Phone transport | WebSocket (native **`ws`** in reference implementation; Socket.IO or custom reconnect layer also viable) | Works identically in web and native clients |
 | IoT transport | MQTT (Mosquitto or EMQX broker) | Lightweight, designed for constrained devices, QoS levels |
 | TouchDesigner transport | OSC (primary) + WebSocket DAT (for structured/bulk data) | Native TD support, low latency |
 | GUI | React + React Flow | Standard node-graph editing; renders the same JSON definitions in both modes |
-| Persistence | PostgreSQL (event log + snapshots + show definitions); Redis optional for hot state/pub-sub at scale | Simple, reliable, queryable for analytics |
+| Persistence | PostgreSQL (event log + snapshots + show definitions); Redis optional for hot state/pub-sub at scale | Simple, reliable, queryable for analytics. **Reference implementation: in-memory only (Phase 2).** |
 | Clock sync | NTP-style offset estimation over WebSocket (e.g., timesync-style algorithm) | ~10–30 ms accuracy on decent WiFi |
 
 ---
@@ -95,6 +95,8 @@ This document specifies a distributed show-control platform for interactive, loc
   - **Role machine(s)** — parallel regions or invoked child machines attached at role-assignment time, containing role-specific flows.
   - Users are naturally in multiple states at once via parallel regions (e.g., `act2.chase` ∥ `audio.playing` ∥ `role.detective.hasClue`).
 - **Role assignment service.** Assigns roles at defined points, either randomly, by rule ("first user to enter Zone 3," "has not held a lead role in a prior show," weighted draw), or manually by the operator. Super-roles swap in or overlay an additional machine on the user's session actor.
+
+**Room actors (contract v2 — implemented).** For experiences where everyone in a physical room should share one narrative cursor (gallery lighting, group briefing, collaborative phone pages), the runtime spawns **one XState actor per room** instead of per user. Users are assigned to rooms via operator `assignZone` or a `defaultRoom` on join; the room actor's state is authoritative. Late entrants sync to the room's current cursor (entry outputs replayed to that user only). The room cursor **holds when empty** — leaving does not rewind. Inputs default to `scope: "room"` (fan to the room actor, outputs to all members); `scope: "personal"` is reserved for per-user side paths. v1 shows (top-level `machine` per user) continue to work unchanged. See `CONTRACT.md` §8 and `shows/room-demo.json`.
 
 ### 3.2 Machine definitions as data
 
@@ -187,6 +189,8 @@ Every input from every source is normalized before entering show logic:
 ### 4.3 Continuous-input bypass
 
 High-frequency continuous streams (e.g., finger-drag cursor control) **bypass the state machine** and stream directly to TouchDesigner (throttled, ~30–60 Hz over WebSocket/OSC). The state machine handles only the discrete envelope: `input.cursorControl.start` / `.stop`.
+
+**Peer relay (implemented — phone-to-phone).** Custom interactive pages may also bypass the state machine for real-time, room-scoped fan-out between phones: arbitrary named channels carry JSON payloads over the existing WebSocket (`relay` messages). This is for collaborative UI (shared cursors, drawing, voting tallies displayed live) where flooding XState with 40 Hz events would be wrong. Relay is **room-scoped** by default (same audience as room outputs), rate-limited (~40 msg/s per device per channel), optionally persisted per channel so late joiners receive the last value from each peer. It does **not** replace promoted inputs — story branches still use canonical `input` events. See `CONTRACT.md` §6b and `custom-pages-kit/CUSTOM-PAGES.md`.
 
 ---
 
@@ -288,6 +292,10 @@ Supported **phone output commands** (the device-facing subset):
 | `setVar` | Update a client-side display variable (text, timer, score) | `key`, `value` |
 
 **Interactive pages** are a small library of declarative phone screens selected by `showPage`, so participants compose experiences without writing front-end code: `audioPlayer`, `videoPlayer`, `prompt` (choice buttons that emit `choice:<id>` events), `gestureSurface` (captures swipes/drags), `text` (timed or static copy), `blank`/`waiting`. New page types are additive.
+
+**Custom pages (implemented).** When declarative pages are not enough, collaborators author **custom pages**: a folder under `public/custom-pages/<pageName>/` with a required `page.js` (registers a renderer via `DIM.registerPage`) and optional `styles.css` and assets. The show references them by folder name in `showPage` params (`"page": "cursorArena"`). Custom pages use the same phone API surface as built-ins — `DIM.emit` for promoted inputs, `DIM.relay` for peer fan-out, `DIM.vars` / `${key}` interpolation for display variables — but may implement arbitrary DOM and interaction logic. **Development workflow:** collaborators work in a standalone **`custom-pages-kit/`** (own Express + WebSocket preview server, default port 3333) without the main repo; when ready, they hand off the page folder for drop-in at show time. The runtime lists installed pages at `GET /api/custom-pages`. Terminology is **custom pages** (not "student pages" or other labels).
+
+The client loads scripts in order: `page-loader.js` → `pages.js` → `client.js`. The page loader registers `DIM.registerPage` / `DIM.pageAsset` before `client.js` builds the final `window.DIM` object; the runtime **must preserve** those hooks when attaching `emit`, `relay`, and session state (replacing the whole object without merging breaks async custom page registration).
 
 The contract is transport-agnostic and versioned; the authoring tool and runtime negotiate a contract version on load so the two tools can evolve independently.
 
@@ -408,14 +416,16 @@ One web application, one underlying document (the JSON show definition), two mod
 
 The near-term driver is a **participant workshop in ~2 weeks**, where participants co-author their own statecharts (in a separate authoring tool being built in parallel), run them live, and have those statecharts drive real phone experiences. The phasing below front-loads the input→XState→action→phone loop that the workshop depends on, and defers location, hardware, and TouchDesigner work.
 
-### Phase 0 — Proof of concept (de-risk sync + cueing)
+### Phase 0 — Proof of concept (de-risk sync + cueing) ✅ *Complete*
 - Hardcoded XState machine, ~5–10 phones on a web app
 - WebSocket transport, clock sync + scheduled audio cues
 - Bare-bones manual cue panel
 - Minimal resilience: session token + snapshot-on-reconnect (enough to survive a page refresh)
 - **Exit criteria:** measured sync skew ≤ 50 ms across devices on venue-like WiFi; a mid-scene page refresh returns the user to the same point within ~2 s
 
-### Phase 1 — Workshop platform: runnable statecharts driving phones ⭐ *(target: workshop)*
+**Built:** `public/client.js` (NTP-style clock sync, Web Audio scheduled cues, join-in-progress loops, session token in cookie + `localStorage`, snapshot restore on reconnect). Operator sync-test cue. Local measurements 0–2 ms; venue WiFi validation still recommended.
+
+### Phase 1 — Workshop platform: runnable statecharts driving phones ⭐ ✅ *Largely complete*
 The goal is a complete authoring → runtime → phone loop, with **no location, no hardware, no TD**.
 
 - **Runtime:** load a participant-authored JSON statechart into the XState runtime and run it live (one machine per user; a hardcoded or simple manual role/assignment is fine for now).
@@ -425,6 +435,33 @@ The goal is a complete authoring → runtime → phone loop, with **no location,
 - **Delivery:** operator can start a machine and push manual states/cues to users; phones sync clock, preload assets, render outputs, report inputs (reuses Phase 0 transport + resilience).
 - **Interactive pages:** a small set of declarative phone "screens" (audio player, video player, prompt/choice page, gesture-capture surface) selectable by action, so participants compose experiences without custom front-end work.
 - **Exit criteria:** a participant authors a statechart in the separate tool, loads it, and a room of phones responds to their inputs and receives their outputs live — with no engineer in the loop at run time.
+
+**Built (repo: `dim_machine`, port 4000):**
+
+| Area | Status | Notes |
+|---|---|---|
+| I/O contract v1 | ✅ Frozen | `CONTRACT.md`; `contractVersion: 1` in show JSON |
+| XState runtime (v1) | ✅ | One actor per user; globals, guards, action vocabulary |
+| Built-in interactive pages | ✅ | `public/pages.js` — waiting, text, prompt, gestureSurface, audioPlayer, videoPlayer |
+| Operator panel | ✅ | `public/operator.html` — load/start/stop, per-device state, event push, globals, telemetry, sync test |
+| Author inspector | ✅ | `public/author.html` — edit show JSON, rooms, input scopes |
+| Example shows | ✅ | `example-haunting.json`, `phase0-demo.json` |
+| Session + snapshot | ✅ | Token persistence; reconnect restores page, vars, active cues |
+| Roles | ⚠️ Manual | Operator dropdown; no assignment strategies yet |
+| `sendTo: orchestrator` | ⚠️ Stub | Forwards to every user machine (Phase 1 documented behavior) |
+
+**Also shipped ahead of Phase 2 (workshop-driven):**
+
+| Area | Status | Notes |
+|---|---|---|
+| Contract v2 room mode | ✅ | `contractVersion: 2`; one actor per room; `shows/room-demo.json` |
+| Zone assignment | ✅ | Operator `assignZone`, `moveAllToRoom`, `defaultRoom` on join |
+| Room operator controls | ✅ | `forceRoomState`, `startRoom`, room roster in operator UI |
+| Input scope | ✅ | `inputBindings` with `scope: "room"` \| `"personal"` |
+| Custom pages + peer relay | ✅ | `public/custom-pages/`, `custom-pages-kit/`, `CONTRACT.md` §6b |
+| Force-state audio hygiene | ✅ | `stopRoomOutputs` before room state override; `skipActiveCues` on resync |
+
+**Not yet built (still Phase 2+):** event sourcing, PostgreSQL, sequenced replay buffer, Design-mode React Flow GUI, location adapters, TouchDesigner, native Android app, service-worker asset cache, operator auth.
 
 ### Phase 2 — Core platform hardening
 - Per-user actors + show orchestrator formalized; JSON-interpreted machine definitions with versioning
@@ -457,10 +494,105 @@ The goal is a complete authoring → runtime → phone loop, with **no location,
 | Scale & deployment | **≤ 50 devices, fully local to the venue.** Single on-site machine hosts everything; assets served over LAN; no CDN or cloud dependency. |
 | Audio sync | ≤ 50 ms skew confirmed sufficient; no phase-level sync techniques required. |
 | Implementation language | **Plain JavaScript on Node.js** (not TypeScript). XState is a JS library and works identically without types; team is fluent in JS. Optional JSDoc hints available if wanted, with no build step. **Python** is a fine choice for peripheral services (UWB/sensor processing, computer vision, analytics over the event log, offline show-definition tooling), which talk to the core over WebSocket/MQTT/OSC — but the state-machine core stays JS, since no Python statechart library matches XState's parallel regions, actors, and GUI-round-trippable serializable definitions. |
+| WebSocket library | **Native `ws`** (not Socket.IO). Custom reconnect + ping/pong + snapshot resync. Socket.IO's buffered delivery deferred; snapshot-on-reconnect is the authoritative backstop (§7.2). |
+| I/O contract versioning | **v1 frozen** (per-user machine). **v2 additive** (room actors + scoped inputs). Additive fields only within a version; breaking changes bump version. Authoritative schema: repo `CONTRACT.md`. |
+| Room vs user machines | **Both supported.** v1 = one XState actor per phone. v2 = one actor per room; phones in the same room share state. Chosen for workshop scenarios where a physical space should feel synchronized (gallery lighting, group pages). |
+| Custom page authoring | **Standalone kit** (`custom-pages-kit/`) shared with collaborators who do not need the main repo. Preview on port **3333**; production drop-in to `public/custom-pages/`. Guide: `custom-pages-kit/CUSTOM-PAGES.md`. |
+| Real-time phone collaboration | **Peer relay** on the main WebSocket — not XState events, not TouchDesigner. Room-scoped channels, JSON payloads, optional persist-for-late-join. Custom pages opt in via `DIM.relay`. |
+| Operator force-state | **`forceRoomState`** replays entry outputs to all room members. **Must stop active room audio first** (`stopRoomOutputs`) so orphaned beds do not continue after a hard jump (e.g. gallery `lit` → `cursors`). Resync uses `skipActiveCues` to avoid double-playing stale cues. |
+| Persistence (interim) | **In-memory only** until Phase 2. Server restart loses sessions and show state. Deliberate tradeoff for workshop velocity. |
+| Operator security (interim) | **No auth** on operator panel. Acceptable on isolated venue LAN for Phase 1; Phase 2 target. |
+| Show reload | Definition change requires operator **re-Load + re-Start** — no hot reload. |
 
 ## 14. Remaining Open Item
 
 - **Accessibility** (captioning cues, non-audio alternatives): pending internal team discussion. Recommendation regardless of outcome: give every cue an optional `alternatives` field in the cue schema now (e.g., `{ "text": "...", "haptic": "pattern-id" }`). It costs nothing while the schema is young and avoids a painful retrofit if requirements land later.
+
+---
+
+## 15. Implementation Reference (July 2026)
+
+This section records what exists in the **`dim_machine`** reference implementation and how it maps to this spec. It is the living counterpart to §12–§13 for anyone reading the spec without the repo.
+
+### 15.1 Repository layout
+
+```
+dim_machine/
+  CONTRACT.md              ← frozen I/O contract (v1 + v2 rooms + peer relay)
+  shows/*.json             ← show definitions (v1 and v2 examples)
+  server/
+    index.js               ← WebSocket server, operator commands, relay routing
+    runtime.js             ← ShowRuntime: XState v1/v2 dual mode
+    relay.js               ← room-scoped peer relay (rate limit, persist, sync)
+  public/
+    client.js              ← phone cue player, DIM API (emit, relay, vars, self)
+    pages.js               ← built-in page renderers
+    page-loader.js         ← dynamic custom page load + registerPage
+    custom-pages/<name>/   ← drop-in collaborator pages (page.js, styles.css, assets)
+    operator.html          ← live show control
+    author.html            ← show JSON editor / inspector
+  custom-pages-kit/        ← standalone dev kit (share without main repo)
+    CUSTOM-PAGES.md        ← canonical authoring guide for LLM + human collaborators
+    server.js              ← preview server (port 3333)
+    public/page-preview.html
+```
+
+### 15.2 Runtime behavior (as built)
+
+**Show lifecycle.** Operator loads a JSON file from `shows/`, then Start with connected phone tokens. Late joiners receive `defaultRoom` / `defaultRole` (v2) or the machine initial state (v1). Stop tears down actors and sends a waiting page.
+
+**Clock sync.** Ping/pong over WebSocket; client estimates offset with outlier rejection and smoothing. Scheduled cues use `startAt` server timestamps; audio via Web Audio API scheduling. Drift reported per cue; operator sync-test fires a flash + click to all devices.
+
+**Resilience.** Opaque session token (cookie + `localStorage`); on reconnect, server sends snapshot (state string, page, display vars, active loop/video cues, relay cache). No sequenced replay buffer yet — snapshot is the backstop.
+
+**Room mode (v2).** Rooms defined under `rooms` in show JSON, each with its own statechart. `startOn: "firstEnter"` starts the room actor when the first user enters; `"operatorOnly"` waits for `startRoom`. Operator can `assignZone` (move one phone), `moveAllToRoom` (bulk, optional from-room filter), `forceRoomState` (jump + replay entry), `sendEvent` with target `room:<id>`. Room outputs (`showPage`, `playAudio`, etc.) fan to all members; `inputBindings` route phone inputs to the room actor when `scope: "room"`.
+
+**Custom pages.** `showPage` with an unknown page name triggers async load of `/custom-pages/<name>/page.js`. Page calls `DIM.registerPage(fn)`; `pages.js` invokes the renderer and loads co-located CSS. Example: `cursorArena` — tap sends normalized `{x,y}` on relay channel `"cursor"`; all phones in the same room see dots. Relay requires both phones assigned to the **same room** on the main server (preview kit simulates relay across tabs via a local WebSocket).
+
+**Phone API (`window.DIM`).**
+
+| API | Purpose |
+|---|---|
+| `DIM.emit(type, payload?)` | Promote interaction → canonical input event |
+| `DIM.relay.send(channel, payload, opts?)` | Room-scoped peer fan-out (not state machine) |
+| `DIM.relay.on(channel, fn)` | Subscribe; receives cached values for late handlers |
+| `DIM.vars` / `${key}` in props | Display variables from `setVar` |
+| `DIM.self` | `{ userId, label, token }` after join |
+| `DIM.registerPage(fn)` | Custom page registration (via page-loader) |
+| `DIM.pageAsset(file)` | Resolve path under active custom page folder |
+
+### 15.3 Example shows
+
+| File | Contract | Purpose |
+|---|---|---|
+| `phase0-demo.json` | v1 | Sync + audio cue smoke test |
+| `example-haunting.json` | v1 | Full narrative with prompts, gestures, globals |
+| `room-demo.json` | v2 | Lobby + Gallery rooms; gallery states `dark` / `lit` / `finale` / `cursors` (custom page) |
+
+**Room demo flow:** Load → Start → phones auto-enter Lobby → operator sends `BEGIN` to lobby room → reassign or move all to Gallery → flip lights (`button:lights`) → operator force state `cursors` for shared cursor page.
+
+### 15.4 Intentional gaps (spec vs repo)
+
+These remain as specified for Phase 2+ and are **not** oversights:
+
+- Event sourcing, PostgreSQL, crash recovery < 10 s
+- Show orchestrator singleton actor (globals are server-owned maps, not a separate orchestrator machine)
+- Role assignment strategies; super-roles
+- Location adapters (UWB, QR, NFC, BLE)
+- TouchDesigner OSC/WebSocket integration
+- Design-mode React Flow GUI; simulation with virtual users
+- Sequenced message replay buffer; upstream input queue on disconnect
+- Service worker / Cache API for assets
+- Operator authentication
+
+### 15.5 Related documents
+
+| Document | Role |
+|---|---|
+| `CONTRACT.md` | Machine-readable integration seam for authoring tool |
+| `README.md` | Run instructions, architecture summary |
+| `custom-pages-kit/CUSTOM-PAGES.md` | Custom page + relay authoring (standalone) |
+| `docs/CUSTOM-PAGES.md` | Pointer to kit guide from main repo |
 
 ---
 
