@@ -2,10 +2,14 @@
 
 **Version:** 0.3 (Rebuild — spatial model)
 **Date:** August 2026
-**Revised:** August 2026 — binary occupancy. The passing-by glitch effect and the
-`approach` tier are removed; room presentation states are reduced to
-`idle` / `active` / `settling`; revisit variants are driven by the activating
-guest's history rather than by room-side memory. See §17.
+**Revised:** August 2026, twice.
+(1) Binary occupancy — the passing-by glitch effect and the `approach` tier are
+removed; room presentation states reduced to `idle` / `active` / `settling`;
+revisit driven by the activating guest's history rather than room-side memory
+(§17).
+(2) The journey — `phases` replaced by an authored per-guest statechart; paths
+become a library assigned mid-show; spaces typed as destinations or hallways
+with declared adjacency; off-path reduced to a one-way boolean (§18).
 **Supersedes:** v0.2 (Phase 1 workshop platform, repo `dim_machine`)
 **Status:** Design draft for rebuild. See §16 for what carries over from `dim_machine` and what is replaced.
 
@@ -26,10 +30,12 @@ This is a rebuild of the runtime core. Transport, clock sync, cue player, sessio
 ### 1.2 Core capabilities
 
 - Concurrent per-room and per-guest statecharts, with an explicit occupancy relation between them
+- An authored journey per guest: a statechart whose regions are location, guidance, and adherence
 - Golden paths: per-guest room eligibility, with a pluggable eligibility predicate
-- Show phases (free roam → directed convergence → exit), scoping eligibility and guidance
-- Path adherence tracking: golden / drifting / cursed, with divergence detected from movement
+- Paths assigned when a guest reaches the part of the show that has them, not at the door
+- Off-path detection, one-way, scoped to the rooms paths actually route through
 - Binary occupancy (inside / outside a room) with asymmetric entry and exit confirmation
+- Spaces typed as destinations or hallways, with adjacency declared as truth about the building
 - Per-room policy for eligible and ineligible entry, driving distinct behaviors from one spatial event stream
 - Room activation locking, with defined behavior for subsequent entrants including multi-guest collaborative states
 - Per-room policy for audio timing, exit/reset, and revisit behavior
@@ -136,13 +142,19 @@ One per physical room, spawned at show start, alive for the whole show regardles
 | `active` | Content running. Sub-states carry the room's beats, any intro, and any collaborative interaction. |
 | `settling` | Occupancy dropped to zero; exit grace timer running (§3.5). Returns to `idle` on `RESET`. |
 
-Rooms that want an intro or transition before their main content express it as a sub-state of `active` (`active.intro`) rather than as a separate top-level state. The runtime never advances a room on its own: every state declares how it is left, whether by an authored `after` delay, an `always`, or an event.
+Rooms may add states beyond these three — an intro before the content, a coda after. Every such state is the room *running for somebody*, and the runtime treats it that way: a room needs a holder unless it is `idle` or `settling`. The runtime never advances a room on its own; every state declares how it is left, by an authored `after` delay, an `always`, or an event.
 
-### 3.2 User actors
+**Kind.** A room is a `destination` or a `hallway`. A hallway is somewhere you pass through to reach somewhere else — always eligible, because you cannot deviate by using the only route between rooms; never counted toward `seen`; never a deviation; and exempt from the activation contract it could never satisfy. Guests still occupy it, and it is where guidance speaks.
 
-One per guest, spawned on join, alive for the whole show.
+**Adjacency.** Each room declares the spaces it physically connects to, from both sides. This does *not* gate movement — a guest can turn up anywhere, whether from a misread beacon or an operator dragging a dot, and the guest machine always has somewhere to put them (§4.1). What adjacency buys is the ability to *notice*: a move between spaces that do not connect is either a test or a location fault, and in Phase C it is the BLE misread signal.
 
-**Owns:** golden path (the ordered room set they are guided along); visit history and per-room dwell accumulation; eligibility evaluation; guidance state (which room they're being pushed toward); phone audio layer state (tour / room / ambient); phone page state; personal context.
+### 3.2 Guest actors
+
+One per guest, spawned on join, alive until the guest is terminated — when their phone is returned to the charger, or by the operator. There is always some method to terminate.
+
+**Owns:** the journey statechart (§4.1); the assigned path, once the journey hands them one; visit history and per-room dwell accumulation; eligibility evaluation; the guidance target; phone audio layer state (tour / room / ambient); phone page state.
+
+**Does not own** where they are. That is the coordinator's, and the guest machine mirrors it.
 
 **Eligibility** is a pluggable predicate evaluated by the guest actor, and the single most important seam in the design — it is what a future roles-based show replaces, without touching a room, the coordinator, or the location layer:
 
@@ -174,31 +186,32 @@ Because Node is single-threaded, coordinator mutations are naturally serialized 
 **First eligible entrant locks the room.** Sequence on entry:
 
 1. Coordinator records occupancy, notifies both actors.
-2. User actor evaluates eligibility. Not eligible → no activation request; the user gets the room's ineligible response, and the room is unchanged. Eligible → send `activate{userId, seen, completed, activatedByMe}` to the room.
+2. Guest actor evaluates eligibility. Eligible → send `ACTIVATE{guestId, seen, completed, activatedByMe}` to the room. Not eligible → the room's declared ineligible response, which is usually nothing at all.
 3. Room actor evaluates its own state. `idle` and unlocked → accept: acquire lock for `guestId`, enter `active` (or the revisit variant the request's history selects). Already `active` (locked by another) → refuse with reason `locked`.
 4. On acceptance the room drives its outputs and emits state to the output adapter; the guest actor shifts phone audio to the room's content per the room's audio policy (§3.7).
 
 Note what the activation request carries and what it does not: enough of the guest's history for a revisit variant, and nothing about their identity, path, or role. That asymmetry is what keeps rooms reusable.
 
-**Ineligible entry is per-room policy.** This is now the *only* place the show distinguishes "this room is yours" from "this room is not," so it carries real weight. A guest entering a room not on their path (and not cursed into eligibility) gets that room's declared response:
+**Ineligible entry is per-room policy.** This is the *only* place the show distinguishes "this room is yours" from "this room is not," so it carries real weight. A guest entering a room they were not sent to gets that room's declared response:
 
 ```jsonc
 "ineligible": {
-  "policy": "ignore",          // ignore | ambientOnly | lockedMessage | tease
+  "policy": "ignore",          // ignore | ambientOnly | lockedMessage | tease | activateVariant
   "audio": "library-locked"    // for message/tease policies
 }
 ```
 
 | Policy | Behavior |
 |---|---|
-| `ignore` | Nothing. Room unchanged, no audio change. Simplest, but can read as a broken beacon |
+| `ignore` | Nothing. Room unchanged, no audio change. What most rooms use |
 | `ambientOnly` | Subtle presence bed — signals "something is here, but not for you" without narration |
 | `lockedMessage` | Explicit narration that this room is not on their path |
 | `tease` | A distinct enticement variant — useful where the room is on *another* path and the show wants to seed curiosity |
+| `activateVariant` | The room **does** react: it activates in its own variant state, and the guest holds the lock |
 
-In every case the room actor's state is untouched: no lock, no activation, no room history. The response is entirely on the phone.
+The first four leave the room actor untouched — no lock, no activation, no room history — and the entire response is on the phone. That asymmetry is what §1.1 justifies the architecture with.
 
-Rooms may declare different policies by adherence state (a cursed guest may find `lockedMessage` rooms suddenly open — see §4.3).
+`activateVariant` is the deliberate exception, and it changes what eligibility *is*: rather than gating activation, eligibility **selects which activation a room gets**. The runtime sends `ACTIVATE_OFFPATH` instead of `ACTIVATE`, and because the room is now running for that guest, they hold it. A room claiming the policy without declaring the transition fails to load.
 
 **Subsequent entrants** while a room is locked and `active` are governed by per-room policy:
 
@@ -336,120 +349,156 @@ Per room, because the right answer differs by room:
 
 ---
 
-## 4. Paths, Phases, and Adherence
+## 4. The Journey
 
-### 4.1 Show phases
+### 4.1 The guest statechart
 
-The guest journey is structured into **phases**, which scope both eligibility and guidance. Phases are a property of the guest actor (guests may progress independently), and may also be advanced show-wide by the orchestrator.
+A guest's journey is an authored statechart, one actor each, alongside one per
+room. It replaces the earlier `phases` array, which could not express this show:
+a guest used to get one path at the door for the whole show, and this show has a
+shared prologue, a museum where paths apply, and a free-roam area after — with
+guests moving freely between them.
 
-```jsonc
-"phases": [
-  { "id": "roamA",   "mode": "freeRoam", "rooms": "pathAssigned",
-    "advanceWhen": { "scope": "guest", "seenCount": 3 } },
-  { "id": "roamB",   "mode": "freeRoam", "rooms": "pathAssigned",
-    "advanceWhen": { "scope": "guest", "seenCount": 3 } },
-  { "id": "converge","mode": "directed", "target": "controlRoom",
-    "advanceWhen": { "scope": "show", "entered": "controlRoom" } },
-  { "id": "exit",    "mode": "directed", "target": "egress" }
-]
+Three parallel regions, because the facts are independent. A timer can move
+guidance to `converge` while a guest stands in the Data Center, and a guest can
+wander back into the museum without guidance changing its mind.
+
+```
+location                    guidance                   adherence
+├─ outside                  ├─ prologue                ├─ onPath
+├─ frontDesk                ├─ museum                  └─ offPath
+├─ maskRoom                 ├─ converge
+├─ … one per room           └─ ending
+└─ library
 ```
 
-`advanceWhen.scope` is required and says **who evaluates the condition**:
-`guest` advances each guest at their own pace; `show` has the orchestrator move
-everyone together. It is declared rather than inferred because the right answer
-changes per show and per rehearsal — a test run often wants everyone pushed
-forward at once where the real show does not.
+| Region | Source | What it is |
+|---|---|---|
+| `location` | **generated** from room adjacency | One state per room, plus `outside`. The map. |
+| `guidance` | **authored** | The journey. The small, readable chart an author reasons about. |
+| `adherence` | **authored** | Whether they are still following what guidance asked. |
 
-For this installation: two free-roam phases where guests explore their assigned rooms at will, then a `directed` phase where the tour audio pushes them toward the control room, then exit. `mode` distinguishes free exploration (guidance suggests, guest chooses) from directed movement (guidance insists on one target). Other installations may use a single phase, or fully ordered sequences.
+**The location region is generated, not authored.** Adjacency is already declared
+on the rooms; writing it a second time as machine transitions would let the two
+drift. What an author draws is the *intended journey* — the guidance region —
+and that is what the diagram is for.
 
-### 4.2 Golden path assignment
+**The machine always matches the coordinator.** The coordinator is authoritative
+about where a guest is; the location region mirrors it, without exception. The
+generated region carries a transition for every room at its root, so a guest who
+turns up somewhere they could not have walked to still has somewhere to be. The
+adjacency transitions on each state take precedence where both apply, so the
+plausible route is used whenever the move was plausible, and the recovery only
+fires for the moves that should not have happened.
+
+That is the trade this makes explicit: an authored chart shows intent, and the
+running machine also handles the impossible. The recovery transitions are not
+drawn, because they are error correction rather than journey — but they are one
+uniform rule, stated here, rather than per-room surprises.
+
+**Rooms are heard as `entered.<roomId>`**, dotted so `entered.*` works as a
+wildcard. `exited` fires when a guest is in no room at all.
+
+**Entry actions are declared data**, executed by the runtime — the same shape as
+room output actions. `assignPath` is the one that exists today.
+
+### 4.2 Timers the statechart cannot express
+
+XState's own `after` measures time since a state was *last* entered. A guest who
+steps out of the museum and back has left and re-entered that state, which
+restarts it — so anything that must survive leaving cannot be an `after`.
+
+```jsonc
+"timers": {
+  "museumTime": { "sinceEntering": "guidance.museum", "afterMs": 1800000, "event": "MUSEUM_TIME_UP" }
+}
+```
+
+Total elapsed since the state was first entered, running through anything, with
+the runtime delivering the event. The machine then holds a plain transition.
+
+This is the same division as everywhere else in the model: the machine owns
+simple delays, the runtime owns conditions. A cumulative variant — time actually
+spent inside, pausing when they leave — would sit beside it as `whileIn`, and
+does not exist yet because nothing needs it.
+
+### 4.3 Paths
+
+A library of named routes, referenced by `assignPath`.
 
 ```jsonc
 "paths": {
-  "assignment": { "strategy": "roundRobin", "at": "onJoin" },
-  "definitions": {
-    "pathA": { "rooms": ["library", "greenhouse", "cellar"],
-               "guidance": "goldenPath" },
-    "pathB": { "rooms": ["parlor", "greenhouse", "attic"],
-               "guidance": "goldenPath" }
-  }
+  "pathA": { "rooms": ["automation", "slop", "consumption1"], "guidance": "goldenPath" },
+  "pathB": { "rooms": ["saas", "kin", "consumption2"], "guidance": "goldenPath" }
 }
 ```
 
-- **Assignment** at join: `roundRobin`, `random`, `manual` (operator), or `balanced` — which staggers starting rooms to spread occupancy and reduce lock contention. At ~20 guests across many rooms, contention is not expected and `balanced` is unnecessary; it remains available for denser installations.
-- **Guidance** declares what the tour audio does, and is a guest-actor concern — pushing someone toward a room is phone audio driven by guidance state. Rooms are not involved.
+**Paths are data, never structure.** That is what lets a route be assigned when a
+guest reaches the part of the show that has paths rather than at the door — which
+is also when there is real occupancy to spread them against — and what lets one
+authored machine serve every guest, with no per-guest expansion.
 
 | Guidance | Behavior |
 |---|---|
-| `goldenPath` | An ordered route the audio leads them along. "Next" is simply the next unvisited room in the list — no distance metric, no adjacency graph, and no wayfinding promise the geometry cannot keep |
-| `guestDirectedPath` | The audio follows the guest rather than leading. Both authorable from the start and where a guest who ignores a golden path lands |
+| `goldenPath` | An ordered route the audio leads them along. "Next" is the next unvisited room in the list — no distance metric, no adjacency graph, and no wayfinding promise the geometry cannot keep |
+| `guestDirectedPath` | The audio follows the guest rather than leading |
 | `freeExplore` | No guidance |
 
-Because `goldenPath` is ordered by definition, a separate `ordered` flag is unnecessary and was removed. Note that `goldenPath` and `guestDirectedPath` are also the two ends of the adherence model (§4.3): guidance mode is what an adherence state *does*.
-- Paths may overlap arbitrarily; shared rooms are expected and are where the multi-guest policies (§3.4) matter.
+A path may not route through a hallway: a route is a list of places to send
+someone, not the corridors between. Paths may overlap; shared rooms are expected,
+and are where the multi-guest policies (§3.4) matter.
 
-### 4.3 Path adherence: golden and cursed
+### 4.4 Eligibility
 
-Guests who ignore the audio guide are not errors to be corrected — the divergence is itself a designed experience. The guest actor therefore tracks an **adherence state** alongside the path.
-
-```
-   ┌─────────┐  drift signals accumulate   ┌──────────┐   threshold   ┌────────┐
-   │ golden  │ ─────────────────────────▶  │ drifting │ ────────────▶ │ cursed │
-   └─────────┘ ◀───────────────────────── └──────────┘ ◀───────────── └────────┘
-                    compliance signals              (per redemption policy)
-```
-
-**Drift signals** are evidence the guest is not following guidance. Each contributes a weighted score; the show defines thresholds:
+A pluggable predicate owned by the guest actor, and the single most important
+seam in the design — it is what a roles-based show replaces (§17.5).
 
 ```jsonc
-"adherence": {
-  "signals": {
-    "ineligibleRoomEntered":   { "weight": 25 },   // entered a room not on their path
-    "guidanceIgnoredMs":       { "weight": 10, "per": 60000 },
-    "guidedRoomBypassed":      { "weight": 20 },   // entered a different room while directed to one
-    "roomExitedEarly":         { "weight": 5 }
-  },
-  "compliance": {
-    "eligibleRoomSeen":        { "weight": -30 },
-    "guidedRoomEntered":       { "weight": -40 }
-  },
-  "thresholds": { "drifting": 30, "cursed": 75 },
-  "redemption": { "policy": "reversible", "hysteresisMs": 30000 },
-  "cursedIsSticky": false
-}
+"eligibility": { "golden": { "strategy": "goldenPath", "params": { "allowRevisit": true } } }
 ```
 
-Signals are deliberately weighted and cumulative rather than a single trigger, because one wrong turn is not a decision — a pattern is. Hysteresis on the return path prevents flapping between states.
+`goldenPath` returns true when the room is on the guest's assigned path — **but
+only among the rooms paths actually route through**. That qualifier is load-
+bearing. A show is rarely paths end to end: this one has a shared prologue, a
+museum where paths apply, and free-roam after, and only the museum rooms appear
+in any path. Treating an unrouted room as "not yours" would make the entrance
+sequence ineligible for everybody, and would lock every guest — none of whom has
+a path yet — out of the whole prologue.
 
-**What changes when cursed.** Adherence state is available to eligibility, guidance, room behavior, and audio:
+Hallways are always eligible. A strategy the contract names but the runtime
+cannot evaluate is rejected at load, because a predicate silently returning the
+wrong answer locks guests out of every room and presents as a location fault.
 
-| Dimension | Golden | Cursed |
-|---|---|---|
-| Eligibility | `goldenPath` — assigned rooms | Per show: `inverted` (previously ineligible rooms become active), `all`, or `none` |
-| Guidance audio | Tour narration toward next room | Cursed variant — different voice, different intent, may misdirect |
-| Room presentation | Standard states | Rooms may declare `cursedVariant` entry states |
-| Ineligible entry | Room's declared policy | May be inverted — rooms that were closed become open, and vice versa |
-| Phase advance | Normal `advanceWhen` | May use separate criteria, or route to a different phase |
+### 4.5 Going off-path
 
-```jsonc
-// Per-room cursed handling
-"library": {
-  "cursed": { "enterState": "active.inverted", "audio": "library-cursed",
-              "allowActivation": true }
-}
+Guidance holds two values per guest: the **target** — the next unvisited room on
+their assigned path — and whether they are **following** it. The second is the
+adherence region, and it is deliberately a boolean rather than a score.
+
+An earlier draft specified weighted drift signals, thresholds at 30 and 75, a
+redemption policy and hysteresis. That machinery answered a question the show
+does not ask. What the show needs is whether the guest is following the path set
+for them, so:
+
+```
+onPath ──(entered a routed room that is not theirs)──▶ offPath
 ```
 
-Because eligibility is already a pluggable predicate (§3.2), the cursed path costs no structural change — it swaps the strategy and consults adherence state. `cursedIsSticky: true` makes the transition one-way for shows where the fall should be permanent; `reversible` lets compliance earn a return to golden.
+**One way.** The tour goes off the rails and stays off; walking back onto the
+path does not restore it.
 
-**Operator controls.** Live adherence score and state per guest, with manual force to golden/cursed/drifting and score reset — essential during tuning, since the weights above will need calibration against real audience behavior.
+**Scoped to routed rooms.** Going off-path only means anything among the rooms
+paths route through — the part of the show where a path is being led. Backtracking
+to an earlier room, or walking down a corridor, is not a deviation, because there
+is no path there to deviate from.
 
-**Detection caveat.** Adherence inference is only as good as the location data feeding it, and binary occupancy constrains what can be inferred. There is no heading and no proximity, so any signal of the form "moved the wrong way" or "came close and turned back" is unavailable — `wrongDirectionSustained` was removed for exactly this reason.
+If a pattern rather than a single wrong turn later proves to be the right model,
+the scoring goes back on top of the same event stream. Nothing is foreclosed —
+but building it speculatively would ship a calibration burden for a distinction
+the show does not currently make.
 
-What survives is stronger anyway, because all of it is founded on room entry, which is the one thing the location layer reports unambiguously. `guidedRoomBypassed` is re-founded on entry rather than proximity: *directed to the library, entered the cellar instead*. That is a decision, not a near-miss, and it needs no approach detection to observe.
-
-Start with `ineligibleRoomEntered` and `guidanceIgnoredMs`, which are the least ambiguous of all, and add the others once real audience behavior is available to calibrate against.
-
----
+**Operator controls.** Live standing and journey state per guest, with manual
+override, remain in scope for tuning.
 
 ## 5. Location Layer
 
@@ -618,51 +667,116 @@ Physical devices in rooms (buttons, sensors, props) connect over MQTT or via TD,
 
 ```jsonc
 {
-  "showId": "the-house",
+  "showId": "the-museum",
   "contractVersion": 3,
+  "floorplan": { "image": "plan.png", "width": 1400, "height": 760 },
+
   "rooms": {
-    "library": {
-      "machine":    { /* XState statechart: idle / active / settling */ },
-      "multiGuest":  { "policy": "collaborative", "maxOccupants": 6, "atCapacity": "spectator" },
-      "ineligible": { "policy": "ambientOnly" },
-      "exit":       { "policy": "resetAfter", "graceMs": 10000, "audioOnExit": "fadeOut" },
-      "audio":      { "timing": "masterTimeline", "joinPolicy": "inProgress", "minRemainingMs": 20000 },
+    "museumHallway": {
+      "kind": "hallway",                       // never activated; no machine required
+      "adjacent": ["cyclorama", "slop", "southCorridor"],
+      "zones": { "museumHallway": { "polygon": [[x,y], ...] } }
+    },
+    "slop": {
+      "kind": "destination",
+      "adjacent": ["museumHallway"],
+      "zones":      { "slop": { "polygon": [[x,y], ...] } },
+      "machine":    { /* idle / active / settling, plus any states of its own */ },
+      "multiGuest": { "policy": "collaborative", "maxOccupants": 6, "atCapacity": "spectator" },
+      "ineligible": { "policy": "activateVariant" },   // this one reacts; most do not
+      "exit":       { "policy": "resetAfter", "graceMs": 10000, "resumeIfReturned": true },
+      "whenAvailable": { "policy": "wait" },
+      "audio":      { "timing": "masterTimeline", "joinPolicy": "inProgress" },
       "seen":       { "dwellMs": 20000, "accumulate": true },
-      "revisit":    { "whenSeen": { "enterState": "active.abbreviated" } },
-      "cursed":     { "enterState": "active.inverted", "allowActivation": true },
+      "revisit":    { "whenSeen": {} },
+      "location":   { "entryConfirmMs": 1500, "exitConfirmMs": 800 },
       "outputs":    { "cues": { /* projection, lighting, in-room audio */ } }
     }
   },
-  "zones":   { /* §5.2 — per-source entry/exit thresholds + floorplan polygons */ },
-  "user":    {
-    "machine": { /* guidance, transit, personal side paths */ },
-    "eligibility": { "golden": { "strategy": "goldenPath" },
-                     "cursed": { "strategy": "inverted" } },
+
+  "paths": {                                   // §4.3 — a library of routes, not an assignment
+    "pathA": { "rooms": ["automation", "slop", "consumption1"], "guidance": "goldenPath" }
+  },
+
+  "guest": {
+    "eligibility": { "golden": { "strategy": "goldenPath", "params": { "allowRevisit": true } } },
+    "timers": {                                // §4.2 — what `after` cannot express
+      "museumTime": { "sinceEntering": "guidance.museum", "afterMs": 1800000, "event": "MUSEUM_TIME_UP" }
+    },
+    "machine": {                               // §4.1 — `location` is generated, not authored
+      "guidance": {
+        "initial": "prologue",
+        "states": {
+          "prologue": { "on": { "entered.museumHallway": "museum" } },
+          "museum": {
+            "entry": [{ "type": "assignPath", "from": ["pathA", "pathB"], "strategy": "roundRobin" }],
+            "on": { "MUSEUM_TIME_UP": "converge" }
+          },
+          "converge": { "on": { "entered.library": "ending" } },
+          "ending": {}
+        }
+      },
+      "adherence": {
+        "initial": "onPath",
+        "states": { "onPath": { "on": { "wentOffPath": "offPath" } }, "offPath": {} }
+      }
+    },
     "audioLayers": { /* §6.2 mixing rules */ }
   },
-  "phases":    { /* §4.1 — roamA, roamB, converge, exit */ },
-  "paths":     { /* §4.2 */ },
-  "adherence": { /* §4.3 — drift/compliance signals, thresholds, redemption */ },
-  "globals":   { /* orchestrator-owned */ },
-  "inputBindings": { /* §6.4 */ }
+
+  "globals":       { /* orchestrator-owned */ },
+  "inputBindings": { /* §6.4 */ },
+  "location":      { "entryConfirmMs": 1500, "exitConfirmMs": 800, "contactLossMs": 5000 }
 }
 ```
+
+Gone from earlier drafts: the top-level `zones` map (zones live in the room they
+belong to), `phases` (replaced by the guidance region), `paths.assignment` (the
+journey assigns), and the weighted `adherence` block (§4.5).
 
 ---
 
 ## 10. Operator GUI
 
-**Floor plan (primary view).** Rooms rendered with live presentation state and lock holder; guest dots with tier and current room; drag-to-move for virtual walkthrough (§5.4); click a room to force state, release lock, or disable it.
+Two surfaces, deliberately separated. What exists today is a **test panel**; the
+production operator GUI is a later, larger piece, and the panel's job is partly
+to establish what that actually needs.
 
-**Guest inspector.** Golden path with progress, visit history and dwell, current audio layers, device telemetry (battery, RSSI, sync quality, connection).
+### 10.1 Test panel — built
 
-**Room inspector.** Current state, occupants, lock holder, elapsed timeline, pending output cues, manual state override with output hygiene (§16.3).
+Vanilla JavaScript and inline SVG, no build step and no framework. That is a
+choice, not a shortcut: its whole state is one snapshot pushed over WebSocket and
+re-rendered, which is the case where a framework earns least, and a no-build loop
+matters on a machine that is not a dev box during venue tuning.
 
-**Statechart views.** Room and user machines rendered as graphs with live state highlighting (React Flow), shared with the authoring tool.
+- **Floor plan.** Zones drawn per room and coloured by room state; hallways
+  rendered differently; lock holder and exit-grace countdown on each. Drag a
+  guest to move them; click a room or guest to inspect. Guest dots are coloured
+  by their **standing** — what the room they are in is to them (§3.4).
+- **Auto-walk.** Simulated guests walk themselves toward eligible unseen rooms,
+  dwell for that room's own `seen` threshold, and move on. Server-side, emitting
+  the same virtual position events a drag would, so the runtime cannot tell them
+  apart. This exists because the behavioural matrix cannot be tested by hand:
+  capacity needs several guests in one room and one mouse cannot drag several
+  dots.
+- **Time.** Elapsed show time, and a scalable clock — 5× or 20× to watch a
+  20-second dwell threshold resolve in one, or paused outright. **Test mode
+  only**, per §14 Phase B.
+- **Overrides.** Activate for an occupant (through the arrival path), release a
+  lock, and raw statechart events, kept visually separate because a raw
+  `ACTIVATE` leaves a room running for nobody.
 
-**Test controls.** Virtual walkthrough, scripted walkthrough playback, mixed real/simulated guests, spawn N simulated users on paths.
+### 10.2 Production operator GUI — later
 
----
+Floor plan as primary view with live state and drag-to-place; guest inspector
+with journey, path progress, visit history, dwell, audio layers and device
+telemetry; room inspector with manual state override; statechart views for both
+room and guest machines, sharing a renderer with the authoring tool; scripted
+walkthrough playback and mixed real/simulated guests.
+
+React is the presumption there (§2.1), and React Flow for the statechart views —
+the one place a framework clearly earns its place, and the reason to keep the
+test panel small rather than let it grow into a first draft of this.
 
 ## 11. Connection Resilience
 
@@ -698,10 +812,21 @@ Carried over from v0.2 §7 (session token in cookie + `localStorage`, actor life
 ## 14. Implementation Phases
 
 ### Phase A — Spatial core
-Room actors + guest actors + occupancy coordinator running concurrently. Activation, locking (incl. transfer and release), capacity, exit grace, dwell/seen tracking, per-room ineligible policies. Phase progression. Adherence scoring with the two strongest signals. Virtual walkthrough as the only location source. Stub output adapter. **Exit criteria:** the full behavioral matrix (eligible entry, ineligible entry, second entrant, capacity, exit/reset, revisit, drift into cursed) demonstrable by dragging dots on a floor plan, with no phones and no hardware.
+Room actors + guest actors + occupancy coordinator running concurrently. Activation, locking (incl. transfer and release), capacity, exit grace, dwell/seen tracking, per-room ineligible policies, the journey statechart, off-path detection. Virtual walkthrough as the only location source. Stub output adapter. **Exit criteria:** the full behavioural matrix (eligible entry, ineligible entry, off-path entry and variants, second entrant, capacity, exit/reset, revisit) demonstrable by dragging dots on a floor plan, with no phones and no hardware.
+
+Built so far: the coordinator, room actors, guest actors and eligibility, exit
+and reset, the journey, and a floor-plan test panel with auto-walking simulated
+guests and a scalable clock. Outstanding: **capacity and the multi-guest
+policies**, which are declared and validated but not yet acted on — in a show
+whose first six rooms are shared, that is the most visible gap, since only the
+first arrival can hold a room and everyone behind them is refused.
 
 ### Phase B — Phones and audio
-Layered phone audio; room timeline join-in-progress; guidance/tour layer including cursed guidance variant; per-room ineligible-entry audio; golden path assignment; browser test mode with self-reported zones. **Exit criteria:** a walkthrough with real phones on browser test-mode zones produces correct audio behavior end to end, including a deliberate divergence run that lands the guest on the cursed path.
+Layered phone audio; room timeline join-in-progress; the guidance/tour layer and its off-path variant; per-room ineligible-entry audio; browser test mode with self-reported zones. **Exit criteria:** a walkthrough with real phones on browser test-mode zones produces correct audio behaviour end to end, including a deliberate divergence run that takes a guest off-path.
+
+Note the constraint this phase introduces: the scaled show clock is a test-mode
+tool only. Once audio is scheduled against a shared clock, running the server at
+anything but 1× desynchronises every device.
 
 ### Phase C — BLE and the Android app
 Android app with beacon scanning; RSSI → tier adapter with tunable hysteresis; on-site threshold tuning; mixed real/virtual guests. **Exit criteria:** a guest walking the space triggers rooms reliably, with false-activation and missed-activation rates measured and tuned.
@@ -721,21 +846,27 @@ Event sourcing + PostgreSQL; operator auth; full authoring GUI; scripted walkthr
 | Question | Decision |
 |---|---|
 | Ineligible entry | **Per room** (§3.4) — `ignore` \| `ambientOnly` \| `lockedMessage` \| `tease`, and may vary by adherence state |
-| Path completion / journey shape | **Phases** (§4.1). This install: two free-roam phases → directed convergence on the control room → exit. Other installs configure differently |
+| Path completion / journey shape | Superseded — see the journey row below. This install: a shared prologue, a museum with assigned paths, then free-roam and the Library |
 | Contention at scale | ~20 guests across many rooms; contention not expected. `balanced` assignment available but unnecessary here |
 | Room capacity vs. lock | **Per room** — `maxOccupants` + `atCapacity` (`spectator` \| `refuse` \| `queue` \| `personalVariant`), separate from the lock |
 | Lock on holder departure | **Released on exit.** Boundary-hovering is handled by location hysteresis (§5.2), not lock stickiness. Transfers to longest-present occupant if others remain |
-| Path divergence | **Golden / drifting / cursed** adherence model (§4.3), reversible by default with hysteresis |
+| Path divergence | **On-path / off-path**, one way (§4.5). The weighted score model was dropped: the show asks whether a guest is following the path, which is a boolean |
+| The journey | **An authored statechart per guest** (§4.1), replacing `phases`. Three parallel regions: location (generated from adjacency), guidance (authored), adherence |
+| When paths are assigned | **On reaching the part of the show that has them**, not at the door — which is also when there is occupancy to spread against |
+| Kinds of space | **`destination` / `hallway`** (§3.1). A hallway is always eligible, never seen, never a deviation, exempt from the activation contract |
+| Rooms reacting to an off-path guest | **Per room** — `ineligible.policy: "activateVariant"` (§3.4). Eligibility selects which activation a room gets rather than gating it. Most rooms stay dark |
+| Impossible movement | **Followed, and flagged.** The guest machine always matches the coordinator; adjacency makes an implausible move noticeable rather than blocking it |
 | Passing-by behavior | **Removed** (§17). The show distinguishes eligible from ineligible entry, and nothing else spatial |
 | Proximity tiers | **Binary** — `outside` / `inside` (§5.2) |
 | Room memory of prior activation | **None.** Revisit variants come from the activating guest's history (§3.6) |
 
 ### 15.2 Open
 
-1. **Accessibility.** Still pending internal team discussion. This matters more in v0.3 than it did in v0.2: the show is audio-guided, so a guest who cannot hear the tour has no wayfinding at all. Options range from a visual guidance layer on the phone (next-room prompts, directional cues) to captioned room content. The cheap insurance remains adding an optional `alternatives` field to every cue now (`{ "text": "...", "haptic": "pattern-id" }`) so a later decision does not require reworking the cue library.
-2. **Adherence weight calibration.** The §4.3 weights are a starting point, not a tuned model. They need real-audience calibration — the risk in both directions is real: too sensitive and curious-but-compliant guests get cursed unfairly; too lax and the cursed path never triggers. Operator override plus a live adherence readout are in scope partly to support this tuning.
-3. **Cursed path scope.** How much distinct content does the cursed path warrant? Full per-room `cursedVariant` states across every room is a large content burden. A cheaper first version is a distinct guidance voice plus inverted eligibility, with only a few rooms authored with true cursed variants.
-4. **Does the audience know?** Whether the golden/cursed distinction is legible to guests (they realize they've fallen) or purely felt (the show just gets stranger) is a directorial choice with implications for how explicit the audio cues around the transition need to be.
+1. **Accessibility.** Still pending internal team discussion, and it matters more here than in v0.2: the show is audio-guided, so a guest who cannot hear the tour has no wayfinding at all. Options range from a visual guidance layer on the phone (next-room prompts, directional cues) to captioned room content. The cheap insurance remains adding an optional `alternatives` field to every cue now (`{ "text": "...", "haptic": "pattern-id" }`) so a later decision does not require reworking the cue library.
+2. **What ends free-roam.** A guest released into the Admin Office / Data Center / Warehouse / Control Room area needs something to move them on toward the Library. Pending the narrative team; the runtime currently advances on entering the Library, with the trigger before it left as an operator action.
+3. **Cursed as a role.** The golden/cursed framing is parked. If it returns it is likely a *role* rather than a fall from grace, which the eligibility seam already accommodates — `roleBased` is a declared strategy and rooms never encode who is allowed in. See §17.5.
+4. **Does the audience know?** Whether going off-path is legible to a guest (they realise the tour has changed) or purely felt (it simply gets stranger) is a directorial choice, with implications for how explicit the audio around the transition needs to be.
+5. **Multi-guest semantics before phones.** `spectator` and `personalVariant` are phone-side responses, so until Phase B, capacity work can only select and display them. Worth agreeing that is the bar for A5.
 
 ---
 
@@ -746,6 +877,8 @@ Clock sync and `startAt` scheduling; Web Audio cue player and join-in-progress; 
 
 ### 16.2 Replaced
 The v1/v2 dual-mode runtime (`runtime.js`) — replaced by always-concurrent room + guest actors with a coordinator; contract v1/v2 → **v3**, a breaking change (v3 shows are not v2 shows); the ad-hoc room-assignment operator commands (`assignZone`, `moveAllToRoom`) → location-source events, with operator placement becoming one source among several; `sendTo: orchestrator` broadcast stub → a real orchestrator.
+
+The v0.2 operator panel went with it. It was still sending seven message types the v0.3 runtime does not have, and was rebuilt as a deliberately lightweight test panel (§10) — vanilla, no build step — whose job is to establish what the real operator surface needs before that is committed to a framework.
 
 ### 16.3 Fixes to fold in from v0.2 review
 - **Cue ownership:** a looping cue started on entry to state S is owned by S and auto-stopped on exit unless declared `persistent`. This makes the orphaned-audio class of bug a runtime invariant rather than authoring discipline (the `stopRoomOutputs` / `skipActiveCues` workaround becomes unnecessary).
@@ -802,7 +935,7 @@ them. Two terms had already failed in conversation (`advanceOn`,
 | top-level `zones` map | `rooms.<id>.zones` | Two maps with identical keys had to be hand-synced; rooms may now own several zones |
 | `guidance: nearestUnseen \| operatorDirected \| free` | `goldenPath \| guestDirectedPath \| freeExplore` | Names the show's own concepts, and removes the need for a distance metric |
 | `paths.*.ordered` | *removed* | Implied by `goldenPath` |
-| `advanceOn` | `advanceWhen` + required `scope` | Read as a condition; who evaluates it was never stated |
+| `advanceOn` | `advanceWhen` + required `scope` | Read as a condition; who evaluates it was never stated. *Both removed in turn by §18 — room-entry transitions and declared timers cover it* |
 | `atCapacity: queue` | *removed* | Needs "wait here" and "you're up" audio, and manufactures a hallway queue |
 | `pauseWhenEmpty` | *removed* | See §3.5 — a room-authoring pattern, not a runtime flag |
 | `multiUser` | `multiGuest` | Follows the guest rename |
@@ -843,6 +976,58 @@ possible are preserved:
 - **Rooms keep their own state**, independent of any guest.
 - **The orchestrator stays**, owning globals, the show clock, and aggregate
   conditions across guests.
+
+---
+
+## 18. Revision — the journey
+
+The second substantial revision, and it came from mapping the real building.
+
+### 18.1 Why phases could not stay
+
+A guest used to be handed one path at the door, for the whole show. The actual
+journey has three route regimes — a shared prologue everyone walks, a museum
+where assigned paths apply, and a free-roam area after — and guests move between
+them freely, including back into the museum from the far side.
+
+So routes belong to the journey rather than to the show, and what progresses is
+not *where a guest may go* but *what the audio is telling them to do*. That is
+the guidance region (§4.1). `phases`, `mode`, `target`, `rooms` and `advanceWhen`
+all disappear: a "directed" phase is simply a region whose guidance points at one
+room, and there is no invalid combination left to author.
+
+### 18.2 What replaced it
+
+| Was | Now |
+|---|---|
+| `phases[]` with `mode`, `target`, `rooms` | The `guidance` region of the guest statechart (§4.1) |
+| `advanceWhen` | Room-entry transitions, plus declared timers for what `after` cannot express (§4.2) |
+| `paths.assignment` at join | `assignPath` as a journey entry action, when the guest reaches the museum (§4.3) |
+| Weighted adherence, thresholds, redemption | `onPath` / `offPath`, one way (§4.5) |
+| Rooms as one undifferentiated kind | `destination` / `hallway`, and declared adjacency (§3.1) |
+| Ineligible entry always leaving the room untouched | Still the default, with `activateVariant` as the declared exception (§3.4) |
+
+### 18.3 Decisions worth recording
+
+**The location region is generated.** Adjacency is already on the rooms;
+authoring it again as transitions would let the two drift. An author draws
+intent; the runtime adds recovery.
+
+**Eligibility only gates rooms that paths route through.** Without that
+qualifier a shared prologue is ineligible for everybody, because no guest has a
+path yet. It also makes backtracking out of the museum a non-event, which is
+what the show wants.
+
+**A guest's standing in a room is derived, not recorded.** An earlier field
+stored the outcome of an entry and went stale whenever a room changed under
+somebody who never moved. It is neither the guest's state nor the room's — one
+room in one state holds its holder and two who were refused — so it is computed
+from the relation each snapshot (§3.4).
+
+**Off-path is a boolean because the show asks a boolean.** The weighted model
+would have shipped a calibration burden for a distinction nobody makes. It can be
+layered back onto the same event stream if a pattern rather than a single wrong
+turn turns out to be the right model.
 
 ---
 
