@@ -113,6 +113,17 @@ describe('RoomActor', () => {
     assert.equal(events.find((e) => e.type === 'room.activated').revisit, false);
   });
 
+  it('releasing during an intro state leaves it too, not just `active`', () => {
+    // A room may declare states beyond the canonical three. Every one of them
+    // is the room running for somebody, so none may outlive the lock.
+    const { room, coordinator } = make();
+    room.requestActivation('u1');
+    assert.equal(rootState(room.state), 'activating');
+    assert.equal(room.release('u1').ok, true);
+    assert.equal(coordinator.getLock('library'), null);
+    assert.equal(rootState(room.state), 'settling');
+  });
+
   it('release with no occupants drops the lock and leaves the active state', () => {
     const { room, coordinator, clock } = make();
     room.requestActivation('u1');

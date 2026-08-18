@@ -29,13 +29,6 @@ export class Guest {
     this.roomId = /** @type {string | null} */ (null);
     this.zoneId = /** @type {string | null} */ (null);
     this.occupancy = /** @type {'outside' | 'inside'} */ ('outside');
-    /**
-     * What happened the last time this guest walked into a room — activated,
-     * refused, or turned away as ineligible. Cleared on leaving. Until phone
-     * audio lands in Phase B this is the only visible outcome of an ineligible
-     * entry, so the operator panel reads it directly.
-     */
-    this.lastEntry = /** @type {object | null} */ (null);
     /** @type {Record<string, VisitRecord>} */
     this.visitHistory = {};
   }
@@ -109,7 +102,6 @@ export class Guest {
       zoneId: this.zoneId,
       occupancy: this.occupancy,
       connected: this.connected,
-      lastEntry: this.lastEntry,
       visitHistory: this.visitHistory,
     };
   }

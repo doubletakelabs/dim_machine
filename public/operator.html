@@ -126,7 +126,7 @@
         <span class="pill" id="walkNote">dwell = room's seen threshold + pad</span>
       </div>
       <table>
-        <thead><tr><th>Guest</th><th>Journey</th><th>Room</th><th>Doing</th><th>Last entry</th><th></th></tr></thead>
+        <thead><tr><th>Guest</th><th>Journey</th><th>Room</th><th>Doing</th><th>Standing</th><th></th></tr></thead>
         <tbody id="guests"></tbody>
       </table>
     </div>
@@ -415,7 +415,7 @@ function renderPlan() {
     g.setAttribute('class', 'guest');
     const dot = document.createElementNS(SVG_NS, 'circle');
     dot.setAttribute('r', 8);
-    dot.setAttribute('fill', outcomeColour(guest.lastEntry));
+    dot.setAttribute('fill', standingColour(guest.currentRoom));
     dot.setAttribute('stroke', selection?.kind === 'guest' && selection.id === guest.guestId
       ? '#6ea8fe' : '#0d0f13');
     dot.setAttribute('stroke-width', guest.walking ? 3 : 2);
@@ -433,7 +433,7 @@ function renderPlan() {
     g.appendChild(ring);
     g.appendChild(dot);
     g.appendChild(label);
-    g.appendChild(title(`${guest.label} · ${guest.pathId}\n${describeEntry(guest.lastEntry)}`));
+    g.appendChild(title(`${guest.label} · ${guest.pathId}\n${describeStanding(guest.currentRoom)}`));
     g.onpointerdown = (evt) => {
       selection = { kind: 'guest', id: guest.guestId };
       dragging = { guestId: guest.guestId, pointerId: evt.pointerId };
@@ -553,15 +553,29 @@ function centroidOf(polygon) {
   return [sum[0] / polygon.length, sum[1] / polygon.length];
 }
 
-function outcomeColour(entry) {
-  switch (entry?.outcome) {
-    case 'activated': case 'alreadyActive': case 'inherited': return '#58c98a';
-    case 'activatedVariant': return '#c58ae0';
-    case 'passingThrough': return '#7f8899';
-    case 'ineligible': return '#e0a758';
+/** What this room is to this guest, right now — not the room's own state. */
+function standingColour(current) {
+  switch (current?.standing) {
+    case 'holder': return '#58c98a';
+    case 'available': return '#6ea8fe';
+    case 'notTheirs': return '#e0a758';
     case 'refused': return '#e0685f';
+    case 'passingThrough': return '#7f8899';
     default: return '#7f8899';
   }
+}
+
+const STANDING_LABEL = {
+  holder: 'theirs',
+  available: 'open to them',
+  refused: 'refused',
+  notTheirs: 'not theirs',
+  passingThrough: 'passing through',
+};
+
+function describeStanding(current) {
+  if (!current) return 'not in a room';
+  return `${current.roomId}: ${STANDING_LABEL[current.standing] ?? current.standing}`;
 }
 
 /**
@@ -586,16 +600,6 @@ function describeIntent(guest) {
   return 'idle';
 }
 
-function describeEntry(entry) {
-  if (!entry) return 'not in a room';
-  if (entry.outcome === 'ineligible') return `${entry.roomId}: not theirs (${entry.policy})`;
-  if (entry.outcome === 'refused') return `${entry.roomId}: refused (${entry.reason})`;
-  if (entry.outcome === 'inherited') return `${entry.roomId}: inherited the room`;
-  if (entry.outcome === 'activatedVariant') return `${entry.roomId}: off-path variant`;
-  if (entry.outcome === 'passingThrough') return `${entry.roomId}: passing through`;
-  return `${entry.roomId}: ${entry.outcome}`;
-}
-
 const shortId = (id) => String(id ?? '').replace(/^u-/, '').slice(0, 6);
 
 /**
@@ -615,7 +619,7 @@ function guestName(guestId) {
 function guestChip(guestId) {
   if (!guestId) return '—';
   const guest = (snap?.guests ?? []).find((g) => g.guestId === guestId);
-  const colour = guest ? outcomeColour(guest.lastEntry) : '#7f8899';
+  const colour = guest ? standingColour(guest.currentRoom) : '#7f8899';
   return `<span style="color:${colour}">●</span> ${guestName(guestId)}`;
 }
 
@@ -652,7 +656,7 @@ function renderGuests() {
     <tr class="${selection?.kind === 'guest' && selection.id === g.guestId ? 'sel' : ''}"
         data-guest="${g.guestId}">
       <td>
-        <span style="color:${outcomeColour(g.lastEntry)}">●</span>
+        <span style="color:${standingColour(g.currentRoom)}">●</span>
         ${g.label}${g.walking ? ' <span class="muted">▸</span>' : ''}
         <br><span class="muted" style="font-size:10px;font-family:ui-monospace,Menlo,monospace">${g.guestId}</span>
       </td>
@@ -661,7 +665,7 @@ function renderGuests() {
         ${g.pathId ? `<br><span style="font-size:10px">${pathRooms(g.pathId).join(' → ')}</span>` : ''}</td>
       <td>${g.roomId ?? '<span class="muted">—</span>'}</td>
       <td class="muted">${describeIntent(g)}</td>
-      <td style="color:${outcomeColour(g.lastEntry)}">${describeEntry(g.lastEntry)}</td>
+      <td style="color:${standingColour(g.currentRoom)}">${describeStanding(g.currentRoom)}</td>
       <td><button class="tiny" data-remove="${g.guestId}">×</button></td>
     </tr>`).join('');
   $('guests').innerHTML = rows || '<tr><td colspan="6" class="muted">No guests yet.</td></tr>';
@@ -715,16 +719,28 @@ function renderInspector() {
         <dt>Last refusal</dt><dd>${room.lastRefuse
           ? `${guestName(room.lastRefuse.guestId)} — ${room.lastRefuse.reason}` : '—'}</dd>
       </dl>
-      <div class="row" style="margin-top:10px">
+      <div class="row" style="margin-top:12px">
+        <span class="pill">for a guest</span>
+        <button class="tiny" data-activate-occupant="1"
+          ${room.eligibleOccupants?.length ? '' : 'disabled'}>Activate for occupant</button>
+        <button class="tiny" data-unlock="1">Release lock</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span class="pill" title="Sent straight to the statechart: no eligibility, no lock, no guest">raw event</span>
         ${['ACTIVATE', 'RELEASE', 'RESET', 'DONE'].map((ev) =>
           `<button class="tiny" data-ev="${ev}">${ev}</button>`).join('')}
-        <button class="tiny" data-unlock="1">Release lock</button>
-      </div>`;
+      </div>
+      <p class="muted" style="margin:6px 0 0;font-size:11px">
+        Raw events poke the machine directly — useful to see a state, but
+        ACTIVATE that way leaves the room running for nobody.
+      </p>`;
     for (const btn of el.querySelectorAll('[data-ev]')) {
       btn.onclick = () => send({ type: 'sendRoomEvent', roomId: room.roomId, event: btn.dataset.ev });
     }
     el.querySelector('[data-unlock]').onclick =
       () => send({ type: 'releaseRoomLock', roomId: room.roomId });
+    el.querySelector('[data-activate-occupant]').onclick =
+      () => send({ type: 'activateForOccupant', roomId: room.roomId });
     return;
   }
 
@@ -734,7 +750,7 @@ function renderInspector() {
   const route = routeFor(guest);
   el.innerHTML = `
     <dl>
-      <dt>Guest</dt><dd><span style="color:${outcomeColour(guest.lastEntry)}">●</span> ${guest.label}</dd>
+      <dt>Guest</dt><dd><span style="color:${standingColour(guest.currentRoom)}">●</span> ${guest.label}</dd>
       <dt>ID</dt><dd style="font-family:ui-monospace,Menlo,monospace;font-size:11px">${guest.guestId}</dd>
       <dt>Path</dt><dd>${guest.pathId
         ? `${guest.pathId} <span class="muted">· ${pathGuidance(guest.pathId)}</span>`
@@ -745,7 +761,7 @@ function renderInspector() {
       <dt>Guiding to</dt><dd>${guest.guidanceTarget ?? '<span class="muted">—</span>'}</dd>
       <dt>Eligible</dt><dd>${guest.eligibleRooms?.join(', ') || '—'}</dd>
       <dt>In room</dt><dd>${guest.roomId ?? '—'}${guest.zoneId ? ` (${guest.zoneId})` : ''}</dd>
-      <dt>Last entry</dt><dd style="color:${outcomeColour(guest.lastEntry)}">${describeEntry(guest.lastEntry)}</dd>
+      <dt>Standing</dt><dd style="color:${standingColour(guest.currentRoom)}">${describeStanding(guest.currentRoom)}</dd>
       <dt>Walking</dt><dd>${guest.walking ? describeIntent(guest) : 'no'}</dd>
     </dl>
     <h2 style="margin-top:12px">Route</h2>

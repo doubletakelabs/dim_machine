@@ -136,7 +136,7 @@ describe('SpatialRuntime', () => {
     const library = rt.getRoomsRoster().find((r) => r.roomId === 'library');
     assert.match(library.state, /^activating|^active/);
     assert.equal(library.lockHolder, p.guestId);
-    assert.equal(rt.getGuestByToken(p.token).lastEntry.outcome, 'activated');
+    assert.equal(rt.guestActors.get(p.guestId).currentRoom().standing, 'holder');
   });
 
   it('requestActivation accepts then refuses a second guest', () => {

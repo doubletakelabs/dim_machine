@@ -367,6 +367,30 @@ export class SpatialRuntime {
     return typeof this.clock.rate === 'number' ? this.clock.rate : 1;
   }
 
+  /**
+   * Activate a room the way a guest walking in would, on behalf of somebody
+   * actually standing there.
+   *
+   * The raw ACTIVATE event bypasses eligibility and the lock, which leaves the
+   * room running for nobody and refusing everyone. This goes through the same
+   * path an arrival takes, so the room ends up genuinely someone's.
+   *
+   * Picks the longest-present eligible occupant — the same ordering lock
+   * succession and `whenAvailable` use, so "who gets the room" is answered one
+   * way across the system.
+   */
+  activateForOccupant(roomId) {
+    const room = this.rooms.get(roomId);
+    if (!room) return { ok: false, reason: 'unknown' };
+    const next = room.holderCandidates()
+      .sort((a, b) => (a.sinceTs ?? 0) - (b.sinceTs ?? 0))[0];
+    if (!next) return { ok: false, reason: 'nobodyEligibleInside' };
+    const outcome = this.guestActors.get(next.guestId)?.enterRoom(roomId);
+    if (outcome) this.logEntryOutcome(next.guestId, outcome);
+    this.io.onStateChange?.();
+    return { ok: true, guestId: next.guestId, outcome };
+  }
+
   /** Send an event straight into a room machine — operator override. */
   sendRoomEvent(roomId, event) {
     const room = this.rooms.get(roomId);

@@ -16,10 +16,21 @@ import { roomCentroid } from './zone-math.js';
  * event. One that does not simply refuses, and the rollback in
  * `requestActivation` keeps the lock from being stranded.
  */
+/**
+ * These are also exactly the states in which a room is *not running*, and so
+ * needs no holder. The two are one idea rather than two: a room is available to
+ * be taken precisely when nobody has it. Keeping them as separate lists is how
+ * the last two bugs here happened — allowlists that quietly disagreed with the
+ * states a show had actually declared.
+ *
+ * Written as the resting states rather than the running ones, because a show
+ * may add running states — an intro before its content, a coda after — and
+ * every one of those is the room running for somebody.
+ */
 const ACTIVATABLE = new Set(['idle', 'settling']);
 
-/** Presentation roots that require a lock holder to be coherent. */
-const REQUIRES_LOCK = new Set(['active']);
+/** A room needs a holder unless it is resting. */
+const requiresLock = (root) => root != null && !ACTIVATABLE.has(root);
 
 export const DEFAULT_GRACE_MS = 10000;
 
@@ -36,7 +47,7 @@ export function stateToString(value) {
  * string this module produced.
  *
  * The string form matters: `stateToString` yields "active.main" for a nested
- * state, and returning that verbatim made every `REQUIRES_LOCK.has(...)` check
+ * state, and returning that verbatim made every running-state check
  * miss — so a room with sub-states under `active` never released its lock on
  * the way out. Rooms without sub-states worked, which is why it went unseen.
  */
@@ -187,7 +198,7 @@ export class RoomActor {
    * @param {string | null} nextRoot
    */
   dropStaleLock(previousRoot, nextRoot) {
-    if (!REQUIRES_LOCK.has(previousRoot) || REQUIRES_LOCK.has(nextRoot)) return;
+    if (!requiresLock(previousRoot) || requiresLock(nextRoot)) return;
     const lock = this.coordinator.getLock(this.roomId);
     if (!lock) return;
     this.lastHolder = lock.guestId;
@@ -303,7 +314,7 @@ export class RoomActor {
       return;
     }
 
-    if (!REQUIRES_LOCK.has(this.presentationRoot())) return;
+    if (!requiresLock(this.presentationRoot())) return;
     this.applyExitPolicy(guestId);
   }
 
@@ -489,7 +500,7 @@ export class RoomActor {
     this.lastHolder = lock.guestId;
     this.coordinator.releaseLock(this.roomId, lock.guestId);
     this.appendEvent({ type: 'room.lockReleased', roomId: this.roomId, guestId: lock.guestId });
-    if (REQUIRES_LOCK.has(this.presentationRoot())) {
+    if (requiresLock(this.presentationRoot())) {
       this.actor.send({ type: 'RELEASE' });
     }
     this.onStateChange();
@@ -503,6 +514,22 @@ export class RoomActor {
     return true;
   }
 
+  /**
+   * Would this room take an activation right now?
+   *
+   * Resting is necessary but not sufficient: a `settling` room that declares no
+   * activation transition is winding down and will refuse. Without this a guest
+   * standing in one would be told the room was available to them, which it is
+   * not.
+   */
+  acceptsActivation() {
+    if (this.kind === 'hallway') return false;
+    const root = this.presentationRoot();
+    if (!ACTIVATABLE.has(root)) return false;
+    const on = this.def.machine?.states?.[root]?.on ?? {};
+    return Object.keys(on).some((event) => event.startsWith('ACTIVATE'));
+  }
+
   snapshot() {
     const lock = this.coordinator.getLock(this.roomId);
     const occupants = this.coordinator.getRoomOccupants(this.roomId);
@@ -512,6 +539,7 @@ export class RoomActor {
       centre: roomCentroid(this.def),
       state: this.state,
       kind: this.kind,
+      acceptsActivation: this.acceptsActivation(),
       lockHolder: lock?.guestId ?? null,
       lastHolder: this.lastHolder,
       // Everyone physically inside, and the subset the room is actually running

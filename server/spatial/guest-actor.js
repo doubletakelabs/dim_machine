@@ -144,6 +144,38 @@ export class GuestActor {
     return path.rooms.find((roomId) => !this.guest.history(roomId).seen) ?? null;
   }
 
+  /**
+   * What the room they are in *is to them*, right now.
+   *
+   * Neither the guest's state nor the room's: one room in one state can hold
+   * three guests reading differently — its holder, and two who were refused.
+   * It is the relation between them, and the coordinator already owns the other
+   * one (who is where).
+   *
+   * Derived rather than recorded. The version that stored an outcome at entry
+   * went stale the moment the room changed underneath somebody — reading
+   * "refused" for a guest the room had since passed to, or "activated" for one
+   * standing in a room that had reset at their feet. What *happened* is an
+   * event, and lives in the event log; what *is* is computed.
+   *
+   * @returns {{ roomId: string, standing: string } | null}
+   */
+  currentRoom() {
+    const roomId = this.guest.roomId;
+    if (!roomId) return null;
+    if ((this.show.rooms?.[roomId]?.kind ?? 'destination') === 'hallway') {
+      return { roomId, standing: 'passingThrough' };
+    }
+    const room = this.roomSnapshot(roomId);
+    if (room?.lockHolder === this.guestId) return { roomId, standing: 'holder' };
+    if (!this.isEligible(roomId)) return { roomId, standing: 'notTheirs' };
+    // Eligible and unheld — but "available" has to mean the room would
+    // actually take them. One left running by a raw operator ACTIVATE belongs
+    // to nobody and still refuses, and so does one winding down that declares
+    // no way back in.
+    return { roomId, standing: room?.acceptsActivation ? 'available' : 'refused' };
+  }
+
   ineligibleResponse(roomId) {
     const declared = this.show.rooms?.[roomId]?.ineligible ?? DEFAULT_INELIGIBLE;
     return { policy: declared.policy ?? 'ignore', audio: declared.audio ?? null };
@@ -159,8 +191,6 @@ export class GuestActor {
       && event.roomId
       && event.roomId !== event.previousRoomId;
     const left = event.previousRoomId && event.previousRoomId !== event.roomId;
-
-    if (left) this.guest.lastEntry = null;
 
     // The machine follows the coordinator, always — including moves that could
     // not have happened, which the runtime flags separately.
@@ -265,9 +295,9 @@ export class GuestActor {
     this.appendEvent({ type: 'guest.pathAssigned', guestId: this.guestId, pathId });
   }
 
+  /** The outcome of an entry, for the log. Deliberately not stored: see currentRoom(). */
   record(roomId, detail) {
-    this.guest.lastEntry = { roomId, ...detail };
-    return this.guest.lastEntry;
+    return { roomId, ...detail };
   }
 
   snapshot() {
@@ -275,7 +305,7 @@ export class GuestActor {
       regions: this.regions(),
       eligibleRooms: this.eligibleRoomIds(),
       guidanceTarget: this.guidanceTarget(),
-      lastEntry: this.guest.lastEntry ?? null,
+      currentRoom: this.currentRoom(),
     };
   }
 }

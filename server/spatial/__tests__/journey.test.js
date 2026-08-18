@@ -34,7 +34,7 @@ function walk(rt, guestId, roomId, ms = MOVE_MS) {
 
 const regions = (rt, guestId) => rt.guestActors.get(guestId).regions();
 const roomOf = (rt, roomId) => rt.getRoomsRoster().find((r) => r.roomId === roomId);
-const entryOf = (rt, guestId) => rt.guests.get(guestId).lastEntry;
+const standingOf = (rt, guestId) => rt.guestActors.get(guestId).currentRoom()?.standing;
 
 /** Walk a guest the whole way in, which is where a path gets assigned. */
 function arriveAtMuseum(rt) {
@@ -116,7 +116,7 @@ describe('the journey', () => {
     const rt = makeRuntime();
     const g = rt.spawnGuest();
     walk(rt, g.guestId, 'frontDesk');
-    assert.equal(entryOf(rt, g.guestId).outcome, 'activated');
+    assert.equal(standingOf(rt, g.guestId), 'holder');
     assert.equal(roomOf(rt, 'frontDesk').lockHolder, g.guestId);
   });
 
@@ -172,7 +172,7 @@ describe('going off-path', () => {
     walk(rt, g.guestId, 'cyclorama');
     assert.equal(regions(rt, g.guestId).adherence, 'onPath');
     // And it is still their room — they were never turned away from it.
-    assert.ok(['activated', 'alreadyActive'].includes(entryOf(rt, g.guestId).outcome));
+    assert.equal(standingOf(rt, g.guestId), 'holder');
     assert.equal(roomOf(rt, 'cyclorama').lockHolder, g.guestId);
   });
 
@@ -181,7 +181,7 @@ describe('going off-path', () => {
     const g = arriveAtMuseum(rt);
     walk(rt, g.guestId, 'southCorridor');
     assert.equal(regions(rt, g.guestId).adherence, 'onPath');
-    assert.equal(entryOf(rt, g.guestId).outcome, 'passingThrough');
+    assert.equal(standingOf(rt, g.guestId), 'passingThrough');
   });
 });
 
@@ -207,7 +207,7 @@ describe('rooms reacting to a guest they were not sent', () => {
     assert.equal(room.state, 'idle');
     assert.equal(room.lockHolder, null);
     assert.equal(room.lastRefuse, null, 'it never even heard a request');
-    assert.equal(entryOf(rt, g.guestId).outcome, 'ineligible');
+    assert.equal(standingOf(rt, g.guestId), 'notTheirs');
   });
 
   it('a room declaring activateVariant runs its variant, and they hold it', () => {
@@ -216,7 +216,43 @@ describe('rooms reacting to a guest they were not sent', () => {
     const room = roomOf(rt, roomId);
     assert.equal(room.state, 'active.offPath');
     assert.equal(room.lockHolder, g.guestId);
-    assert.equal(entryOf(rt, g.guestId).outcome, 'activatedVariant');
+    assert.equal(standingOf(rt, g.guestId), 'holder');
     assert.equal(rt.eventLog.filter((e) => e.type === 'room.activated').at(-1).offPath, true);
+  });
+});
+
+describe('operator activation', () => {
+  it('activates for somebody actually standing there', () => {
+    const rt = makeRuntime();
+    const g = rt.spawnGuest();
+    walk(rt, g.guestId, 'frontDesk');
+    rt.releaseRoomLock('frontDesk');
+    rt.testAdvanceTime(11000);
+    assert.equal(roomOf(rt, 'frontDesk').state, 'idle');
+
+    const result = rt.activateForOccupant('frontDesk');
+    assert.equal(result.ok, true);
+    assert.equal(result.guestId, g.guestId);
+    assert.equal(roomOf(rt, 'frontDesk').lockHolder, g.guestId);
+  });
+
+  it('refuses when nobody eligible is inside, rather than running for nobody', () => {
+    const rt = makeRuntime();
+    assert.deepEqual(rt.activateForOccupant('frontDesk'), { ok: false, reason: 'nobodyEligibleInside' });
+    assert.equal(roomOf(rt, 'frontDesk').state, 'idle');
+    assert.equal(roomOf(rt, 'frontDesk').lockHolder, null);
+  });
+
+  it('picks the longest-present occupant, as succession does', () => {
+    const rt = makeRuntime();
+    const first = rt.spawnGuest();
+    walk(rt, first.guestId, 'frontDesk');
+    rt.testAdvanceTime(50);
+    const second = rt.spawnGuest();
+    walk(rt, second.guestId, 'frontDesk');
+    rt.releaseRoomLock('frontDesk');
+    rt.testAdvanceTime(11000);
+
+    assert.equal(rt.activateForOccupant('frontDesk').guestId, first.guestId);
   });
 });

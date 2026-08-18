@@ -449,8 +449,30 @@ Per-guest state the runtime maintains:
 { "guestId": "g-123", "label": "Guest 1", "pathId": "pathA",
   "regions": { "location": "library", "guidance": "museum", "adherence": "onPath" },
   "roomId": "library", "zoneId": "library-main", "occupancy": "inside",
+  "currentRoom": { "roomId": "library", "standing": "holder" },
   "visitHistory": { "library": { "visits": 2, "seen": true, "activatedByMe": true } } }
 ```
+
+### `currentRoom` — what the room they are in is *to them*
+
+Neither the guest's state nor the room's: one room in one state can hold three
+guests reading differently — its holder and two who were refused. It is the
+relation between them, and the coordinator already owns the other one (who is
+where).
+
+| `standing` | Means |
+|---|---|
+| `holder` | The room is running for them — however they came by it |
+| `available` | Eligible, unheld, and the room would take them |
+| `refused` | Eligible, but it will not — someone holds it, or it is winding down |
+| `notTheirs` | Not eligible for this room |
+| `passingThrough` | A hallway |
+
+**Derived, not recorded.** An earlier version stored the outcome at entry and
+went stale whenever the room changed underneath somebody — reading `refused` for
+a guest the room had since passed to, or `activated` for one standing in a room
+that had reset at their feet. What *happened* is an event and lives in the event
+log; what *is* is computed each snapshot, so it cannot drift.
 
 ---
 

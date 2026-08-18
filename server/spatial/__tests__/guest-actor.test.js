@@ -147,7 +147,7 @@ describe('A3 — walking into rooms', () => {
     walkTo(rt, a.guestId, AT.library);
 
     assert.equal(roomOf(rt, 'library').lockHolder, a.guestId);
-    assert.equal(guestOf(rt, a.token).lastEntry.outcome, 'activated');
+    assert.equal(guestOf(rt, a.token).currentRoom.standing, 'holder');
     assert.ok(rt.eventLog.some((e) => e.type === 'guest.activatedRoom' && e.roomId === 'library'));
     assert.equal(guestOf(rt, a.token).visitHistory.library.activatedByMe, true);
   });
@@ -165,10 +165,12 @@ describe('A3 — walking into rooms', () => {
     assert.equal(cellar.lastRefuse, null);   // it never even heard a request
     assert.ok(cellar.occupants.includes(a.guestId));
 
-    const entry = guestOf(rt, a.token).lastEntry;
-    assert.equal(entry.outcome, 'ineligible');
-    assert.equal(entry.policy, 'lockedMessage');
-    assert.equal(entry.audio, 'cellar-locked');
+    assert.equal(guestOf(rt, a.token).currentRoom.standing, 'notTheirs');
+    // The room's declared response is an event — what happened — rather than a
+    // standing, which is what is.
+    const event = rt.eventLog.filter((e) => e.type === 'guest.ineligibleEntry').at(-1);
+    assert.equal(event.policy, 'lockedMessage');
+    assert.equal(event.audio, 'cellar-locked');
   });
 
   it('records an ineligible entry for adherence to consume later', () => {
@@ -199,7 +201,7 @@ describe('A3 — walking into rooms', () => {
 
     walkTo(rt, a.guestId, AT.greenhouse);
     assert.equal(roomOf(rt, 'greenhouse').lockHolder, a.guestId);
-    assert.equal(guestOf(rt, a.token).lastEntry.outcome, 'activated');
+    assert.equal(guestOf(rt, a.token).currentRoom.standing, 'holder');
   });
 
   it('a second eligible guest is refused while the first holds the room', () => {
@@ -211,11 +213,11 @@ describe('A3 — walking into rooms', () => {
     assert.equal(roomOf(rt, 'library').lockHolder, a.guestId);
 
     walkTo(rt, b.guestId, AT.library);
-    const entry = guestOf(rt, b.token).lastEntry;
-    assert.equal(entry.outcome, 'refused');
-    assert.equal(entry.reason, 'locked');
+    assert.equal(guestOf(rt, b.token).currentRoom.standing, 'refused');
+    const event = rt.eventLog.filter((e) => e.type === 'guest.activationRefused').at(-1);
+    assert.equal(event.reason, 'locked');
     // A5 turns this policy into behavior; A3 only has to surface the decision.
-    assert.equal(entry.multiGuestPolicy, 'collaborative');
+    assert.equal(event.multiGuestPolicy, 'collaborative');
     assert.equal(roomOf(rt, 'library').lockHolder, a.guestId);
   });
 
@@ -235,9 +237,9 @@ describe('A3 — walking into rooms', () => {
     const rt = makeRuntime();
     const a = spawnOnPath(rt, 'pathA');
     walkTo(rt, a.guestId, AT.cellar);
-    assert.equal(guestOf(rt, a.token).lastEntry.outcome, 'ineligible');
+    assert.equal(guestOf(rt, a.token).currentRoom.standing, 'notTheirs');
     walkTo(rt, a.guestId, AT.corridor, 800);
-    assert.equal(guestOf(rt, a.token).lastEntry, null);
+    assert.equal(guestOf(rt, a.token).currentRoom, null);
   });
 
   it('the lock transfers to a remaining guest the room is running for', () => {
@@ -269,13 +271,13 @@ describe('A3 — walking into rooms', () => {
     walkTo(rt, a.guestId, AT.library);
     rt.testAdvanceTime(50);
     walkTo(rt, b.guestId, AT.library);
-    assert.equal(guestOf(rt, b.token).lastEntry.outcome, 'refused');
+    assert.equal(guestOf(rt, b.token).currentRoom.standing, 'refused');
 
     walkTo(rt, a.guestId, AT.corridor, 900);
 
     assert.equal(roomOf(rt, 'library').lockHolder, b.guestId);
-    assert.equal(guestOf(rt, b.token).lastEntry.outcome, 'inherited');
-    assert.equal(guestOf(rt, b.token).lastEntry.roomId, 'library');
+    assert.equal(guestOf(rt, b.token).currentRoom.standing, 'holder');
+    assert.equal(guestOf(rt, b.token).currentRoom.roomId, 'library');
     // The room is running for them now, which is what this flag asks.
     assert.equal(guestOf(rt, b.token).visitHistory.library.activatedByMe, true);
     assert.ok(rt.eventLog.some((e) => e.type === 'guest.inheritedRoom' && e.guestId === b.guestId));
@@ -289,7 +291,7 @@ describe('A3 — walking into rooms', () => {
     rt.testAdvanceTime(50);
     walkTo(rt, b.guestId, AT.library);
     walkTo(rt, a.guestId, AT.corridor, 900);
-    assert.equal(guestOf(rt, a.token).lastEntry, null);
+    assert.equal(guestOf(rt, a.token).currentRoom, null);
   });
 
   it('the lock never transfers to a guest the room is not for', () => {
@@ -327,7 +329,7 @@ describe('A3 — walking into rooms', () => {
       walkTo(rt, holder.guestId, AT.greenhouse);
       rt.testAdvanceTime(50);
       walkTo(rt, waiting.guestId, AT.greenhouse);
-      assert.equal(guestOf(rt, waiting.token).lastEntry.outcome, 'refused');
+      assert.equal(guestOf(rt, waiting.token).currentRoom.standing, 'refused');
       return { holder, waiting };
     }
 
@@ -337,8 +339,9 @@ describe('A3 — walking into rooms', () => {
       rt.testAdvanceTime(5000);    // content ends
       rt.testAdvanceTime(11000);   // grace expires
       assert.equal(roomOf(rt, 'greenhouse').state, 'idle');
-      // Accurate, if unsatisfying — which is why this is a choice, not a default.
-      assert.equal(guestOf(rt, waiting.token).lastEntry.outcome, 'refused');
+      // The room would take them — nothing offered it. Accurate, if
+      // unsatisfying, which is why replaying is a choice and not a default.
+      assert.equal(guestOf(rt, waiting.token).currentRoom.standing, 'available');
       assert.equal(roomOf(rt, 'greenhouse').lockHolder, null);
     });
 
@@ -349,7 +352,7 @@ describe('A3 — walking into rooms', () => {
       rt.testAdvanceTime(11000);
       assert.match(roomOf(rt, 'greenhouse').state, /^active/);
       assert.equal(roomOf(rt, 'greenhouse').lockHolder, holder.guestId);
-      assert.equal(guestOf(rt, holder.token).lastEntry.outcome, 'activated');
+      assert.equal(guestOf(rt, holder.token).currentRoom.standing, 'holder');
     });
 
     it('offers it to the longest-present occupant, as lock succession does', () => {
@@ -368,7 +371,7 @@ describe('A3 — walking into rooms', () => {
       assert.equal(roomOf(rt, 'greenhouse').lockHolder, first.guestId);
       // The second guest is still an unsatisfied secondary occupant — that is
       // A5's multiGuest problem, not this one's.
-      assert.equal(guestOf(rt, second.token).lastEntry.outcome, 'refused');
+      assert.equal(guestOf(rt, second.token).currentRoom.standing, 'refused');
     });
 
     it('does not offer the room to an ineligible occupant', () => {
@@ -383,7 +386,7 @@ describe('A3 — walking into rooms', () => {
 
       rt.testAdvanceTime(5000);
       assert.equal(roomOf(rt, 'cellar').lockHolder, null);
-      assert.equal(guestOf(rt, other.token).lastEntry.outcome, 'ineligible');
+      assert.equal(guestOf(rt, other.token).currentRoom.standing, 'notTheirs');
     });
 
     it('activating from inside the state change does not re-enter or double-fire', () => {
@@ -405,7 +408,7 @@ describe('A3 — walking into rooms', () => {
       rt.def.rooms.greenhouse.whenAvailable = { policy: 'activate' };
       const alone = spawnOnPath(rt, 'pathA');
       walkTo(rt, alone.guestId, AT.greenhouse);
-      assert.equal(guestOf(rt, alone.token).lastEntry.outcome, 'activated');
+      assert.equal(guestOf(rt, alone.token).currentRoom.standing, 'holder');
 
       for (let i = 0; i < 3; i++) rt.testAdvanceTime(16000);   // content + grace
       const replays = rt.eventLog.filter(
@@ -500,7 +503,7 @@ describe('A3 — walking into rooms', () => {
     walkTo(rt, a.guestId, AT.greenhouse);
     assert.equal(roomOf(rt, 'greenhouse').state, 'settling');
     assert.equal(roomOf(rt, 'greenhouse').lockHolder, null);
-    assert.equal(guestOf(rt, a.token).lastEntry.outcome, 'refused');
+    assert.equal(guestOf(rt, a.token).currentRoom.standing, 'refused');
   });
 
   it('the operator roster shows eligibility and the last decision', () => {
@@ -510,7 +513,6 @@ describe('A3 — walking into rooms', () => {
 
     const snap = rt.getOperatorSnapshot().guests.find((g) => g.guestId === a.guestId);
     assert.deepEqual(snap.eligibleRooms.sort(), ['greenhouse', 'hallway', 'library']);
-    assert.equal(snap.lastEntry.outcome, 'ineligible');
-    assert.equal(snap.lastEntry.policy, 'lockedMessage');
+    assert.deepEqual(snap.currentRoom, { roomId: 'cellar', standing: 'notTheirs' });
   });
 });

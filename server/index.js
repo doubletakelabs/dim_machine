@@ -489,6 +489,16 @@ wss.on('connection', (ws) => {
         return;
       }
 
+      case 'activateForOccupant': {
+        if (!isOperator) return;
+        const result = runtime.activateForOccupant(msg.roomId);
+        opLog(result.ok
+          ? `${msg.roomId}: activated for ${runtime.guests.get(result.guestId)?.label ?? result.guestId}`
+          : `${msg.roomId}: cannot activate — ${result.reason}`);
+        sendRoster();
+        return;
+      }
+
       case 'sendRoomEvent': {
         if (!isOperator) return;
         if (runtime.sendRoomEvent(msg.roomId, msg.event)) {
