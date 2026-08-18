@@ -96,6 +96,7 @@ describe('RoomActor', () => {
       seen: true,
       completed: false,
       activatedByMe: true,
+      offPath: false,
     });
   });
 

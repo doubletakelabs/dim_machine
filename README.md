@@ -103,16 +103,27 @@ it. If you do want the demo itself snappier, `location.entryConfirmMs` in
 Contract **v3 only** (`contractVersion: 3`) — see `CONTRACT.md`. v1/v2 workshop
 shows are removed.
 
-Rooms declare their **zones** (one or more polygons) and a machine with three
-canonical states — `idle`, `active`, `settling` — handling `ACTIVATE`, `RESET`,
-and `RELEASE`. Occupancy is per room, so crossing between a room's zones is not
-an exit. Extra states (an intro, room beats) are free-form. Rooms have no memory of having run before: revisit
-variants come from the activating guest's history, carried on `ACTIVATE`.
-The validator enforces all of this, along with every policy enum, at load.
+Rooms declare their **kind** (`destination` or `hallway`), **adjacency**, and
+**zones**. A destination has a machine with three canonical states — `idle`,
+`active`, `settling` — handling `ACTIVATE`, `RESET`, and `RELEASE`. A hallway is
+somewhere you pass through: always eligible, never counted as seen, never a
+deviation, and exempt from the activation contract it could never satisfy.
+
+Occupancy is per room, so crossing between a room's zones is not an exit. Rooms
+have no memory of having run before — revisit variants come from the activating
+guest's history. A room may also declare `ineligible.policy: "activateVariant"`
+to react to a guest it was not sent, in its own variant state.
+
+**The guest is a statechart too.** Three parallel regions: `location` (generated
+from adjacency — the map), `guidance` (authored — the journey), and `adherence`
+(whether they are still following it). Paths are a library of named routes,
+assigned by the journey when a guest reaches the part of the show that has them,
+not at the door. See `CONTRACT.md`.
 
 | File | Purpose |
 |---|---|
-| `shows/spatial-demo.json` | Three-room demo (library, greenhouse, cellar) for Phase A matrix testing |
+| `shows/the-museum.json` | The real show: 23 spaces, two hallway hubs, 10 museum rooms, 4 paths |
+| `shows/spatial-demo.json` | Small fixture — three rooms and a hallway — for focused tests |
 
 Validate via `POST /api/shows/validate` or `SpatialRuntime.load()`.
 
@@ -123,11 +134,17 @@ there is nothing to press. `POST /api/spatial/activate` with `{ guestId, roomId 
 forces it manually for testing.
 
 **Eligibility (A3):** the guest actor evaluates `guest.eligibility` before any
-request reaches a room. `goldenPath`, `all`, and `none` are implemented; naming a
-declared-but-unimplemented strategy fails the load. An **ineligible entry never
-reaches the room** — the guest gets the room's declared `ineligible.policy`
-(visible on the guest roster and in the event log; audio lands in Phase B) while
-the room's state, lock, and history are untouched.
+request reaches a room. A room no path routes through is open to everyone, so a
+shared prologue works for guests who have not been assigned a path yet. An
+ineligible entry normally leaves the room **completely untouched** — unless the
+room declares `activateVariant`, in which case it runs its variant and the guest
+holds it.
+
+**Journey (A6):** `location` follows the coordinator exactly, including moves
+that could not physically have happened; `guidance` advances on room entry and
+on declared timers; `adherence` flips one-way when a guest enters a routed room
+that is not theirs. Declared timers exist because XState's `after` restarts on
+re-entry, and "thirty minutes in the museum" has to survive leaving.
 
 **Exit and reset (A4):** walking out drives the room's `exit.policy` —
 `resetAfter` (default, `graceMs` 10000) · `finish` · `hold` · `resetImmediate`.

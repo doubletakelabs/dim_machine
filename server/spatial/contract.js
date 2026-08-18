@@ -11,6 +11,17 @@ export const OCCUPANCY_STATES = ['outside', 'inside'];
 export const ROOM_PRESENTATION_STATES = ['idle', 'active', 'settling'];
 
 /**
+ * What kind of space a room is.
+ *
+ * A `hallway` is somewhere you pass through to reach somewhere else. It is
+ * always eligible — you cannot deviate by using the only route between rooms —
+ * never counts toward `seen`, is never a deviation, and is exempt from the
+ * activation contract it could never satisfy. Guests still occupy it, and it is
+ * where guidance speaks.
+ */
+export const ROOM_KINDS = ['destination', 'hallway'];
+
+/**
  * Presentation roots every room machine must declare.
  *
  * Rooms have no memory of having run before, deliberately. What matters when
@@ -51,6 +62,30 @@ export const REVISIT_EVENTS = {
   whenCompleted: 'ACTIVATE_COMPLETED',
 };
 
+/**
+ * Sent instead of ACTIVATE when a guest enters a room they were not sent to and
+ * the room declares `ineligible.policy: "activateVariant"`.
+ *
+ * Eligibility therefore selects *which* activation a room gets rather than
+ * gating activation outright. A room that would rather stay dark for such a
+ * guest keeps `ignore`, which most do.
+ */
+export const OFF_PATH_ACTIVATION_EVENT = 'ACTIVATE_OFFPATH';
+
+/** Room entry, as the guest machine hears it. Dotted, so `entered.*` works. */
+export const enteredEvent = (roomId) => `entered.${roomId}`;
+
+/**
+ * Parallel regions of the guest machine.
+ *
+ * `location` mirrors the coordinator and is generated from room adjacency —
+ * it is the map. `guidance` is the authored journey, and the small readable
+ * chart an author reasons about. `adherence` is whether they are still
+ * following what guidance asked.
+ */
+export const GUEST_REGIONS = ['location', 'guidance', 'adherence'];
+export const AUTHORED_GUEST_REGIONS = ['guidance', 'adherence'];
+
 export const ADHERENCE_STATES = ['golden', 'drifting', 'cursed'];
 
 export const AUDIO_TIMINGS = ['masterTimeline', 'perGuest'];
@@ -58,8 +93,6 @@ export const AUDIO_TIMINGS = ['masterTimeline', 'perGuest'];
 export const AUDIO_JOIN_POLICIES = ['inProgress', 'waitForNext', 'restart'];
 
 export const AUDIO_ON_EXIT = ['fadeOut', 'continue', 'cut'];
-
-export const PHASE_MODES = ['freeRoam', 'directed'];
 
 /**
  * What the tour audio does for a guest.
@@ -72,9 +105,6 @@ export const PHASE_MODES = ['freeRoam', 'directed'];
  */
 export const GUIDANCE_POLICIES = ['goldenPath', 'guestDirectedPath', 'freeExplore'];
 
-/** Who evaluates a phase's `advanceWhen` — each guest at their own pace, or the show as one. */
-export const ADVANCE_SCOPES = ['guest', 'show'];
-
 /**
  * What a guest gets on entering a room that is not theirs. This now
  * carries the weight the passing-by glitch used to: it is the only place the
@@ -85,6 +115,7 @@ export const INELIGIBLE_POLICIES = [
   'ambientOnly',
   'lockedMessage',
   'tease',
+  'activateVariant',
 ];
 
 export const MULTI_GUEST_POLICIES = [

@@ -2,21 +2,100 @@
   "contractVersion": 3,
   "showId": "spatial-demo",
   "name": "Spatial Demo (Phase A)",
-  "floorplan": { "width": 640, "height": 420 },
-  "globals": {
-    "showStartedAt": { "type": "number", "initial": 0 }
+  "floorplan": {
+    "width": 640,
+    "height": 420
   },
   "rooms": {
+    "hallway": {
+      "name": "Hallway",
+      "kind": "hallway",
+      "adjacent": [
+        "library",
+        "greenhouse",
+        "cellar"
+      ],
+      "zones": {
+        "hallway": {
+          "polygon": [
+            [
+              60,
+              210
+            ],
+            [
+              580,
+              210
+            ],
+            [
+              580,
+              260
+            ],
+            [
+              60,
+              260
+            ]
+          ],
+          "label": [
+            320,
+            235
+          ]
+        }
+      }
+    },
     "library": {
       "name": "Library",
+      "kind": "destination",
+      "adjacent": [
+        "hallway"
+      ],
       "zones": {
         "library-main": {
-          "polygon": [[120, 80], [280, 80], [280, 200], [120, 200]],
-          "label": [200, 140]
+          "polygon": [
+            [
+              120,
+              80
+            ],
+            [
+              280,
+              80
+            ],
+            [
+              280,
+              200
+            ],
+            [
+              120,
+              200
+            ]
+          ],
+          "label": [
+            200,
+            140
+          ]
         },
         "library-alcove": {
-          "polygon": [[280, 100], [330, 100], [330, 170], [280, 170]],
-          "label": [305, 135]
+          "polygon": [
+            [
+              280,
+              100
+            ],
+            [
+              330,
+              100
+            ],
+            [
+              330,
+              170
+            ],
+            [
+              280,
+              170
+            ]
+          ],
+          "label": [
+            305,
+            135
+          ]
         }
       },
       "machine": {
@@ -30,23 +109,39 @@
             }
           },
           "activating": {
-            "on": { "READY": "active", "RELEASE": "settling" },
-            "after": { "1200": { "target": "active" } }
+            "on": {
+              "READY": "active",
+              "RELEASE": "settling"
+            },
+            "after": {
+              "1200": {
+                "target": "active"
+              }
+            }
           },
           "active": {
             "initial": "main",
-            "on": { "RELEASE": "settling" },
+            "on": {
+              "RELEASE": "settling"
+            },
             "states": {
-              "main": { "on": { "DONE": "#library.settling" } },
-              "abbreviated": { "on": { "DONE": "#library.settling" } }
+              "main": {
+                "on": {
+                  "DONE": "#library.settling"
+                }
+              },
+              "abbreviated": {
+                "on": {
+                  "DONE": "#library.settling"
+                }
+              }
             }
           },
           "settling": {
             "on": {
               "RESET": "idle",
-              "RESUME": "active.main",
-              "ACTIVATE": "active.main",
-              "ACTIVATE_SEEN": "active.abbreviated"
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
             }
           }
         }
@@ -56,40 +151,98 @@
         "maxOccupants": 6,
         "atCapacity": "spectator"
       },
-      "ineligible": { "policy": "ambientOnly" },
+      "ineligible": {
+        "policy": "ignore"
+      },
       "exit": {
         "policy": "resetAfter",
         "graceMs": 10000,
         "audioOnExit": "fadeOut",
         "resumeIfReturned": true
       },
-      "audio": {
-        "timing": "masterTimeline",
-        "joinPolicy": "inProgress",
-        "minRemainingMs": 20000
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
       },
-      "seen": { "dwellMs": 20000, "accumulate": true },
-      "revisit": { "whenSeen": {} },
-      "location": { "entryConfirmMs": 1500, "exitConfirmMs": 800 }
+      "revisit": {
+        "whenSeen": {}
+      },
+      "location": {
+        "entryConfirmMs": 1500,
+        "exitConfirmMs": 800
+      }
     },
     "greenhouse": {
       "name": "Greenhouse",
+      "kind": "destination",
+      "adjacent": [
+        "hallway"
+      ],
       "zones": {
         "greenhouse": {
-          "polygon": [[360, 80], [520, 80], [520, 200], [360, 200]],
-          "label": [440, 140]
+          "polygon": [
+            [
+              360,
+              80
+            ],
+            [
+              520,
+              80
+            ],
+            [
+              520,
+              200
+            ],
+            [
+              360,
+              200
+            ]
+          ],
+          "label": [
+            440,
+            140
+          ]
         }
       },
       "machine": {
         "id": "greenhouse",
         "initial": "idle",
         "states": {
-          "idle": { "on": { "ACTIVATE": "active" } },
-          "active": {
-            "on": { "RELEASE": "settling" },
-            "after": { "5000": { "target": "settling" } }
+          "idle": {
+            "on": {
+              "ACTIVATE": "active",
+              "ACTIVATE_OFFPATH": "active.offPath"
+            }
           },
-          "settling": { "on": { "RESET": "idle", "ACTIVATE": "active" } }
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling"
+            },
+            "after": {
+              "5000": {
+                "target": "settling"
+              }
+            },
+            "states": {
+              "main": {
+                "on": {
+                  "DONE": "#greenhouse.settling"
+                }
+              },
+              "offPath": {
+                "on": {
+                  "DONE": "#greenhouse.settling"
+                }
+              }
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active"
+            }
+          }
         }
       },
       "multiGuest": {
@@ -97,94 +250,177 @@
         "maxOccupants": 2,
         "atCapacity": "spectator"
       },
-      "ineligible": { "policy": "ignore" },
-      "exit": { "policy": "finish", "audioOnExit": "continue" },
-      "seen": { "dwellMs": 15000, "accumulate": true },
-      "location": { "entryConfirmMs": 1500, "exitConfirmMs": 800 }
+      "ineligible": {
+        "policy": "activateVariant"
+      },
+      "exit": {
+        "policy": "finish",
+        "audioOnExit": "continue"
+      },
+      "seen": {
+        "dwellMs": 15000,
+        "accumulate": true
+      },
+      "location": {
+        "entryConfirmMs": 1500,
+        "exitConfirmMs": 800
+      }
     },
     "cellar": {
       "name": "Cellar",
+      "kind": "destination",
+      "adjacent": [
+        "hallway"
+      ],
       "zones": {
         "cellar": {
-          "polygon": [[220, 240], [380, 240], [380, 360], [220, 360]],
-          "label": [300, 300]
+          "polygon": [
+            [
+              220,
+              280
+            ],
+            [
+              380,
+              280
+            ],
+            [
+              380,
+              400
+            ],
+            [
+              220,
+              400
+            ]
+          ],
+          "label": [
+            300,
+            340
+          ]
         }
       },
       "machine": {
         "id": "cellar",
         "initial": "idle",
         "states": {
-          "idle": { "on": { "ACTIVATE": "active" } },
-          "active": {
-            "initial": "main",
-            "on": { "RELEASE": "settling" },
-            "states": {
-              "main": {},
-              "inverted": {}
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
             }
           },
-          "settling": { "on": { "RESET": "idle", "ACTIVATE": "active.main" } }
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling"
+            },
+            "states": {
+              "main": {
+                "on": {
+                  "DONE": "#cellar.settling"
+                }
+              }
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active"
+            }
+          }
         }
       },
-      "multiGuest": { "policy": "refuse", "maxOccupants": 1, "atCapacity": "refuse" },
-      "ineligible": { "policy": "lockedMessage", "audio": "cellar-locked" },
-      "exit": { "policy": "resetImmediate" },
-      "seen": { "dwellMs": 10000, "accumulate": false },
-      "location": { "entryConfirmMs": 1500, "exitConfirmMs": 800 }
+      "multiGuest": {
+        "policy": "refuse",
+        "maxOccupants": 1,
+        "atCapacity": "refuse"
+      },
+      "ineligible": {
+        "policy": "lockedMessage",
+        "audio": "cellar-locked"
+      },
+      "exit": {
+        "policy": "resetImmediate"
+      },
+      "seen": {
+        "dwellMs": 10000,
+        "accumulate": false
+      },
+      "location": {
+        "entryConfirmMs": 1500,
+        "exitConfirmMs": 800
+      }
+    }
+  },
+  "paths": {
+    "pathA": {
+      "rooms": [
+        "library",
+        "greenhouse"
+      ],
+      "guidance": "goldenPath"
+    },
+    "pathB": {
+      "rooms": [
+        "library",
+        "cellar"
+      ],
+      "guidance": "goldenPath"
     }
   },
   "guest": {
     "eligibility": {
-      "golden": { "strategy": "goldenPath", "params": { "allowRevisit": true } }
-    }
-  },
-  "phases": [
-    {
-      "id": "roamA",
-      "mode": "freeRoam",
-      "rooms": "pathAssigned",
-      "advanceWhen": { "scope": "guest", "seenCount": 2 }
+      "golden": {
+        "strategy": "goldenPath",
+        "params": {
+          "allowRevisit": true
+        }
+      }
     },
-    {
-      "id": "converge",
-      "mode": "directed",
-      "target": "library",
-      "advanceWhen": { "scope": "show", "entered": "library" }
+    "timers": {
+      "roamTime": {
+        "sinceEntering": "guidance.roaming",
+        "afterMs": 600000,
+        "event": "ROAM_TIME_UP"
+      }
     },
-    {
-      "id": "exit",
-      "mode": "directed",
-      "target": "library"
-    }
-  ],
-  "paths": {
-    "assignment": { "strategy": "roundRobin", "at": "onJoin" },
-    "definitions": {
-      "pathA": {
-        "rooms": ["library", "greenhouse"],
-        "guidance": "goldenPath"
+    "machine": {
+      "guidance": {
+        "initial": "arriving",
+        "states": {
+          "arriving": {
+            "on": {
+              "entered.hallway": "roaming"
+            }
+          },
+          "roaming": {
+            "entry": [
+              {
+                "type": "assignPath",
+                "from": [
+                  "pathA",
+                  "pathB"
+                ],
+                "strategy": "roundRobin"
+              }
+            ],
+            "on": {
+              "ROAM_TIME_UP": "ending"
+            }
+          },
+          "ending": {}
+        }
       },
-      "pathB": {
-        "rooms": ["library", "cellar"],
-        "guidance": "goldenPath"
+      "adherence": {
+        "initial": "onPath",
+        "states": {
+          "onPath": {
+            "on": {
+              "wentOffPath": "offPath"
+            }
+          },
+          "offPath": {}
+        }
       }
     }
-  },
-  "adherence": {
-    "signals": {
-      "ineligibleRoomEntered": { "weight": 25 },
-      "guidanceIgnoredMs": { "weight": 10, "per": 60000 }
-    },
-    "compliance": {
-      "eligibleRoomSeen": { "weight": -30 },
-      "guidedRoomEntered": { "weight": -40 }
-    },
-    "thresholds": { "drifting": 30, "cursed": 75 },
-    "redemption": { "policy": "reversible", "hysteresisMs": 30000 },
-    "cursedIsSticky": false
-  },
-  "inputBindings": {
-    "button:activate": { "event": "mechanism.pull", "scope": "room" }
   },
   "location": {
     "entryConfirmMs": 1500,

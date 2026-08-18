@@ -13,14 +13,15 @@
  */
 export class Guest {
   /**
-   * @param {{ guestId: string, token: string, label: string, pathId: string, phaseId: string }} init
+   * @param {{ guestId: string, token: string, label: string, pathId?: string|null }} init
    */
   constructor(init) {
     this.guestId = init.guestId;
     this.token = init.token;
     this.label = init.label;
     this.pathId = init.pathId;
-    this.phaseId = init.phaseId;
+    /** Mirror of the guest machine's parallel regions. */
+    this.regions = { location: 'outside', guidance: null, adherence: null };
     this.adherence = /** @type {'golden' | 'drifting' | 'cursed'} */ ('golden');
     this.adherenceScore = 0;
     this.connected = true;
@@ -101,7 +102,7 @@ export class Guest {
       token: this.token,
       label: this.label,
       pathId: this.pathId,
-      phaseId: this.phaseId,
+      regions: this.regions,
       adherence: this.adherence,
       adherenceScore: this.adherenceScore,
       roomId: this.roomId,

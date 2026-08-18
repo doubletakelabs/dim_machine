@@ -15,9 +15,20 @@
 
 /** @type {Record<string, (ctx: EligibilityContext) => boolean>} */
 const STRATEGIES = {
-  /** The room is on the guest's assigned path. */
+  /**
+   * The room is on the guest's assigned path — but only among rooms that paths
+   * route through at all.
+   *
+   * A show is rarely paths end to end. This one has a shared prologue, a museum
+   * where paths apply, and a free-roam area after; only the museum rooms appear
+   * in any path. Treating an unrouted room as "not yours" would make the
+   * entrance sequence ineligible for everybody, and would leave a guest with no
+   * path assigned yet — every guest, for the whole prologue — locked out of the
+   * entire show. So paths gate only what they actually route.
+   */
   goldenPath({ guest, roomId, show, params }) {
-    const path = show.paths?.definitions?.[guest.pathId];
+    if (!routedRooms(show).has(roomId)) return true;
+    const path = show.paths?.[guest.pathId];
     if (!path?.rooms?.includes(roomId)) return false;
     // A path room they have already seen stays open unless the show says
     // otherwise — most shows want people to be able to wander back in.
@@ -35,6 +46,15 @@ const STRATEGIES = {
     return false;
   },
 };
+
+/** Every room any path routes through. Cached per show definition. */
+const routedCache = new WeakMap();
+export function routedRooms(show) {
+  if (!routedCache.has(show)) {
+    routedCache.set(show, new Set(Object.values(show.paths ?? {}).flatMap((p) => p.rooms ?? [])));
+  }
+  return routedCache.get(show);
+}
 
 /**
  * Strategies this build can actually evaluate.

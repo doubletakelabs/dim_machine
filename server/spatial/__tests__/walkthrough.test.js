@@ -76,11 +76,13 @@ describe('floor-plan geometry', () => {
     assert.ok(centre[0] > 120 && centre[0] < 280);
   });
 
-  it('computes the extent across every room', () => {
+  it('computes the extent across every room, hallways included', () => {
     const extent = floorPlanExtent(spatialDemo.rooms);
-    assert.equal(extent.minX, 120);
-    assert.equal(extent.maxX, 520);
-    assert.equal(extent.maxY, 360);
+    const xs = Object.values(spatialDemo.rooms)
+      .flatMap((r) => Object.values(r.zones ?? {}))
+      .flatMap((z) => z.polygon.map((p) => p[0]));
+    assert.equal(extent.minX, Math.min(...xs));
+    assert.equal(extent.maxX, Math.max(...xs));
   });
 
   it('returns null when nothing has geometry', () => {
@@ -249,7 +251,7 @@ describe('operator snapshot for the floor plan', () => {
     const rt = makeRuntime();
     const snap = rt.getOperatorSnapshot();
     assert.equal(snap.floorPlan.width, 640);
-    assert.equal(snap.floorPlan.extent.minX, 120);
+    assert.equal(snap.floorPlan.extent.minX, 60);
     assert.equal(snap.timeScale, 1);
     assert.equal(snap.walkthrough.running, false);
   });
@@ -275,7 +277,10 @@ describe('operator snapshot for the floor plan', () => {
     const zones = rt.getOperatorSnapshot().zones;
     assert.equal(zones['library-alcove'].roomId, 'library');
     assert.equal(zones['library-main'].roomId, 'library');
-    assert.equal(Object.keys(zones).length, 4);
+    assert.equal(zones.hallway.roomId, 'hallway');
+    const declared = Object.values(spatialDemo.rooms)
+      .reduce((n, r) => n + Object.keys(r.zones ?? {}).length, 0);
+    assert.equal(Object.keys(zones).length, declared);
   });
 
   it('gives a dragged guest their exact point', () => {

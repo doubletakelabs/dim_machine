@@ -48,6 +48,7 @@
   #plan { width: 100%; height: auto; display: block; border-radius: 6px; background: #101216; }
   .zone { stroke: #55606f; stroke-width: 1.5; cursor: pointer; }
   .zone.idle { fill: var(--idle); fill-opacity: .55; }
+  .zone.hallway { fill: #23262d; fill-opacity: .8; stroke-dasharray: 5 4; }
   .zone.active { fill: var(--active); fill-opacity: .55; }
   .zone.settling { fill: var(--settling); fill-opacity: .55; }
   .zone.selected { stroke: var(--accent); stroke-width: 2.5; }
@@ -125,7 +126,7 @@
         <span class="pill" id="walkNote">dwell = room's seen threshold + pad</span>
       </div>
       <table>
-        <thead><tr><th>Guest</th><th>Path</th><th>Room</th><th>Doing</th><th>Last entry</th><th></th></tr></thead>
+        <thead><tr><th>Guest</th><th>Journey</th><th>Room</th><th>Doing</th><th>Last entry</th><th></th></tr></thead>
         <tbody id="guests"></tbody>
       </table>
     </div>
@@ -351,7 +352,7 @@ function renderPlan() {
     const room = rooms.get(zone.roomId);
     const poly = document.createElementNS(SVG_NS, 'polygon');
     poly.setAttribute('points', zone.polygon.map((p) => p.join(',')).join(' '));
-    poly.setAttribute('class', `zone ${roomStateClass(room?.state)}`
+    poly.setAttribute('class', `zone ${room?.kind === 'hallway' ? 'hallway' : roomStateClass(room?.state)}`
       + (selection?.kind === 'room' && selection.id === zone.roomId ? ' selected' : ''));
     poly.onclick = () => { selection = { kind: 'room', id: zone.roomId }; render(); };
     poly.appendChild(title(`${zone.roomId} · zone ${zoneId}`));
@@ -363,9 +364,10 @@ function renderPlan() {
     const label = zones[0]?.label ?? centroidOf(zones[0]?.polygon);
     if (!label) continue;
     svg.appendChild(text(label[0], label[1] - 4, room.name, 'roomLabel'));
-    const bits = [room.state];
+    const bits = room.kind === 'hallway' ? [] : [room.state];
     if (room.lockHolder) bits.push(`🔒 ${guestName(room.lockHolder)}`);
     if (room.resetInMs != null) bits.push(`${Math.ceil(room.resetInMs / 1000)}s`);
+    if (room.occupantCount && room.kind === 'hallway') bits.push(`${room.occupantCount} here`);
     svg.appendChild(text(label[0], label[1] + 9, bits.join(' · '), 'roomMeta'));
   }
 
@@ -374,7 +376,7 @@ function renderPlan() {
   const routed = selection?.kind === 'guest'
     ? (snap?.guests ?? []).find((g) => g.guestId === selection.id)
     : null;
-  if (routed) {
+  if (routed?.pathId) {
     const stops = pathRooms(routed.pathId)
       .map((roomId) => rooms.get(roomId))
       .filter((r) => r?.centre);
@@ -554,6 +556,8 @@ function centroidOf(polygon) {
 function outcomeColour(entry) {
   switch (entry?.outcome) {
     case 'activated': case 'alreadyActive': case 'inherited': return '#58c98a';
+    case 'activatedVariant': return '#c58ae0';
+    case 'passingThrough': return '#7f8899';
     case 'ineligible': return '#e0a758';
     case 'refused': return '#e0685f';
     default: return '#7f8899';
@@ -587,6 +591,8 @@ function describeEntry(entry) {
   if (entry.outcome === 'ineligible') return `${entry.roomId}: not theirs (${entry.policy})`;
   if (entry.outcome === 'refused') return `${entry.roomId}: refused (${entry.reason})`;
   if (entry.outcome === 'inherited') return `${entry.roomId}: inherited the room`;
+  if (entry.outcome === 'activatedVariant') return `${entry.roomId}: off-path variant`;
+  if (entry.outcome === 'passingThrough') return `${entry.roomId}: passing through`;
   return `${entry.roomId}: ${entry.outcome}`;
 }
 
@@ -650,7 +656,9 @@ function renderGuests() {
         ${g.label}${g.walking ? ' <span class="muted">▸</span>' : ''}
         <br><span class="muted" style="font-size:10px;font-family:ui-monospace,Menlo,monospace">${g.guestId}</span>
       </td>
-      <td class="muted" title="${pathRooms(g.pathId).join(' → ')}">${g.pathId}<br><span style="font-size:10px">${pathRooms(g.pathId).join(' → ')}</span></td>
+      <td class="muted">${g.regions?.guidance ?? '—'}${
+        g.regions?.adherence === 'offPath' ? ' <span style="color:var(--bad)">off-path</span>' : ''}
+        ${g.pathId ? `<br><span style="font-size:10px">${pathRooms(g.pathId).join(' → ')}</span>` : ''}</td>
       <td>${g.roomId ?? '<span class="muted">—</span>'}</td>
       <td class="muted">${describeIntent(g)}</td>
       <td style="color:${outcomeColour(g.lastEntry)}">${describeEntry(g.lastEntry)}</td>
@@ -728,9 +736,13 @@ function renderInspector() {
     <dl>
       <dt>Guest</dt><dd><span style="color:${outcomeColour(guest.lastEntry)}">●</span> ${guest.label}</dd>
       <dt>ID</dt><dd style="font-family:ui-monospace,Menlo,monospace;font-size:11px">${guest.guestId}</dd>
-      <dt>Path</dt><dd>${guest.pathId} <span class="muted">· ${pathGuidance(guest.pathId)}</span></dd>
-      <dt>Phase</dt><dd>${guest.phaseId}</dd>
-      <dt>Adherence</dt><dd>${guest.adherence} (${guest.adherenceScore})</dd>
+      <dt>Path</dt><dd>${guest.pathId
+        ? `${guest.pathId} <span class="muted">· ${pathGuidance(guest.pathId)}</span>`
+        : '<span class="muted">not assigned yet</span>'}</dd>
+      <dt>Journey</dt><dd>${guest.regions?.guidance ?? '—'}</dd>
+      <dt>Following</dt><dd style="color:${guest.regions?.adherence === 'offPath' ? 'var(--bad)' : 'var(--ok)'}">${
+        guest.regions?.adherence === 'offPath' ? 'off-path' : 'on path'}</dd>
+      <dt>Guiding to</dt><dd>${guest.guidanceTarget ?? '<span class="muted">—</span>'}</dd>
       <dt>Eligible</dt><dd>${guest.eligibleRooms?.join(', ') || '—'}</dd>
       <dt>In room</dt><dd>${guest.roomId ?? '—'}${guest.zoneId ? ` (${guest.zoneId})` : ''}</dd>
       <dt>Last entry</dt><dd style="color:${outcomeColour(guest.lastEntry)}">${describeEntry(guest.lastEntry)}</dd>

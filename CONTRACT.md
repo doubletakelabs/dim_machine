@@ -25,19 +25,17 @@ Each section is marked with what the runtime does with it **today**:
   "contractVersion": 3,
   "showId": "the-house",
   "name": "The House",
-  "rooms":   { /* §2 — one entry per physical room, geometry included */ },
+  "rooms":   { /* §2 — one entry per space, geometry and adjacency included */ },
   "floorplan": { "image": "plan.png", "width": 640, "height": 420 },
-  "guest":   { /* §5 — eligibility strategies (machine optional) */ },
-  "phases":  [ /* §6 */ ],
-  "paths":   { /* §7 */ },
-  "adherence":     { /* §8 */ },
+  "guest":   { /* §5 — the journey statechart, eligibility, timers */ },
+  "paths":   { /* §6 — a library of named routes */ },
   "globals":       { "showStartedAt": { "type": "number", "initial": 0 } },
   "inputBindings": { /* §10 */ },
   "location":      { /* §4.3 — show-wide hysteresis defaults */ }
 }
 ```
 
-`rooms`, `guest`, `phases`, and `paths` are required. Validation runs on
+`rooms` and `guest` are required. Validation runs on
 every load (`POST /api/shows/validate`, or `SpatialRuntime.load()`), and returns
 `errors` (refuse to load) and `warnings` (load, but say so).
 
@@ -55,6 +53,8 @@ is allowed in — that keeps them portable across shows (spec §3.1).
 ```jsonc
 "library": {
   "name": "Library",
+  "kind":       "destination",          // destination | hallway
+  "adjacent":   ["museumHallway"],      // which spaces physically connect
   "zones":      { /* §4.2 — one or more polygons this room occupies */ },
   "machine":    { /* §3 — required */ },
   "multiGuest":  { "policy": "collaborative", "maxOccupants": 6, "atCapacity": "spectator" },
@@ -76,7 +76,9 @@ is allowed in — that keeps them portable across shows (spec §3.1).
 | `multiGuest.policy` | `collaborative` \| `spectator` \| `personalVariant` \| `refuse` | declared |
 | `multiGuest.maxOccupants` | positive integer; caps active participation, separate from the lock | declared |
 | `multiGuest.atCapacity` | `spectator` \| `refuse` \| `personalVariant` | declared |
-| `ineligible.policy` | `ignore` \| `ambientOnly` \| `lockedMessage` \| `tease` | declared |
+| `kind` | `destination` (default) \| `hallway` — see below | **live** |
+| `adjacent` | room ids this one physically connects to; must be declared from both sides | **live** |
+| `ineligible.policy` | `ignore` \| `ambientOnly` \| `lockedMessage` \| `tease` \| `activateVariant` | `activateVariant` **live**, rest declared |
 | `exit.policy` | `resetAfter` (default, `graceMs` 10000) \| `finish` \| `hold` \| `resetImmediate` | **live** |
 | `exit.graceMs` | non-negative; how long `settling` waits before `RESET`. Ignored by `resetImmediate` | **live** |
 | `exit.resumeIfReturned` | re-entry during grace cancels the reset and sends `RESUME`; requires `settling` to handle it | **live** |
@@ -101,6 +103,31 @@ requires the canonical presentation vocabulary, because room actors send these
 events and read these states by name. A machine that omits any of it produces a
 room that silently never moves, so **it is a load error, not a runtime
 surprise.**
+
+### Hallways
+
+A `hallway` is a space you pass through to reach somewhere else. It is **always
+eligible** — you cannot deviate by using the only route between rooms — never
+counts toward `seen`, is never a deviation, and is **exempt from the activation
+contract** below, because a room that can never be activated should not have to
+declare states it can never enter. Guests still occupy it, it still appears on
+the floor plan, and it is where guidance speaks.
+
+### Adjacency
+
+`adjacent` is truth about the building, declared from both sides. It does **not**
+gate movement: a guest can turn up anywhere — a misread beacon, an operator
+dragging a dot — and the guest machine always has somewhere to put them. What it
+buys is the ability to *notice*, which in Phase C is the BLE misread signal.
+
+### Rooms reacting to a guest they were not sent
+
+`ineligible.policy: "activateVariant"` makes the runtime send
+`ACTIVATE_OFFPATH` instead of `ACTIVATE`, and the guest holds the resulting
+lock — the room is running for them. Eligibility therefore selects *which*
+activation a room gets rather than gating activation outright. Most rooms keep
+`ignore` and stay dark. A room claiming the policy without handling the event
+fails to load.
 
 ### Required states
 
@@ -338,137 +365,124 @@ however the guest was located.
 
 ## 5. Guest block — live
 
+The guest is a statechart, one actor each, alongside one per room. Three
+parallel regions, from two sources.
+
 ```jsonc
 "guest": {
-  "eligibility": {
-    "golden": { "strategy": "goldenPath", "params": { "allowRevisit": true } }
+  "eligibility": { "golden": { "strategy": "goldenPath", "params": { "allowRevisit": true } } },
+  "timers": {
+    "museumTime": { "sinceEntering": "guidance.museum", "afterMs": 1800000, "event": "MUSEUM_TIME_UP" }
+  },
+  "machine": {
+    "guidance": {
+      "initial": "prologue",
+      "states": {
+        "prologue": { "on": { "entered.museumHallway": "museum" } },
+        "museum": {
+          "entry": [{ "type": "assignPath", "from": ["pathA", "pathB"], "strategy": "roundRobin" }],
+          "on": { "MUSEUM_TIME_UP": "converge" }
+        },
+        "converge": { "on": { "entered.library": "ending" } },
+        "ending": {}
+      }
+    },
+    "adherence": {
+      "initial": "onPath",
+      "states": { "onPath": { "on": { "wentOffPath": "offPath" } }, "offPath": {} }
+    }
   }
 }
 ```
 
-Eligibility is evaluated by the guest actor and never by the room — adding a new
-access mechanism is a new strategy here and touches nothing else. This is the
-seam that lets paths become **roles** in a later show without changing a room,
-the coordinator, or the location layer.
+| Region | Source | What it is |
+|---|---|---|
+| `location` | **generated** from room adjacency | One state per room plus `outside`. The map. Never authored — writing the same adjacency twice would let the two drift. |
+| `guidance` | **authored** | The journey. The small, readable chart an author reasons about. |
+| `adherence` | **authored** | Whether the guest is still following what guidance asked. |
+
+The regions are parallel because the facts are independent: a timer can move
+guidance to `converge` while the guest stands in the Data Center, and a guest can
+wander back without guidance changing its mind.
+
+**The machine always matches the coordinator.** The generated location region
+carries a transition for every room at the region root, so a guest who turns up
+somewhere they could not have walked to still has somewhere to be. The adjacency
+transitions on each state win where both apply, so the plausible move is used
+whenever the move was plausible.
+
+**Rooms are heard as `entered.<roomId>`.** Dotted, so `entered.*` works as a
+wildcard. `exited` fires when a guest is in no room at all.
+
+**Actions are declared data**, executed by the runtime — the same shape as room
+output actions. `assignPath` is the one that exists today.
+
+### Timers
+
+XState's `after` measures time since a state was *last* entered, so a guest who
+left the museum and came back would restart it. A condition that has to survive
+leaving is declared instead, and the runtime delivers an event:
+
+```jsonc
+"museumTime": { "sinceEntering": "guidance.museum", "afterMs": 1800000, "event": "MUSEUM_TIME_UP" }
+```
+
+Total elapsed since the state was *first* entered, running through anything.
+
+### Eligibility
 
 | `strategy` | Status | Meaning |
 |---|---|---|
-| `goldenPath` | **live** | The room is on the guest's assigned path. `params.allowRevisit: false` closes rooms they have already seen; the default leaves them open |
-| `all` | **live** | Every room is open — rehearsal, and single-path shows |
-| `none` | **live** | Nothing is open |
-| `roleBased` · `progressGated` · `inverted` · `custom` | declared | Named by the contract for shows not yet written |
+| `goldenPath` | **live** | The room is on the guest's assigned path — but only among rooms paths actually route through |
+| `all` · `none` | **live** | Absolute |
+| `roleBased` · `progressGated` · `inverted` · `custom` | declared | For shows not yet written; naming one is a load error |
 
-Naming a declared-but-unimplemented strategy is a **load error**, not a warning.
-An eligibility predicate quietly returning the wrong answer would lock guests out
-of every room, and would read as a location bug rather than a config one.
+The qualifier matters. A show is rarely paths end to end — this one has a shared
+prologue, a museum where paths apply, and free-roam after. **A room no path
+routes through is open to everyone**, so the entrance sequence works for a guest
+who has not been assigned a path yet, which every guest is for the whole
+prologue.
 
-Which config applies is looked up by the guest's adherence state
-(`eligibility[adherence]`, falling back to `golden`), so a strayed guest can be
-given a different predicate once adherence lands.
-
-**`guest.machine` is optional and currently unused.** A statechart earns its
-place when there are modes that reinterpret the same input; where a guest *is*
-is a variable, not a state. The two genuinely mode-shaped things — phase and
-adherence — arrive as parallel regions later.
-
-Per-guest state the runtime maintains (`guest.js`):
+Per-guest state the runtime maintains:
 
 ```jsonc
-{ "guestId": "g-123", "label": "P1", "pathId": "pathA", "phaseId": "roamA",
-  "adherence": "golden", "adherenceScore": 0,
+{ "guestId": "g-123", "label": "Guest 1", "pathId": "pathA",
+  "regions": { "location": "library", "guidance": "museum", "adherence": "onPath" },
   "roomId": "library", "zoneId": "library-main", "occupancy": "inside",
-  "visitHistory": {
-    "library": { "roomId": "library", "firstEnteredAt": 1723…, "totalDwellMs": 34500,
-                 "visits": 2, "seen": true, "completed": false, "activatedByMe": true }
-  } }
+  "visitHistory": { "library": { "visits": 2, "seen": true, "activatedByMe": true } } }
 ```
-
-`roomId` / `zoneId` / `occupancy` are a read-model of the coordinator, never the
-source of truth. Two histories are tracked, both per-guest: **this guest has seen
-the room**, and **this guest activated it themselves**. There is deliberately no
-room-side "has been activated before" — it gives the wrong answer for a
-first-time visitor to a room someone else already ran.
 
 ---
 
-## 6. Phases — declared
+## 6. Paths — live
 
-```jsonc
-"phases": [
-  { "id": "roamA", "mode": "freeRoam", "rooms": "pathAssigned",
-    "advanceWhen": { "scope": "guest", "seenCount": 3 } },
-  { "id": "converge", "mode": "directed", "target": "controlRoom",
-    "advanceWhen": { "scope": "show", "entered": "controlRoom" } },
-  { "id": "exit", "mode": "directed", "target": "egress" }
-]
-```
-
-`mode`: `freeRoam` (guidance suggests) | `directed` (guidance insists on one
-target; `target` is then required). Phase ids must be unique.
-
-`advanceWhen.scope` is **required** and says who evaluates the condition:
-
-| Scope | Meaning |
-|---|---|
-| `guest` | each guest advances at their own pace, evaluated by their guest actor |
-| `show` | the orchestrator advances everyone together |
-
-It is declared rather than inferred because the right answer changes per show
-and per test. A phase with no `advanceWhen` warns — only the operator can move
-guests on from it.
-
-## 7. Paths — assignment live, guidance declared
+A library of named routes, referenced by `assignPath`. **Data, never
+structure** — which is what lets a route be assigned when a guest reaches the
+part of the show that has paths rather than at the door, and lets one authored
+machine serve every guest.
 
 ```jsonc
 "paths": {
-  "assignment": { "strategy": "roundRobin", "at": "onJoin" },
-  "definitions": {
-    "pathA": { "rooms": ["library", "greenhouse"], "guidance": "goldenPath" }
-  }
+  "pathA": { "rooms": ["automation", "slop", "consumption1"], "guidance": "goldenPath" },
+  "pathB": { "rooms": ["saas", "kin", "consumption2"], "guidance": "goldenPath" }
 }
 ```
 
-`strategy`: `roundRobin` | `random` | `manual` | `balanced`.
+`guidance`: `goldenPath` (ordered; the audio leads) · `guestDirectedPath` (the
+audio follows) · `freeExplore` (no guidance). A path may not route through a
+hallway. Paths may overlap.
 
-`guidance` is what the tour audio does:
+## 7. Going off-path — live
 
-| Value | Behavior |
-|---|---|
-| `goldenPath` | An ordered route the audio leads them along, room by room |
-| `guestDirectedPath` | The audio follows the guest instead of leading — where a guest who ignores the golden path lands, and authorable from the start |
-| `freeExplore` | No guidance; they wander |
+Guidance holds two values per guest: the **target** (next unvisited room on the
+assigned path) and whether they are **following** it.
 
-`goldenPath` is ordered by definition, so "which room next" is just the next
-unvisited room in the list — there is no distance metric and no adjacency graph
-to author. (An earlier `nearestUnseen` would have needed one, and would have
-promised wayfinding the geometry could not deliver through walls.)
+Off-path arms only among the rooms paths route through. Wandering back to an
+earlier part of the show, or down a corridor, is not a deviation — there is no
+path being led there to deviate from. It is **one-way**: the tour goes off the
+rails and stays off.
 
-Paths may overlap; shared rooms are expected, and are exactly where the
-`multiGuest` policies matter. A room on no path warns.
-
-## 8. Adherence — declared
-
-```jsonc
-"adherence": {
-  "signals":    { "ineligibleRoomEntered": { "weight": 25 },
-                  "guidanceIgnoredMs": { "weight": 10, "per": 60000 } },
-  "compliance": { "eligibleRoomSeen": { "weight": -30 },
-                  "guidedRoomEntered": { "weight": -40 } },
-  "thresholds": { "drifting": 30, "cursed": 75 },
-  "redemption": { "policy": "reversible", "hysteresisMs": 30000 },
-  "cursedIsSticky": false
-}
-```
-
-Signal weights must be positive, compliance weights negative, and `drifting`
-below `cursed` — all validated, because a sign error here is invisible until an
-audience is in the building. These weights are a starting point awaiting
-real-audience calibration, which is why the operator panel exposes live score
-and manual override.
-
----
-
-## 9. Outputs
+## 8. Outputs
 
 ### 9.1 Room output intents — live (stub adapter)
 
@@ -518,7 +532,7 @@ invariant rather than authoring discipline.
 
 ---
 
-## 10. Inputs — declared
+## 9. Inputs — declared
 
 Page-local interaction never reaches the backend; only committed interactions
 are promoted, now carrying a **scope**:
@@ -542,7 +556,7 @@ Canonical input events carried from v0.2: `tap` `{x,y}`, `button:<id>`,
 
 ---
 
-## 11. Event log — live
+## 10. Event log — live
 
 Every state mutation goes through one append path. The sink is an in-memory ring
 buffer today and an append-only Postgres table in Phase E (spec §12); routing
@@ -558,6 +572,9 @@ time.
 | `guest.ineligibleEntry` | a guest entered a room not open to them (carries the room's `policy`) |
 | `guest.activationRefused` | eligible, but the room would not take them (carries `reason` and `multiGuestPolicy`) |
 | `guest.inheritedRoom` | the holder left and the room passed to them without their asking |
+| `guest.wentOffPath` | entered a routed room that was not theirs (carries the abandoned `target`) |
+| `guest.pathAssigned` | the journey handed them a route |
+| `guest.timer` | a declared timer fired |
 | `room.operatorEvent` | an event forced into a room machine from the panel |
 | `show.timeScale` | test-mode clock rate changed |
 | `zone.occupancy` | an entry or exit commits (§4.1) |
@@ -571,7 +588,7 @@ time.
 
 ---
 
-## 12. Operator and test surfaces — live
+## 11. Operator and test surfaces — live
 
 HTTP:
 
@@ -610,7 +627,7 @@ can accept, which is what keeps rooms reusable across shows.
 
 ---
 
-## 13. Peer relay and custom pages — carried
+## 12. Peer relay and custom pages — carried
 
 Unchanged from v0.2, and still valuable: relay channels are now naturally scoped
 to room occupancy.
@@ -632,7 +649,7 @@ render, and a teardown hook on page swap.
 
 ---
 
-## 14. Versioning
+## 13. Versioning
 
 The runtime rejects definitions whose `contractVersion` it does not support and
 reports the mismatch to the operator. v3 is the only supported version; v1 and

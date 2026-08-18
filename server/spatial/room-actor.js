@@ -1,6 +1,6 @@
 import { createMachine, createActor } from 'xstate';
 import { systemClock } from './clock.js';
-import { REVISIT_EVENTS } from './contract.js';
+import { REVISIT_EVENTS, OFF_PATH_ACTIVATION_EVENT } from './contract.js';
 import { roomCentroid } from './zone-math.js';
 
 /**
@@ -31,9 +31,18 @@ export function stateToString(value) {
     .join(' ∥ ');
 }
 
+/**
+ * The top-level presentation state, from either a snapshot value or a state
+ * string this module produced.
+ *
+ * The string form matters: `stateToString` yields "active.main" for a nested
+ * state, and returning that verbatim made every `REQUIRES_LOCK.has(...)` check
+ * miss — so a room with sub-states under `active` never released its lock on
+ * the way out. Rooms without sub-states worked, which is why it went unseen.
+ */
 export function rootState(value) {
   if (value == null) return null;
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') return value.split(' ')[0].split('.')[0];
   return Object.keys(value)[0] ?? null;
 }
 
@@ -67,6 +76,7 @@ export class RoomActor {
     this.roomId = opts.roomId;
     this.name = opts.def.name ?? opts.roomId;
     this.def = opts.def;
+    this.kind = opts.def.kind ?? 'destination';
     this.coordinator = opts.coordinator;
     this.clock = opts.clock ?? systemClock;
     this.emitOutput = opts.emitOutput ?? (() => {});
@@ -107,10 +117,11 @@ export class RoomActor {
 
   start() {
     this.stop();
-    const machine = createMachine({
-      ...this.def.machine,
-      id: this.def.machine.id ?? this.roomId,
-    });
+    // A hallway is never activated, so it is not required to declare a machine.
+    // It still gets an actor: guests occupy it, and the operator view lists it
+    // alongside everything else.
+    const config = this.def.machine ?? { initial: 'idle', states: { idle: {} } };
+    const machine = createMachine({ ...config, id: config.id ?? this.roomId });
     // The show clock drives authored `after` transitions too, so scripted
     // walkthroughs replay room timing at speed along with everything else.
     this.actor = createActor(machine, { clock: this.clock });
@@ -368,6 +379,7 @@ export class RoomActor {
    * @returns {{ ok: true, state: string } | { ok: false, reason: string }}
    */
   requestActivation(guestId, context = {}) {
+    if (this.kind === 'hallway') return this.refuse(guestId, 'hallway');
     const root = this.presentationRoot();
     if (!ACTIVATABLE.has(root)) {
       return this.refuse(guestId, this.coordinator.getLock(this.roomId) ? 'locked' : 'busy');
@@ -386,6 +398,7 @@ export class RoomActor {
       seen: !!context.seen,
       completed: !!context.completed,
       activatedByMe: !!context.activatedByMe,
+      offPath: !!context.offPath,
     });
 
     if (this.state === before) {
@@ -405,6 +418,7 @@ export class RoomActor {
       guestId,
       state: this.state,
       revisit: !!context.seen,
+      offPath: !!context.offPath,
       interruptedSettling: interrupted,
     });
     return { ok: true, state: this.state, interruptedSettling: interrupted };
@@ -423,6 +437,10 @@ export class RoomActor {
    * there is no silent fallback here.
    */
   activationEventFor(context) {
+    // A guest who was not sent here gets the room's variant, if it declares one.
+    // Eligibility therefore selects which activation a room gets rather than
+    // gating activation outright.
+    if (context.offPath) return OFF_PATH_ACTIVATION_EVENT;
     const revisit = this.def.revisit ?? {};
     if (context.completed && revisit.whenCompleted) return REVISIT_EVENTS.whenCompleted;
     if (context.seen && revisit.whenSeen) return REVISIT_EVENTS.whenSeen;
@@ -493,6 +511,7 @@ export class RoomActor {
       name: this.name,
       centre: roomCentroid(this.def),
       state: this.state,
+      kind: this.kind,
       lockHolder: lock?.guestId ?? null,
       lastHolder: this.lastHolder,
       // Everyone physically inside, and the subset the room is actually running

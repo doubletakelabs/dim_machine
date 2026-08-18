@@ -1,0 +1,1824 @@
+{
+  "contractVersion": 3,
+  "showId": "the-museum",
+  "name": "The Museum",
+  "floorplan": {
+    "width": 1400,
+    "height": 760
+  },
+  "rooms": {
+    "frontDesk": {
+      "name": "Front Desk",
+      "kind": "destination",
+      "adjacent": [
+        "calibration"
+      ],
+      "zones": {
+        "frontDesk": {
+          "polygon": [
+            [
+              60,
+              40
+            ],
+            [
+              180,
+              40
+            ],
+            [
+              180,
+              150
+            ],
+            [
+              60,
+              150
+            ]
+          ],
+          "label": [
+            120,
+            95
+          ]
+        }
+      },
+      "machine": {
+        "id": "frontDesk",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 8,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 8000,
+        "accumulate": true
+      }
+    },
+    "calibration": {
+      "name": "Calibration",
+      "kind": "destination",
+      "adjacent": [
+        "frontDesk",
+        "entranceHallway"
+      ],
+      "zones": {
+        "calibration": {
+          "polygon": [
+            [
+              200,
+              40
+            ],
+            [
+              320,
+              40
+            ],
+            [
+              320,
+              150
+            ],
+            [
+              200,
+              150
+            ]
+          ],
+          "label": [
+            260,
+            95
+          ]
+        }
+      },
+      "machine": {
+        "id": "calibration",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 8,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 8000,
+        "accumulate": true
+      }
+    },
+    "entranceHallway": {
+      "name": "Entrance Hallway",
+      "kind": "hallway",
+      "adjacent": [
+        "calibration",
+        "maskRoom"
+      ],
+      "zones": {
+        "entranceHallway": {
+          "polygon": [
+            [
+              340,
+              40
+            ],
+            [
+              420,
+              40
+            ],
+            [
+              420,
+              150
+            ],
+            [
+              340,
+              150
+            ]
+          ],
+          "label": [
+            380,
+            95
+          ]
+        }
+      }
+    },
+    "maskRoom": {
+      "name": "Mask Room",
+      "kind": "destination",
+      "adjacent": [
+        "entranceHallway",
+        "hallOfHeroes"
+      ],
+      "zones": {
+        "maskRoom": {
+          "polygon": [
+            [
+              440,
+              40
+            ],
+            [
+              560,
+              40
+            ],
+            [
+              560,
+              150
+            ],
+            [
+              440,
+              150
+            ]
+          ],
+          "label": [
+            500,
+            95
+          ]
+        }
+      },
+      "machine": {
+        "id": "maskRoom",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 8,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "hallOfHeroes": {
+      "name": "Hall of Heroes",
+      "kind": "destination",
+      "adjacent": [
+        "maskRoom",
+        "cyclorama"
+      ],
+      "zones": {
+        "hallOfHeroes": {
+          "polygon": [
+            [
+              580,
+              40
+            ],
+            [
+              720,
+              40
+            ],
+            [
+              720,
+              150
+            ],
+            [
+              580,
+              150
+            ]
+          ],
+          "label": [
+            650,
+            95
+          ]
+        }
+      },
+      "machine": {
+        "id": "hallOfHeroes",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 8,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "cyclorama": {
+      "name": "Cyclorama",
+      "kind": "destination",
+      "adjacent": [
+        "hallOfHeroes",
+        "museumHallway"
+      ],
+      "zones": {
+        "cyclorama": {
+          "polygon": [
+            [
+              740,
+              40
+            ],
+            [
+              900,
+              40
+            ],
+            [
+              900,
+              150
+            ],
+            [
+              740,
+              150
+            ]
+          ],
+          "label": [
+            820,
+            95
+          ]
+        }
+      },
+      "machine": {
+        "id": "cyclorama",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 8,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "museumHallway": {
+      "name": "Museum Hallway",
+      "kind": "hallway",
+      "adjacent": [
+        "cyclorama",
+        "automation",
+        "saas",
+        "influence",
+        "slop",
+        "kin",
+        "faerie",
+        "superintelligence",
+        "consumption1",
+        "consumption2",
+        "consumption3",
+        "southCorridor"
+      ],
+      "zones": {
+        "museumHallway": {
+          "polygon": [
+            [
+              60,
+              200
+            ],
+            [
+              1340,
+              200
+            ],
+            [
+              1340,
+              260
+            ],
+            [
+              60,
+              260
+            ]
+          ],
+          "label": [
+            700,
+            230
+          ]
+        }
+      }
+    },
+    "automation": {
+      "name": "Automation",
+      "kind": "destination",
+      "adjacent": [
+        "museumHallway"
+      ],
+      "zones": {
+        "automation": {
+          "polygon": [
+            [
+              60,
+              280
+            ],
+            [
+              178,
+              280
+            ],
+            [
+              178,
+              420
+            ],
+            [
+              60,
+              420
+            ]
+          ],
+          "label": [
+            119,
+            350
+          ]
+        }
+      },
+      "machine": {
+        "id": "automation",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active",
+              "ACTIVATE_SEEN": "active.abbreviated"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {},
+              "abbreviated": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 6,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      },
+      "revisit": {
+        "whenSeen": {}
+      }
+    },
+    "saas": {
+      "name": "SaaS",
+      "kind": "destination",
+      "adjacent": [
+        "museumHallway"
+      ],
+      "zones": {
+        "saas": {
+          "polygon": [
+            [
+              188,
+              280
+            ],
+            [
+              306,
+              280
+            ],
+            [
+              306,
+              420
+            ],
+            [
+              188,
+              420
+            ]
+          ],
+          "label": [
+            247,
+            350
+          ]
+        }
+      },
+      "machine": {
+        "id": "saas",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 6,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "influence": {
+      "name": "Influence",
+      "kind": "destination",
+      "adjacent": [
+        "museumHallway"
+      ],
+      "zones": {
+        "influence": {
+          "polygon": [
+            [
+              316,
+              280
+            ],
+            [
+              434,
+              280
+            ],
+            [
+              434,
+              420
+            ],
+            [
+              316,
+              420
+            ]
+          ],
+          "label": [
+            375,
+            350
+          ]
+        }
+      },
+      "machine": {
+        "id": "influence",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 6,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "slop": {
+      "name": "Slop",
+      "kind": "destination",
+      "adjacent": [
+        "museumHallway"
+      ],
+      "zones": {
+        "slop": {
+          "polygon": [
+            [
+              444,
+              280
+            ],
+            [
+              562,
+              280
+            ],
+            [
+              562,
+              420
+            ],
+            [
+              444,
+              420
+            ]
+          ],
+          "label": [
+            503,
+            350
+          ]
+        }
+      },
+      "machine": {
+        "id": "slop",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active",
+              "ACTIVATE_OFFPATH": "active.offPath"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {},
+              "offPath": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 6,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "activateVariant"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "kin": {
+      "name": "Kin",
+      "kind": "destination",
+      "adjacent": [
+        "museumHallway"
+      ],
+      "zones": {
+        "kin": {
+          "polygon": [
+            [
+              572,
+              280
+            ],
+            [
+              690,
+              280
+            ],
+            [
+              690,
+              420
+            ],
+            [
+              572,
+              420
+            ]
+          ],
+          "label": [
+            631,
+            350
+          ]
+        }
+      },
+      "machine": {
+        "id": "kin",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 6,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "faerie": {
+      "name": "Faerie",
+      "kind": "destination",
+      "adjacent": [
+        "museumHallway"
+      ],
+      "zones": {
+        "faerie": {
+          "polygon": [
+            [
+              700,
+              280
+            ],
+            [
+              818,
+              280
+            ],
+            [
+              818,
+              420
+            ],
+            [
+              700,
+              420
+            ]
+          ],
+          "label": [
+            759,
+            350
+          ]
+        }
+      },
+      "machine": {
+        "id": "faerie",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 6,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "superintelligence": {
+      "name": "Superintelligence",
+      "kind": "destination",
+      "adjacent": [
+        "museumHallway"
+      ],
+      "zones": {
+        "superintelligence": {
+          "polygon": [
+            [
+              828,
+              280
+            ],
+            [
+              946,
+              280
+            ],
+            [
+              946,
+              420
+            ],
+            [
+              828,
+              420
+            ]
+          ],
+          "label": [
+            887,
+            350
+          ]
+        }
+      },
+      "machine": {
+        "id": "superintelligence",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 6,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "consumption1": {
+      "name": "Consumption I",
+      "kind": "destination",
+      "adjacent": [
+        "museumHallway"
+      ],
+      "zones": {
+        "consumption1": {
+          "polygon": [
+            [
+              956,
+              280
+            ],
+            [
+              1074,
+              280
+            ],
+            [
+              1074,
+              420
+            ],
+            [
+              956,
+              420
+            ]
+          ],
+          "label": [
+            1015,
+            350
+          ]
+        }
+      },
+      "machine": {
+        "id": "consumption1",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active",
+              "ACTIVATE_OFFPATH": "active.offPath"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {},
+              "offPath": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 6,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "activateVariant"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "consumption2": {
+      "name": "Consumption II",
+      "kind": "destination",
+      "adjacent": [
+        "museumHallway"
+      ],
+      "zones": {
+        "consumption2": {
+          "polygon": [
+            [
+              1084,
+              280
+            ],
+            [
+              1202,
+              280
+            ],
+            [
+              1202,
+              420
+            ],
+            [
+              1084,
+              420
+            ]
+          ],
+          "label": [
+            1143,
+            350
+          ]
+        }
+      },
+      "machine": {
+        "id": "consumption2",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 6,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "consumption3": {
+      "name": "Consumption III",
+      "kind": "destination",
+      "adjacent": [
+        "museumHallway"
+      ],
+      "zones": {
+        "consumption3": {
+          "polygon": [
+            [
+              1212,
+              280
+            ],
+            [
+              1330,
+              280
+            ],
+            [
+              1330,
+              420
+            ],
+            [
+              1212,
+              420
+            ]
+          ],
+          "label": [
+            1271,
+            350
+          ]
+        }
+      },
+      "machine": {
+        "id": "consumption3",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 6,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "southCorridor": {
+      "name": "South Corridor",
+      "kind": "hallway",
+      "adjacent": [
+        "museumHallway",
+        "warehouse",
+        "adminOffice",
+        "controlRoom"
+      ],
+      "zones": {
+        "southCorridor": {
+          "polygon": [
+            [
+              60,
+              470
+            ],
+            [
+              900,
+              470
+            ],
+            [
+              900,
+              530
+            ],
+            [
+              60,
+              530
+            ]
+          ],
+          "label": [
+            480,
+            500
+          ]
+        }
+      }
+    },
+    "warehouse": {
+      "name": "Warehouse",
+      "kind": "destination",
+      "adjacent": [
+        "southCorridor",
+        "adminOffice"
+      ],
+      "zones": {
+        "warehouse": {
+          "polygon": [
+            [
+              60,
+              560
+            ],
+            [
+              280,
+              560
+            ],
+            [
+              280,
+              700
+            ],
+            [
+              60,
+              700
+            ]
+          ],
+          "label": [
+            170,
+            630
+          ]
+        }
+      },
+      "machine": {
+        "id": "warehouse",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 8,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "adminOffice": {
+      "name": "Admin Office",
+      "kind": "destination",
+      "adjacent": [
+        "southCorridor",
+        "warehouse",
+        "dataCenter"
+      ],
+      "zones": {
+        "adminOffice": {
+          "polygon": [
+            [
+              300,
+              560
+            ],
+            [
+              520,
+              560
+            ],
+            [
+              520,
+              700
+            ],
+            [
+              300,
+              700
+            ]
+          ],
+          "label": [
+            410,
+            630
+          ]
+        }
+      },
+      "machine": {
+        "id": "adminOffice",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 8,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "dataCenter": {
+      "name": "Data Center",
+      "kind": "destination",
+      "adjacent": [
+        "adminOffice"
+      ],
+      "zones": {
+        "dataCenter": {
+          "polygon": [
+            [
+              540,
+              560
+            ],
+            [
+              760,
+              560
+            ],
+            [
+              760,
+              700
+            ],
+            [
+              540,
+              700
+            ]
+          ],
+          "label": [
+            650,
+            630
+          ]
+        }
+      },
+      "machine": {
+        "id": "dataCenter",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 8,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "controlRoom": {
+      "name": "Control Room",
+      "kind": "destination",
+      "adjacent": [
+        "southCorridor",
+        "library"
+      ],
+      "zones": {
+        "controlRoom": {
+          "polygon": [
+            [
+              780,
+              560
+            ],
+            [
+              1000,
+              560
+            ],
+            [
+              1000,
+              700
+            ],
+            [
+              780,
+              700
+            ]
+          ],
+          "label": [
+            890,
+            630
+          ]
+        }
+      },
+      "machine": {
+        "id": "controlRoom",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 8,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      }
+    },
+    "library": {
+      "name": "Library",
+      "kind": "destination",
+      "adjacent": [
+        "controlRoom"
+      ],
+      "zones": {
+        "library": {
+          "polygon": [
+            [
+              1020,
+              560
+            ],
+            [
+              1240,
+              560
+            ],
+            [
+              1240,
+              700
+            ],
+            [
+              1020,
+              700
+            ]
+          ],
+          "label": [
+            1130,
+            630
+          ]
+        }
+      },
+      "machine": {
+        "id": "library",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "settling",
+              "DONE": "settling"
+            },
+            "states": {
+              "main": {}
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active.main"
+            }
+          }
+        }
+      },
+      "multiGuest": {
+        "policy": "collaborative",
+        "maxOccupants": 8,
+        "atCapacity": "spectator"
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 10000,
+        "audioOnExit": "fadeOut",
+        "resumeIfReturned": true
+      },
+      "seen": {
+        "dwellMs": 30000,
+        "accumulate": true
+      }
+    }
+  },
+  "paths": {
+    "pathA": {
+      "rooms": [
+        "automation",
+        "slop",
+        "consumption1"
+      ],
+      "guidance": "goldenPath"
+    },
+    "pathB": {
+      "rooms": [
+        "saas",
+        "kin",
+        "consumption2"
+      ],
+      "guidance": "goldenPath"
+    },
+    "pathC": {
+      "rooms": [
+        "influence",
+        "faerie",
+        "consumption3"
+      ],
+      "guidance": "goldenPath"
+    },
+    "pathD": {
+      "rooms": [
+        "superintelligence",
+        "slop",
+        "consumption1"
+      ],
+      "guidance": "goldenPath"
+    }
+  },
+  "guest": {
+    "eligibility": {
+      "golden": {
+        "strategy": "goldenPath",
+        "params": {
+          "allowRevisit": true
+        }
+      }
+    },
+    "timers": {
+      "museumTime": {
+        "sinceEntering": "guidance.museum",
+        "afterMs": 1800000,
+        "event": "MUSEUM_TIME_UP"
+      }
+    },
+    "machine": {
+      "guidance": {
+        "initial": "prologue",
+        "states": {
+          "prologue": {
+            "on": {
+              "entered.museumHallway": "museum"
+            }
+          },
+          "museum": {
+            "entry": [
+              {
+                "type": "assignPath",
+                "from": [
+                  "pathA",
+                  "pathB",
+                  "pathC",
+                  "pathD"
+                ],
+                "strategy": "roundRobin"
+              }
+            ],
+            "on": {
+              "MUSEUM_TIME_UP": "converge"
+            }
+          },
+          "converge": {
+            "on": {
+              "entered.library": "ending"
+            }
+          },
+          "ending": {}
+        }
+      },
+      "adherence": {
+        "initial": "onPath",
+        "states": {
+          "onPath": {
+            "on": {
+              "wentOffPath": "offPath"
+            }
+          },
+          "offPath": {}
+        }
+      }
+    }
+  },
+  "location": {
+    "entryConfirmMs": 1500,
+    "exitConfirmMs": 800,
+    "contactLossMs": 5000
+  }
+}

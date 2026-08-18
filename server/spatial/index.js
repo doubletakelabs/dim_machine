@@ -7,7 +7,9 @@ export {
   ACTIVATION_CONTEXT_FIELDS,
   REVISIT_EVENTS,
   GUIDANCE_POLICIES,
-  ADVANCE_SCOPES,
+  ROOM_KINDS,
+  OFF_PATH_ACTIVATION_EVENT,
+  GUEST_REGIONS,
 } from './contract.js';
 export { validateShowDefinition } from './validate.js';
 export { SpatialRuntime } from './runtime.js';
@@ -19,6 +21,7 @@ export {
 } from './zone-math.js';
 export { RoomActor, stateToString, rootState } from './room-actor.js';
 export { Guest } from './guest.js';
+export { buildGuestMachine, regionState } from './guest-machine.js';
 export { GuestActor } from './guest-actor.js';
 export {
   eligibilityStrategy,

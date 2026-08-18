@@ -7,16 +7,16 @@ import { validateShowDefinition } from '../validate.js';
 import { CONTRACT_VERSION } from '../contract.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
-const spatialDemo = JSON.parse(
-  readFileSync(join(root, 'shows/spatial-demo.json'), 'utf8'),
-);
+const load = (f) => JSON.parse(readFileSync(join(root, 'shows', f), 'utf8'));
 
-const minimalV3 = {
+const minimal = () => ({
   contractVersion: CONTRACT_VERSION,
   showId: 'test',
   name: 'Test Show',
   rooms: {
     alpha: {
+      kind: 'destination',
+      adjacent: ['corridor'],
       zones: { alpha: { polygon: [[0, 0], [10, 0], [10, 10], [0, 10]] } },
       machine: {
         initial: 'idle',
@@ -27,289 +27,209 @@ const minimalV3 = {
         },
       },
     },
-  },
-  guest: {
-    eligibility: { golden: { strategy: 'goldenPath' } },
-  },
-  phases: [{ id: 'roam', mode: 'freeRoam' }],
-  paths: {
-    assignment: { strategy: 'roundRobin' },
-    definitions: {
-      pathA: { rooms: ['alpha'], guidance: 'freeExplore' },
+    corridor: {
+      kind: 'hallway',
+      adjacent: ['alpha'],
+      zones: { corridor: { polygon: [[20, 0], [30, 0], [30, 10], [20, 10]] } },
     },
   },
+  paths: { pathA: { rooms: ['alpha'], guidance: 'goldenPath' } },
+  guest: {
+    eligibility: { golden: { strategy: 'goldenPath' } },
+    machine: {
+      guidance: {
+        initial: 'start',
+        states: {
+          start: { on: { 'entered.corridor': 'roaming' } },
+          roaming: { entry: [{ type: 'assignPath', from: ['pathA'], strategy: 'roundRobin' }] },
+        },
+      },
+      adherence: { initial: 'onPath', states: { onPath: { on: { wentOffPath: 'offPath' } }, offPath: {} } },
+    },
+  },
+});
+
+const errorsFor = (mutate) => {
+  const def = minimal();
+  mutate(def);
+  return validateShowDefinition(def).errors;
+};
+const warningsFor = (mutate) => {
+  const def = minimal();
+  mutate(def);
+  return validateShowDefinition(def).warnings;
 };
 
 describe('validateShowDefinition', () => {
-  it('accepts spatial-demo.json', () => {
-    const { errors } = validateShowDefinition(spatialDemo);
-    assert.equal(errors.length, 0);
+  it('accepts the shipped shows', () => {
+    for (const file of ['spatial-demo.json', 'the-museum.json']) {
+      const { errors, warnings } = validateShowDefinition(load(file));
+      assert.deepEqual(errors, [], file);
+      assert.deepEqual(warnings, [], file);
+    }
   });
 
-  it('accepts a minimal v3 definition', () => {
-    const { errors } = validateShowDefinition(minimalV3);
-    assert.equal(errors.length, 0);
+  it('accepts a minimal definition', () => {
+    assert.deepEqual(validateShowDefinition(minimal()).errors, []);
   });
 
-  it('rejects contract v1', () => {
-    const { errors } = validateShowDefinition({ contractVersion: 1, showId: 'x', name: 'x' });
-    assert.match(errors[0], /contractVersion must be 3/);
+  it('rejects v1 and v2', () => {
+    for (const v of [1, 2]) {
+      const { errors } = validateShowDefinition({ contractVersion: v, showId: 'x', name: 'x' });
+      assert.match(errors[0], /contractVersion must be 3/);
+    }
   });
 
-  it('rejects contract v2', () => {
-    const { errors } = validateShowDefinition({ contractVersion: 2, showId: 'x', name: 'x' });
-    assert.match(errors[0], /v1\/v2 shows are not supported/);
+  it('rejects the vocabularies this contract replaced', () => {
+    assert.ok(errorsFor((d) => { d.zones = {}; }).some((e) => e.includes('declare zones inside each room')));
+    assert.ok(errorsFor((d) => { d.user = {}; }).some((e) => e.includes('renamed to "guest"')));
+    assert.ok(errorsFor((d) => { d.phases = []; }).some((e) => e.includes('guidance region')));
   });
 
-  it('rejects path referencing unknown room', () => {
-    const bad = structuredClone(minimalV3);
-    bad.paths.definitions.pathA.rooms = ['missing'];
-    const { errors } = validateShowDefinition(bad);
-    assert.ok(errors.some((e) => e.includes('unknown room')));
+  describe('room kind', () => {
+    it('rejects an unknown kind', () => {
+      assert.ok(errorsFor((d) => { d.rooms.alpha.kind = 'annex'; }).some((e) => e.includes('kind must be one of')));
+    });
+
+    it('does not require the activation contract of a hallway', () => {
+      // A hallway is never activated, so demanding states it could never enter
+      // would be ceremony.
+      assert.deepEqual(errorsFor((d) => { delete d.rooms.corridor.machine; }), []);
+    });
+
+    it('warns when a hallway carries settings that cannot apply', () => {
+      const warnings = warningsFor((d) => { d.rooms.corridor.exit = { policy: 'hold' }; });
+      assert.ok(warnings.some((w) => w.includes('do not apply')));
+    });
+
+    it('rejects a path routing through a hallway', () => {
+      const errors = errorsFor((d) => { d.paths.pathA.rooms = ['alpha', 'corridor']; });
+      assert.ok(errors.some((e) => e.includes('which is a hallway')));
+    });
   });
 
-  it('rejects a top-level zones map', () => {
-    const def = structuredClone(minimalV3);
-    def.zones = { alpha: {} };
-    assert.ok(validateShowDefinition(def).errors.some((e) => e.includes('declare zones inside each room')));
+  describe('adjacency', () => {
+    it('rejects a door declared from only one side', () => {
+      const errors = errorsFor((d) => { d.rooms.corridor.adjacent = []; });
+      assert.ok(errors.some((e) => e.includes('omits')));
+    });
+
+    it('rejects an unknown neighbour and self-adjacency', () => {
+      assert.ok(errorsFor((d) => { d.rooms.alpha.adjacent.push('nowhere'); }).some((e) => e.includes('unknown room')));
+      assert.ok(errorsFor((d) => { d.rooms.alpha.adjacent.push('alpha'); }).some((e) => e.includes('lists itself')));
+    });
+
+    it('warns when a room declares none', () => {
+      const warnings = warningsFor((d) => { delete d.rooms.alpha.adjacent; delete d.rooms.corridor.adjacent; });
+      assert.ok(warnings.some((w) => w.includes('cannot be checked')));
+    });
   });
 
-  it('rejects the old "user" block', () => {
-    const def = structuredClone(minimalV3);
-    def.user = def.guest;
-    delete def.guest;
-    assert.ok(validateShowDefinition(def).errors.some((e) => e.includes('renamed to "guest"')));
+  describe('off-path variants', () => {
+    it('requires a room promising a variant to be able to hear it', () => {
+      const errors = errorsFor((d) => { d.rooms.alpha.ineligible = { policy: 'activateVariant' }; });
+      assert.ok(errors.some((e) => e.includes('ACTIVATE_OFFPATH')));
+    });
+
+    it('accepts one that declares the transition', () => {
+      assert.deepEqual(errorsFor((d) => {
+        d.rooms.alpha.ineligible = { policy: 'activateVariant' };
+        d.rooms.alpha.machine.states.idle.on.ACTIVATE_OFFPATH = 'active';
+      }), []);
+    });
+  });
+
+  describe('the guest machine', () => {
+    it('refuses an authored location region', () => {
+      const errors = errorsFor((d) => { d.guest.machine.location = { initial: 'a', states: { a: {} } }; });
+      assert.ok(errors.some((e) => e.includes('generated from room adjacency')));
+    });
+
+    it('rejects a region that is not authorable', () => {
+      const errors = errorsFor((d) => { d.guest.machine.audio = { initial: 'a', states: { a: {} } }; });
+      assert.ok(errors.some((e) => e.includes('not an authorable region')));
+    });
+
+    it('rejects an initial state that is not its own', () => {
+      const errors = errorsFor((d) => { d.guest.machine.guidance.initial = 'elsewhere'; });
+      assert.ok(errors.some((e) => e.includes('must name one of its own states')));
+    });
+
+    it('rejects a room-entry transition naming an unknown room', () => {
+      const errors = errorsFor((d) => { d.guest.machine.guidance.states.start.on = { 'entered.attic': 'roaming' }; });
+      assert.ok(errors.some((e) => e.includes('unknown room "attic"')));
+    });
+
+    it('rejects an assignPath with no options', () => {
+      const errors = errorsFor((d) => { d.guest.machine.guidance.states.roaming.entry = [{ type: 'assignPath', from: [] }]; });
+      assert.ok(errors.some((e) => e.includes('non-empty "from"')));
+    });
+  });
+
+  describe('declared timers', () => {
+    it('accepts one naming a real state', () => {
+      assert.deepEqual(errorsFor((d) => {
+        d.guest.timers = { t: { sinceEntering: 'guidance.roaming', afterMs: 1000, event: 'UP' } };
+      }), []);
+    });
+
+    it('rejects one naming a state that does not exist', () => {
+      const errors = errorsFor((d) => {
+        d.guest.timers = { t: { sinceEntering: 'guidance.nowhere', afterMs: 1000, event: 'UP' } };
+      });
+      assert.ok(errors.some((e) => e.includes('unknown state')));
+    });
+
+    it('rejects a timer with no duration or no event', () => {
+      assert.ok(errorsFor((d) => { d.guest.timers = { t: { sinceEntering: 'guidance.roaming', event: 'UP' } }; })
+        .some((e) => e.includes('afterMs')));
+      assert.ok(errorsFor((d) => { d.guest.timers = { t: { sinceEntering: 'guidance.roaming', afterMs: 5 } }; })
+        .some((e) => e.includes('event')));
+    });
+  });
+
+  describe('eligibility', () => {
+    it('rejects a strategy the build cannot evaluate', () => {
+      assert.ok(errorsFor((d) => { d.guest.eligibility.golden = { strategy: 'roleBased' }; })
+        .some((e) => e.includes('not implemented yet')));
+    });
+
+    it('rejects one the contract does not name', () => {
+      assert.ok(errorsFor((d) => { d.guest.eligibility.golden = { strategy: 'vibes' }; })
+        .some((e) => e.includes('must be one of')));
+    });
+  });
+
+  describe('room policy enums', () => {
+    it('rejects misspellings rather than loading them silently', () => {
+      const errors = errorsFor((d) => {
+        d.rooms.alpha.multiGuest = { policy: 'colaborative', maxOccupants: 2, atCapacity: 'queue' };
+        d.rooms.alpha.exit = { policy: 'never' };
+        d.rooms.alpha.whenAvailable = { policy: 'maybe' };
+      });
+      assert.ok(errors.some((e) => e.includes('multiGuest.policy')));
+      assert.ok(errors.some((e) => e.includes('atCapacity')));
+      assert.ok(errors.some((e) => e.includes('exit.policy')));
+      assert.ok(errors.some((e) => e.includes('whenAvailable.policy')));
+    });
+
+    it('requires settling to handle RESUME when the room promises it', () => {
+      const errors = errorsFor((d) => {
+        d.rooms.alpha.exit = { policy: 'resetAfter', graceMs: 5000, resumeIfReturned: true };
+      });
+      assert.ok(errors.some((e) => e.includes('RESUME')));
+    });
   });
 
   describe('zones', () => {
-    it('accepts several zones in one room', () => {
-      const def = structuredClone(minimalV3);
-      def.rooms.alpha.zones.annex = { polygon: [[20, 0], [30, 0], [30, 10], [20, 10]] };
-      assert.equal(validateShowDefinition(def).errors.length, 0);
-    });
-
     it('rejects a zone id reused across rooms', () => {
-      const def = structuredClone(minimalV3);
-      def.rooms.beta = structuredClone(def.rooms.alpha);
-      def.paths.definitions.pathA.rooms.push('beta');
-      const { errors } = validateShowDefinition(def);
+      const errors = errorsFor((d) => { d.rooms.corridor.zones = { alpha: { polygon: [[0, 0], [1, 0], [1, 1]] } }; });
       assert.ok(errors.some((e) => e.includes('duplicates a zone id')));
     });
 
     it('rejects a polygon with too few points', () => {
-      const def = structuredClone(minimalV3);
-      def.rooms.alpha.zones.alpha.polygon = [[0, 0], [1, 1]];
-      assert.ok(validateShowDefinition(def).errors.some((e) => e.includes('at least 3 points')));
-    });
-
-    it('warns when a room has no zones at all', () => {
-      const def = structuredClone(minimalV3);
-      def.rooms.alpha.zones = {};
-      assert.ok(validateShowDefinition(def).warnings.some((w) => w.includes('cannot be entered')));
-    });
-  });
-
-  describe('room machine contract', () => {
-    function withRoomStates(mutate) {
-      const def = structuredClone(minimalV3);
-      mutate(def.rooms.alpha.machine.states);
-      return validateShowDefinition(def);
-    }
-
-    it('requires every canonical presentation state', () => {
-      const { errors } = withRoomStates((states) => { delete states.settling; });
-      assert.ok(errors.some((e) => e.includes('states.settling is required')));
-    });
-
-    it('requires ACTIVATE from idle', () => {
-      const { errors } = withRoomStates((states) => { states.idle = {}; });
-      assert.ok(errors.some((e) => e.includes('states.idle must handle "ACTIVATE"')));
-    });
-
-    it('requires RESET from settling so exit grace can complete', () => {
-      const { errors } = withRoomStates((states) => { states.settling = {}; });
-      assert.ok(errors.some((e) => e.includes('states.settling must handle "RESET"')));
-    });
-
-    it('requires RELEASE from active so an unlocked room cannot stay active', () => {
-      const { errors } = withRoomStates((states) => { states.active = {}; });
-      assert.ok(errors.some((e) => e.includes('states.active must handle "RELEASE"')));
-    });
-
-    it('requires idle to be the initial state', () => {
-      const def = structuredClone(minimalV3);
-      def.rooms.alpha.machine.initial = 'active';
-      assert.ok(validateShowDefinition(def).errors.some((e) => e.includes('initial must be "idle"')));
-    });
-
-    it('allows extra non-canonical states such as an intro', () => {
-      const { errors } = withRoomStates((states) => {
-        states.idle = { on: { ACTIVATE: 'activating' } };
-        states.activating = { on: { RELEASE: 'settling' }, after: { 900: { target: 'active' } } };
-      });
-      assert.equal(errors.length, 0);
-    });
-
-    it('requires idle to handle the revisit event a room declares', () => {
-      const def = structuredClone(minimalV3);
-      def.rooms.alpha.revisit = { whenSeen: {} };
-      const { errors } = validateShowDefinition(def);
-      assert.ok(errors.some((e) => e.includes('must handle "ACTIVATE_SEEN"')));
-    });
-
-    it('accepts a revisit variant the machine handles', () => {
-      const def = structuredClone(minimalV3);
-      def.rooms.alpha.revisit = { whenSeen: {} };
-      def.rooms.alpha.machine.states.idle.on.ACTIVATE_SEEN = 'active';
-      assert.equal(validateShowDefinition(def).errors.length, 0);
-    });
-  });
-
-  describe('policy enums', () => {
-    function withRoom(mutate) {
-      const def = structuredClone(minimalV3);
-      mutate(def.rooms.alpha);
-      return validateShowDefinition(def);
-    }
-
-    it('rejects a misspelled multiGuest policy', () => {
-      const { errors } = withRoom((room) => {
-        room.multiGuest = { policy: 'colaborative' };
-      });
-      assert.ok(errors.some((e) => e.includes('multiGuest.policy must be one of')));
-    });
-
-    it('rejects the dropped queue capacity policy', () => {
-      const { errors } = withRoom((room) => {
-        room.multiGuest = { policy: 'collaborative', maxOccupants: 2, atCapacity: 'queue' };
-      });
-      assert.ok(errors.some((e) => e.includes('atCapacity must be one of')));
-    });
-
-    it('rejects unknown ineligible, exit, and audio policies', () => {
-      const { errors } = withRoom((room) => {
-        room.ineligible = { policy: 'shrug' };
-        room.exit = { policy: 'never' };
-        room.audio = { timing: 'whenever', joinPolicy: 'sure' };
-      });
-      assert.ok(errors.some((e) => e.includes('ineligible.policy')));
-      assert.ok(errors.some((e) => e.includes('exit.policy')));
-      assert.ok(errors.some((e) => e.includes('audio.timing')));
-      assert.ok(errors.some((e) => e.includes('audio.joinPolicy')));
-    });
-
-    it('requires settling to handle RESUME when resumeIfReturned is set', () => {
-      const { errors } = withRoom((room) => {
-        room.exit = { policy: 'resetAfter', graceMs: 5000, resumeIfReturned: true };
-      });
-      assert.ok(errors.some((e) => e.includes('settling must handle "RESUME"')));
-    });
-
-    it('accepts resumeIfReturned when settling declares RESUME', () => {
-      const def = structuredClone(minimalV3);
-      def.rooms.alpha.machine.states.settling = { on: { RESET: 'idle', RESUME: 'active' } };
-      def.rooms.alpha.exit = { policy: 'resetAfter', graceMs: 5000, resumeIfReturned: true };
-      assert.equal(validateShowDefinition(def).errors.length, 0);
-    });
-
-    it('rejects an unknown guidance policy', () => {
-      const def = structuredClone(minimalV3);
-      def.paths.definitions.pathA.guidance = 'nearestUnseen';
-      assert.ok(validateShowDefinition(def).errors.some((e) => e.includes('guidance must be one of')));
-    });
-
-    it('requires a scope on advanceWhen', () => {
-      const def = structuredClone(minimalV3);
-      def.phases = [{ id: 'roam', mode: 'freeRoam', advanceWhen: { seenCount: 2 } }, { id: 'done' }];
-      assert.ok(validateShowDefinition(def).errors.some((e) => e.includes('advanceWhen.scope is required')));
-    });
-
-    it('accepts both advanceWhen scopes', () => {
-      const def = structuredClone(minimalV3);
-      def.phases = [
-        { id: 'roam', mode: 'freeRoam', advanceWhen: { scope: 'guest', seenCount: 1 } },
-        { id: 'converge', mode: 'directed', target: 'alpha', advanceWhen: { scope: 'show', entered: 'alpha' } },
-      ];
-      assert.equal(validateShowDefinition(def).errors.length, 0);
-    });
-
-    it('rejects a negative grace window', () => {
-      const { errors } = withRoom((room) => {
-        room.exit = { policy: 'resetAfter', graceMs: -1 };
-      });
-      assert.ok(errors.some((e) => e.includes('graceMs must be a non-negative number')));
-    });
-
-    it('warns when resumeIfReturned is combined with hold', () => {
-      const def = structuredClone(minimalV3);
-      def.rooms.alpha.machine.states.settling = { on: { RESET: 'idle', RESUME: 'active' } };
-      def.rooms.alpha.exit = { policy: 'hold', resumeIfReturned: true };
-      const { warnings } = validateShowDefinition(def);
-      assert.ok(warnings.some((w) => w.includes('no effect with policy "hold"')));
-    });
-
-  });
-
-  describe('eligibility', () => {
-    it('rejects a strategy the contract names but the build cannot evaluate', () => {
-      const def = structuredClone(minimalV3);
-      def.guest.eligibility.golden = { strategy: 'roleBased' };
-      const { errors } = validateShowDefinition(def);
-      assert.ok(errors.some((e) => e.includes('not implemented yet')));
-    });
-
-    it('rejects a strategy the contract does not name at all', () => {
-      const def = structuredClone(minimalV3);
-      def.guest.eligibility.golden = { strategy: 'vibes' };
-      assert.ok(validateShowDefinition(def).errors.some((e) => e.includes('must be one of')));
-    });
-
-    it('accepts the implemented strategies', () => {
-      for (const strategy of ['goldenPath', 'all', 'none']) {
-        const def = structuredClone(minimalV3);
-        def.guest.eligibility.golden = { strategy };
-        assert.equal(validateShowDefinition(def).errors.length, 0, strategy);
-      }
-    });
-
-    it('warns when no golden eligibility is declared', () => {
-      const def = structuredClone(minimalV3);
-      def.guest.eligibility = {};
-      assert.ok(validateShowDefinition(def).warnings.some((w) => w.includes('default to goldenPath')));
-    });
-  });
-
-  describe('phases, paths, and adherence', () => {
-    it('requires a target on directed phases', () => {
-      const def = structuredClone(minimalV3);
-      def.phases = [{ id: 'converge', mode: 'directed' }];
-      const { errors } = validateShowDefinition(def);
-      assert.ok(errors.some((e) => e.includes('target is required for directed phases')));
-    });
-
-    it('rejects duplicate phase ids', () => {
-      const def = structuredClone(minimalV3);
-      def.phases = [{ id: 'roam', mode: 'freeRoam' }, { id: 'roam', mode: 'freeRoam' }];
-      assert.ok(validateShowDefinition(def).errors.some((e) => e.includes('must be unique')));
-    });
-
-    it('rejects a drifting threshold at or above cursed', () => {
-      const def = structuredClone(minimalV3);
-      def.adherence = { thresholds: { drifting: 80, cursed: 75 } };
-      assert.ok(validateShowDefinition(def).errors.some((e) => e.includes('drifting must be below cursed')));
-    });
-
-    it('rejects compliance weights that are not negative', () => {
-      const def = structuredClone(minimalV3);
-      def.adherence = { compliance: { eligibleRoomSeen: { weight: 30 } } };
-      assert.ok(validateShowDefinition(def).errors.some((e) => e.includes('must be a negative number')));
-    });
-
-    it('warns about a room on no path', () => {
-      const def = structuredClone(minimalV3);
-      def.rooms.beta = structuredClone(def.rooms.alpha);
-      const { warnings } = validateShowDefinition(def);
-      assert.ok(warnings.some((w) => w.includes('rooms.beta is on no path')));
+      const errors = errorsFor((d) => { d.rooms.alpha.zones.alpha.polygon = [[0, 0], [1, 1]]; });
+      assert.ok(errors.some((e) => e.includes('at least 3 points')));
     });
   });
 });

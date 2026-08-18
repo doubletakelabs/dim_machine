@@ -219,7 +219,7 @@ function sendRoster() {
       disconnectedForMs: offlineMs,
       telemetry: u.telemetry ?? null,
       pathId: guest?.pathId ?? null,
-      phaseId: guest?.phaseId ?? null,
+      regions: guest?.regions ?? null,
       adherence: guest?.adherence ?? null,
       roomId: guest?.roomId ?? null,
       occupancy: guest?.occupancy ?? null,
@@ -248,7 +248,7 @@ function phoneSnapshot(token) {
     spatial: guest
       ? {
           pathId: guest.pathId,
-          phaseId: guest.phaseId,
+          regions: guest.regions,
           adherence: guest.adherence,
           roomId: guest.roomId,
           occupancy: guest.occupancy,

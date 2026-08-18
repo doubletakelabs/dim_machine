@@ -5,6 +5,7 @@ import { VirtualLocationAdapter } from './virtual-location.js';
 import { RoomActor } from './room-actor.js';
 import { Guest } from './guest.js';
 import { GuestActor } from './guest-actor.js';
+import { buildGuestMachine } from './guest-machine.js';
 import { WalkthroughDriver } from './walkthrough.js';
 import { roomStandingSpot, slotForGuest, floorPlanExtent } from './zone-math.js';
 import { systemClock } from './clock.js';
@@ -103,6 +104,7 @@ export class SpatialRuntime {
     });
 
     this.walkthrough = new WalkthroughDriver({ runtime: this, clock: this.clock });
+    this.guestMachineConfig = buildGuestMachine(this.def);
 
     for (const roomId of Object.keys(this.def.rooms)) {
       this.rooms.set(roomId, new RoomActor({
@@ -136,6 +138,7 @@ export class SpatialRuntime {
     for (const p of this.guests.values()) {
       this.coordinator.ensureGuest(p.guestId);
       this.coordinator.setConnected(p.guestId, p.connected);
+      this.guestActors.get(p.guestId)?.start();
     }
     this.startTick();
     this.append({ type: 'show.started', showId: this.def.showId });
@@ -159,6 +162,7 @@ export class SpatialRuntime {
       }
     }
     this.walkthrough?.stop();
+    for (const actor of this.guestActors.values()) actor.stop();
     this.startedAt = null;
     for (const room of this.rooms.values()) room.stop();
     if (wasRunning) this.append({ type: 'show.stopped', showId: this.def?.showId ?? null });
@@ -195,36 +199,43 @@ export class SpatialRuntime {
     if (!this.def) return null;
     const guestId = `u-${randomUUID().slice(0, 8)}`;
     const token = randomUUID();
-    const pathId = assignPath(this.def.paths, this._pathAssignIndex++);
-    const phaseId = this.def.phases?.[0]?.id ?? 'phase-0';
     const num = ++this._guestSeq;
 
+    // No path at the door. The journey assigns one when the guest reaches the
+    // part of the show that has paths, which is also when there is real
+    // occupancy to spread them against.
     const guest = new Guest({
       guestId,
       token,
       label: label ?? `Guest ${num}`,
-      pathId,
-      phaseId,
+      pathId: null,
+
     });
 
     this.guests.set(guestId, guest);
-    this.guestActors.set(guestId, new GuestActor({
+    const actor = new GuestActor({
       guest,
       show: this.def,
+      machineConfig: this.guestMachineConfig,
+      clock: this.clock,
       requestActivation: (roomId, context) => this.activateFor(guestId, roomId, context),
       roomSnapshot: (roomId) => this.rooms.get(roomId)?.snapshot() ?? null,
+      assignPath: (from, strategy) => this.nextPath(from, strategy),
       appendEvent: (event) => this.append(event),
-    }));
+      onStateChange: () => this.io.onStateChange?.(),
+    });
+    this.guestActors.set(guestId, actor);
+    if (this.running) actor.start();
     this.tokens.set(token, guestId);
     this.coordinator?.ensureGuest(guestId);
     this.coordinator?.setConnected(guestId, true);
 
-    this.append({ type: 'guest.joined', guestId, pathId, phaseId, label: guest.label });
+    this.append({ type: 'guest.joined', guestId, label: guest.label });
     if (this.running) {
-      this.io.log?.(`${guest.label} joined → path ${pathId}`);
+      this.io.log?.(`${guest.label} joined`);
     }
     this.io.onStateChange?.();
-    return { token, guestId, pathId, label: guest.label };
+    return { token, guestId, label: guest.label };
   }
 
   removeGuest(guestId) {
@@ -244,6 +255,7 @@ export class SpatialRuntime {
 
     this.tokens.delete(p.token);
     this.guests.delete(guestId);
+    this.guestActors.get(guestId)?.stop();
     this.guestActors.delete(guestId);
     this.walkthrough?.remove(guestId);
     this.virtualLocation?.forget(guestId);
@@ -413,8 +425,17 @@ export class SpatialRuntime {
     if (typeof this.clock.advance !== 'function') {
       throw new Error('testAdvanceTime requires a ManualClock');
     }
-    this.clock.advance(ms);
-    this.coordinator?.processTime(this.now());
+    // Step in tick-sized chunks rather than one jump. A move between rooms
+    // takes two commits — you leave one before entering the next — and a single
+    // processTime only ever completes the first, which makes tests quietly
+    // measure half a transition.
+    let remaining = ms;
+    do {
+      const step = Math.min(TICK_MS, remaining);
+      this.clock.advance(step);
+      this.coordinator?.processTime(this.now());
+      remaining -= step;
+    } while (remaining > 0);
   }
 
   /** @param {import('./coordinator.js').ZoneOccupancyEvent} event */
@@ -447,6 +468,14 @@ export class SpatialRuntime {
     const outcome = this.guestActors.get(next.guestId)?.enterRoom(roomId);
     if (outcome) this.logEntryOutcome(next.guestId, outcome);
     this.io.onStateChange?.();
+  }
+
+  /** @param {string[]} from @param {string} strategy */
+  nextPath(from, strategy = 'roundRobin') {
+    const options = from.filter((id) => this.def?.paths?.[id]);
+    if (!options.length) return null;
+    if (strategy === 'random') return options[Math.floor(Math.random() * options.length)];
+    return options[this._pathAssignIndex++ % options.length];
   }
 
   /** The room changed hands; the guest who inherited it must stop saying "refused". */
@@ -536,11 +565,10 @@ export class SpatialRuntime {
       name: this.def?.name ?? null,
       roomCount: this.rooms.size,
       guestCount: this.guests.size,
-      phaseIds: (this.def?.phases ?? []).map((p) => p.id),
-      pathIds: Object.keys(this.def?.paths?.definitions ?? {}),
+      pathIds: Object.keys(this.def?.paths ?? {}),
       // Full definitions, not just ids: the panel needs the ordered route to
       // show where a guest is being led and how far along they are.
-      paths: this.def?.paths?.definitions ?? {},
+      paths: this.def?.paths ?? {},
       globals: { ...this.globals },
     };
   }
@@ -605,13 +633,4 @@ export class SpatialRuntime {
   }
 }
 
-/** @param {object} paths @param {number} index */
-function assignPath(paths, index) {
-  const ids = Object.keys(paths?.definitions ?? {});
-  if (!ids.length) return 'path-default';
-  const strategy = paths?.assignment?.strategy ?? 'roundRobin';
-  if (strategy === 'random') {
-    return ids[Math.floor(Math.random() * ids.length)];
-  }
-  return ids[index % ids.length];
-}
+/** Path rotation is show-wide, so it lives here rather than on any one guest. */

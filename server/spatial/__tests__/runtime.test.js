@@ -17,12 +17,26 @@ describe('SpatialRuntime', () => {
     return new SpatialRuntime({ enableTick: false, clock: new ManualClock(), ...io });
   }
 
-  it('loads spatial-demo and reports three rooms', () => {
+  /** Paths are handed out at the hallway now, not at the door. */
+  function spawnOnPath(rt, pathId) {
+    for (let i = 0; i < 4; i++) {
+      const g = rt.spawnGuest();
+      rt.setVirtualPosition(g.guestId, 320, 235);
+      rt.testAdvanceTime(1700);
+      if (rt.guests.get(g.guestId).pathId === pathId) return g;
+      rt.removeGuest(g.guestId);
+    }
+    throw new Error(`no guest assigned to ${pathId}`);
+  }
+
+  it('loads spatial-demo, hallway included', () => {
     const rt = makeRuntime();
     const result = rt.load(spatialDemo);
     assert.equal(result.ok, true);
-    assert.equal(rt.rooms.size, 3);
-    assert.deepEqual([...rt.rooms.keys()].sort(), ['cellar', 'greenhouse', 'library']);
+    assert.deepEqual([...rt.rooms.keys()].sort(), ['cellar', 'greenhouse', 'hallway', 'library']);
+    // A hallway gets an actor like any other space — guests occupy it — but it
+    // is never activated.
+    assert.equal(rt.rooms.get('hallway').kind, 'hallway');
   });
 
   it('rejects v2 definitions', () => {
@@ -40,17 +54,31 @@ describe('SpatialRuntime', () => {
     assert.equal(rt.running, true);
   });
 
-  it('spawnGuest assigns paths round-robin', () => {
+  it('spawnGuest hands out no path at the door', () => {
+    // Paths are assigned by the journey, when a guest reaches the part of the
+    // show that has them — which is also when there is real occupancy to
+    // spread them against.
     const rt = makeRuntime();
     rt.load(spatialDemo);
     rt.start();
     const a = rt.spawnGuest();
-    const b = rt.spawnGuest();
-    const c = rt.spawnGuest();
-    assert.ok(a && b && c);
-    assert.notEqual(a.pathId, b.pathId);
-    assert.equal(a.pathId, c.pathId);
-    assert.equal(rt.guests.size, 3);
+    assert.equal(rt.guests.get(a.guestId).pathId, null);
+    assert.equal(rt.guests.size, 1);
+  });
+
+  it('rotates paths round-robin as guests reach the hallway', () => {
+    const rt = makeRuntime();
+    rt.load(spatialDemo);
+    rt.start();
+    const assigned = [];
+    for (let i = 0; i < 3; i++) {
+      const g = rt.spawnGuest();
+      rt.setVirtualPosition(g.guestId, 320, 235);   // hallway
+      rt.testAdvanceTime(1700);
+      assigned.push(rt.guests.get(g.guestId).pathId);
+    }
+    assert.notEqual(assigned[0], assigned[1]);
+    assert.equal(assigned[0], assigned[2]);
   });
 
   it('operator snapshot includes rooms and zero occupancy', () => {
@@ -58,7 +86,7 @@ describe('SpatialRuntime', () => {
     rt.load(spatialDemo);
     rt.start();
     const snap = rt.getOperatorSnapshot();
-    assert.equal(snap.show.roomCount, 3);
+    assert.equal(snap.show.roomCount, 4);
     assert.equal(snap.guests.length, 0);
     assert.equal(snap.rooms.every((r) => r.state === 'idle'), true);
     assert.deepEqual(snap.coordinator.occupancy, {});
@@ -94,12 +122,16 @@ describe('SpatialRuntime', () => {
     const rt = makeRuntime();
     rt.load(spatialDemo);
     rt.start();
-    const p = rt.spawnGuest();          // pathA: library + greenhouse
-    rt.setVirtualPosition(p.guestId, 200, 140);
+    const p = rt.spawnGuest();
+    // Through the hallway first: that is where the journey assigns a path, and
+    // the library is a room paths route through.
+    rt.setVirtualPosition(p.guestId, 320, 235);
+    rt.testAdvanceTime(1700);
+    rt.setVirtualPosition(p.guestId, 200, 140);   // library
 
     // Nothing happens until entry is confirmed.
     assert.equal(rt.getRoomsRoster().find((r) => r.roomId === 'library').state, 'idle');
-    rt.testAdvanceTime(1500);
+    rt.testAdvanceTime(2600);
 
     const library = rt.getRoomsRoster().find((r) => r.roomId === 'library');
     assert.match(library.state, /^activating|^active/);
@@ -242,14 +274,13 @@ describe('SpatialRuntime', () => {
     const rt = makeRuntime();
     rt.load(spatialDemo);
     rt.start();
-    const p = rt.spawnGuest();
+    const p = spawnOnPath(rt, 'pathA');           // greenhouse is on pathA
     rt.setVirtualPosition(p.guestId, 440, 140);   // greenhouse: exit policy "finish"
-    rt.testAdvanceTime(1500);
-    rt.requestActivation(p.guestId, 'greenhouse');
+    rt.testAdvanceTime(2600);
 
     rt.setVirtualPosition(p.guestId, 10, 10);
-    rt.testAdvanceTime(800);
-    assert.equal(rt.getRoomsRoster().find((r) => r.roomId === 'greenhouse').state, 'active');
+    rt.testAdvanceTime(900);
+    assert.match(rt.getRoomsRoster().find((r) => r.roomId === 'greenhouse').state, /^active/);
 
     rt.testAdvanceTime(5000);                    // content runs out in an empty room
     assert.equal(rt.getRoomsRoster().find((r) => r.roomId === 'greenhouse').state, 'settling');

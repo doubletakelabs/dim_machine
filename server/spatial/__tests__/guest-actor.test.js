@@ -12,14 +12,19 @@ import { eligibilityStrategy, IMPLEMENTED_ELIGIBILITY_STRATEGIES } from '../elig
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const spatialDemo = JSON.parse(readFileSync(join(root, 'shows/spatial-demo.json'), 'utf8'));
 
-/** Floor-plan points inside each demo room. */
+/** A point inside each room of the small demo. */
 const AT = {
+  hallway: [320, 235],
   library: [200, 140],
-  libraryAlcove: [300, 135],
+  libraryAlcove: [305, 135],
   greenhouse: [440, 140],
-  cellar: [300, 300],
+  cellar: [300, 340],
+  outside: [10, 10],
   corridor: [10, 10],
 };
+
+/** Long enough for an exit and an entry to both confirm (800 + 1500). */
+const MOVE_MS = 2600;
 
 function makeRuntime(io = {}) {
   const rt = new SpatialRuntime({ enableTick: false, clock: new ManualClock(), ...io });
@@ -28,36 +33,58 @@ function makeRuntime(io = {}) {
   return rt;
 }
 
-/** Spawn until we get a guest on the requested path. */
-function spawnOnPath(rt, pathId) {
-  for (let i = 0; i < 4; i++) {
-    const g = rt.spawnGuest({ label: pathId });
-    if (g.pathId === pathId) return g;
-  }
-  throw new Error(`no guest assigned to ${pathId}`);
-}
-
-function walkTo(rt, guestId, point, ms = 1500) {
+function walkTo(rt, guestId, point, ms = MOVE_MS) {
   rt.setVirtualPosition(guestId, point[0], point[1]);
   rt.testAdvanceTime(ms);
 }
 
+/**
+ * Spawn a guest and walk them through the hallway, which is where the journey
+ * assigns a path — paths are no longer handed out at the door. Retries until
+ * the round-robin lands on the one the test wants.
+ */
+function spawnOnPath(rt, pathId) {
+  for (let i = 0; i < 4; i++) {
+    const g = rt.spawnGuest();
+    walkTo(rt, g.guestId, AT.hallway, 1700);
+    if (rt.guests.get(g.guestId).pathId === pathId) return g;
+    // Discarded candidates must leave. Getting a path now means walking into
+    // the hallway, so a guest we do not want would otherwise linger there —
+    // eligible, occupying rooms, and quietly skewing whatever comes next.
+    rt.removeGuest(g.guestId);
+  }
+  throw new Error(`no guest assigned to ${pathId}`);
+}
+
 const roomOf = (rt, roomId) => rt.getRoomsRoster().find((r) => r.roomId === roomId);
 const guestOf = (rt, token) => rt.getGuestsRoster().find((g) => g.token === token);
+const regionsOf = (rt, guestId) => rt.guestActors.get(guestId).regions();
 
 describe('eligibility strategies', () => {
   const show = {
-    paths: { definitions: { pathA: { rooms: ['library', 'greenhouse'] } } },
-    rooms: { library: {}, greenhouse: {}, cellar: {} },
+    paths: { pathA: { rooms: ['library', 'greenhouse'] }, pathB: { rooms: ['cellar'] } },
+    rooms: { library: {}, greenhouse: {}, cellar: {}, atrium: {} },
   };
-  const guest = () => new Guest({
-    guestId: 'g1', token: 't1', label: 'G', pathId: 'pathA', phaseId: 'roamA',
-  });
+  const guest = () => {
+    const g = new Guest({ guestId: 'g1', token: 't1', label: 'G' });
+    g.pathId = 'pathA';
+    return g;
+  };
 
   it('goldenPath admits rooms on the assigned path', () => {
     const strategy = eligibilityStrategy('goldenPath');
     assert.equal(strategy({ guest: guest(), roomId: 'library', show, params: {} }), true);
     assert.equal(strategy({ guest: guest(), roomId: 'cellar', show, params: {} }), false);
+  });
+
+  it('leaves rooms no path routes through open to everyone', () => {
+    // Otherwise a shared prologue would be ineligible for all, and a guest with
+    // no path assigned yet would be locked out of the entire show.
+    const strategy = eligibilityStrategy('goldenPath');
+    assert.equal(strategy({ guest: guest(), roomId: 'atrium', show, params: {} }), true);
+    const unassigned = new Guest({ guestId: 'g2', token: 't2', label: 'G2' });
+    assert.equal(strategy({ guest: unassigned, roomId: 'atrium', show, params: {} }), true);
+    assert.equal(strategy({ guest: unassigned, roomId: 'library', show, params: {} }), false);
   });
 
   it('goldenPath lets guests back into a seen room by default', () => {
@@ -87,7 +114,8 @@ describe('GuestActor', () => {
     const rt = makeRuntime();
     const a = spawnOnPath(rt, 'pathA');
     const actor = rt.guestActors.get(a.guestId);
-    assert.deepEqual(actor.eligibleRoomIds().sort(), ['greenhouse', 'library']);
+    // Hallways are always eligible — you cannot deviate by using a corridor.
+    assert.deepEqual(actor.eligibleRoomIds().sort(), ['greenhouse', 'hallway', 'library']);
     assert.equal(actor.isEligible('cellar'), false);
   });
 
@@ -283,8 +311,9 @@ describe('A3 — walking into rooms', () => {
     const cellar = roomOf(rt, 'cellar');
     assert.equal(cellar.lockHolder, null);
     assert.notEqual(cellar.lockHolder, b.guestId);
-    // Running for nobody, so it takes its exit policy even though a body remains.
-    assert.equal(cellar.state, 'settling');
+    // Running for nobody, so it takes its exit policy even though a body
+    // remains. The cellar resets immediately, so it is already back to idle.
+    assert.equal(cellar.state, 'idle');
     assert.equal(cellar.occupantCount, 1);
     assert.deepEqual(cellar.eligibleOccupants, []);
   });
@@ -480,7 +509,7 @@ describe('A3 — walking into rooms', () => {
     walkTo(rt, a.guestId, AT.cellar);
 
     const snap = rt.getOperatorSnapshot().guests.find((g) => g.guestId === a.guestId);
-    assert.deepEqual(snap.eligibleRooms.sort(), ['greenhouse', 'library']);
+    assert.deepEqual(snap.eligibleRooms.sort(), ['greenhouse', 'hallway', 'library']);
     assert.equal(snap.lastEntry.outcome, 'ineligible');
     assert.equal(snap.lastEntry.policy, 'lockedMessage');
   });

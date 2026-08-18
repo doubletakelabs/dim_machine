@@ -12,10 +12,12 @@ import {
   AUDIO_TIMINGS,
   AUDIO_JOIN_POLICIES,
   AUDIO_ON_EXIT,
-  PHASE_MODES,
   GUIDANCE_POLICIES,
-  ADVANCE_SCOPES,
   REVISIT_EVENTS,
+  ROOM_KINDS,
+  OFF_PATH_ACTIVATION_EVENT,
+  AUTHORED_GUEST_REGIONS,
+  enteredEvent,
 } from './contract.js';
 import { IMPLEMENTED_ELIGIBILITY_STRATEGIES } from './eligibility.js';
 
@@ -114,6 +116,22 @@ function checkRoom(roomId, room, errors, warnings) {
     errors.push(`${path} must be an object`);
     return;
   }
+
+  checkEnum(room.kind, ROOM_KINDS, `${path}.kind`, errors);
+  const kind = room.kind ?? 'destination';
+
+  // A hallway is never activated, so requiring the presentation contract of it
+  // would be ceremony — a machine with states that can never be entered.
+  if (kind === 'hallway') {
+    if (room.machine != null) {
+      warnings.push(`${path} is a hallway; its machine will never be activated`);
+    }
+    if (room.multiGuest || room.exit || room.ineligible) {
+      warnings.push(`${path} is a hallway; multiGuest/exit/ineligible do not apply`);
+    }
+    return;
+  }
+
   checkRoomMachine(room.machine, `${path}.machine`, errors);
 
   const multiGuest = room.multiGuest;
@@ -133,6 +151,15 @@ function checkRoom(roomId, room, errors, warnings) {
   if (['lockedMessage', 'tease'].includes(room.ineligible?.policy) && !room.ineligible.audio) {
     warnings.push(`${path}.ineligible.policy "${room.ineligible.policy}" has no audio asset`);
   }
+  // A room that promises to react to an off-path guest must be able to hear it.
+  if (room.ineligible?.policy === 'activateVariant'
+    && isObject(room.machine?.states?.idle)
+    && !handlesEvent(room.machine.states.idle, OFF_PATH_ACTIVATION_EVENT)) {
+    errors.push(
+      `${path}.machine.states.idle must handle "${OFF_PATH_ACTIVATION_EVENT}" — `
+      + 'ineligible.policy is "activateVariant"',
+    );
+  }
 
   if (isObject(room.exit)) {
     checkEnum(room.exit.policy, EXIT_POLICIES, `${path}.exit.policy`, errors);
@@ -144,11 +171,6 @@ function checkRoom(roomId, room, errors, warnings) {
       && (typeof room.exit.graceMs !== 'number' || room.exit.graceMs < 0)) {
       errors.push(`${path}.exit.graceMs must be a non-negative number`);
     }
-    if (room.exit.graceMs != null && room.exit.policy === 'resetImmediate') {
-      warnings.push(`${path}.exit.graceMs is ignored when policy is resetImmediate`);
-    }
-    // A room can only be resumed if its machine says how, and a room that
-    // promises resumption but cannot deliver it would silently reset instead.
     if (room.exit.resumeIfReturned === true
       && isObject(room.machine?.states?.settling)
       && !handlesEvent(room.machine.states.settling, 'RESUME')) {
@@ -156,20 +178,11 @@ function checkRoom(roomId, room, errors, warnings) {
         `${path}.machine.states.settling must handle "RESUME" — exit.resumeIfReturned is true`,
       );
     }
-    if (room.exit.policy === 'hold' && room.exit.resumeIfReturned === true) {
-      warnings.push(`${path}.exit.resumeIfReturned has no effect with policy "hold" — a held room never enters settling`);
-    }
   }
 
   if (isObject(room.whenAvailable)) {
     checkEnum(room.whenAvailable.policy, WHEN_AVAILABLE_POLICIES,
       `${path}.whenAvailable.policy`, errors);
-    // A room that replays for whoever is inside, whose content ends by itself,
-    // and which resets with no grace, will cycle for as long as anyone stands
-    // in it. That is a legitimate ambient room — but it should be on purpose.
-    if (room.whenAvailable.policy === 'activate' && room.exit?.policy === 'resetImmediate') {
-      warnings.push(`${path}.whenAvailable "activate" with exit "resetImmediate" will replay continuously while occupied`);
-    }
   }
 
   if (isObject(room.audio)) {
@@ -183,6 +196,40 @@ function checkRoom(roomId, room, errors, warnings) {
   }
 
   checkRevisitVariants(roomId, room, errors);
+}
+
+/**
+ * Adjacency is truth about the building: which spaces physically connect.
+ *
+ * It does not gate movement — a guest can turn up anywhere, whether from a bad
+ * beacon read or an operator dragging a dot, and the guest machine always has
+ * somewhere to put them. What adjacency buys is the ability to *notice*: a move
+ * between rooms that do not connect is either a test or a location fault, and
+ * either way is worth flagging.
+ */
+function checkAdjacency(rooms, errors, warnings) {
+  const ids = Object.keys(rooms);
+  for (const [roomId, room] of Object.entries(rooms)) {
+    const path = `rooms.${roomId}.adjacent`;
+    if (room.adjacent == null) {
+      warnings.push(`${path} is not declared — movement to and from it cannot be checked`);
+      continue;
+    }
+    if (!Array.isArray(room.adjacent)) {
+      errors.push(`${path} must be an array of room ids`);
+      continue;
+    }
+    for (const other of room.adjacent) {
+      if (!ids.includes(other)) {
+        errors.push(`${path} references unknown room "${other}"`);
+      } else if (other === roomId) {
+        errors.push(`${path} lists itself`);
+      } else if (!rooms[other]?.adjacent?.includes(roomId)) {
+        // A door leads both ways. A one-sided declaration is a typo.
+        errors.push(`${path} lists "${other}", but rooms.${other}.adjacent omits "${roomId}"`);
+      }
+    }
+  }
 }
 
 /**
@@ -228,116 +275,58 @@ function checkFloorPlan(floorplan, errors, warnings) {
   }
 }
 
-function checkPaths(paths, roomIds, errors, warnings) {
+/**
+ * Paths are a library of named routes, referenced by the guest machine when it
+ * assigns one. They are data, never structure — which is what lets a route be
+ * assigned at the moment a guest reaches the museum rather than at the door,
+ * and lets one authored machine serve every guest.
+ */
+function checkPaths(paths, rooms, errors, warnings) {
+  if (paths == null) return;
   if (!isObject(paths)) {
-    errors.push('paths must be an object');
+    errors.push('paths must be an object of named routes');
     return;
   }
-  const assignment = paths.assignment;
-  if (!isObject(assignment)) {
-    errors.push('paths.assignment must be an object');
-  } else if (!PATH_ASSIGNMENT_STRATEGIES.includes(assignment.strategy)) {
-    errors.push(`paths.assignment.strategy must be one of: ${PATH_ASSIGNMENT_STRATEGIES.join(', ')}`);
-  }
-  const definitions = paths.definitions;
-  if (!isObject(definitions) || !Object.keys(definitions).length) {
-    errors.push('paths.definitions must be a non-empty object');
-    return;
-  }
-  for (const [pathId, def] of Object.entries(definitions)) {
-    if (!Array.isArray(def.rooms) || !def.rooms.length) {
-      errors.push(`paths.definitions.${pathId}.rooms must be a non-empty array`);
-      continue;
-    }
-    for (const rid of def.rooms) {
-      if (!roomIds.includes(rid)) {
-        errors.push(`paths.definitions.${pathId} references unknown room "${rid}"`);
-      }
-    }
-    checkEnum(def.guidance, GUIDANCE_POLICIES, `paths.definitions.${pathId}.guidance`, errors);
-    if (def.guidance === 'goldenPath' && def.rooms.length < 2) {
-      warnings.push(`paths.definitions.${pathId} uses goldenPath with fewer than two rooms — order is moot`);
-    }
-  }
-
-  const covered = new Set(Object.values(definitions).flatMap((d) => d.rooms ?? []));
-  for (const roomId of roomIds) {
-    if (!covered.has(roomId)) {
-      warnings.push(`rooms.${roomId} is on no path — only reachable while cursed or by operator`);
-    }
-  }
-}
-
-function checkPhases(phases, roomIds, errors, warnings) {
-  if (!Array.isArray(phases) || !phases.length) {
-    errors.push('phases must be a non-empty array');
-    return;
-  }
-  for (const [i, phase] of phases.entries()) {
-    const path = `phases[${i}]`;
-    if (!isObject(phase)) {
+  for (const [pathId, def] of Object.entries(paths)) {
+    const path = `paths.${pathId}`;
+    if (!isObject(def)) {
       errors.push(`${path} must be an object`);
       continue;
     }
-    requireString(phase, 'id', path, errors);
-    checkEnum(phase.mode, PHASE_MODES, `${path}.mode`, errors);
-    if (phase.mode === 'directed' && !phase.target) {
-      errors.push(`${path}.target is required for directed phases`);
+    if (!Array.isArray(def.rooms) || !def.rooms.length) {
+      errors.push(`${path}.rooms must be a non-empty array`);
+      continue;
     }
-    if (phase.target && !roomIds.includes(phase.target)) {
-      warnings.push(`${path}.target "${phase.target}" is not a room`);
-    }
-    // Whether a phase advances per guest or for the whole show is a per-show,
-    // per-test decision, so it is declared rather than inferred.
-    if (phase.advanceWhen != null) {
-      if (!isObject(phase.advanceWhen)) {
-        errors.push(`${path}.advanceWhen must be an object`);
-      } else {
-        checkEnum(phase.advanceWhen.scope, ADVANCE_SCOPES, `${path}.advanceWhen.scope`, errors);
-        if (phase.advanceWhen.scope == null) {
-          errors.push(`${path}.advanceWhen.scope is required (${ADVANCE_SCOPES.join(' | ')})`);
-        }
-        if (phase.advanceWhen.entered && !roomIds.includes(phase.advanceWhen.entered)) {
-          warnings.push(`${path}.advanceWhen.entered "${phase.advanceWhen.entered}" is not a room`);
-        }
+    for (const roomId of def.rooms) {
+      if (!(roomId in rooms)) {
+        errors.push(`${path} references unknown room "${roomId}"`);
+      } else if ((rooms[roomId].kind ?? 'destination') === 'hallway') {
+        // A route is a list of places to send someone, not the corridors between.
+        errors.push(`${path} includes "${roomId}", which is a hallway`);
       }
-    } else if (i < phases.length - 1) {
-      warnings.push(`${path} has no advanceWhen — only the operator can move guests on`);
     }
+    checkEnum(def.guidance, GUIDANCE_POLICIES, `${path}.guidance`, errors);
   }
-  const ids = phases.map((p) => p?.id).filter(Boolean);
-  if (new Set(ids).size !== ids.length) errors.push('phases[].id must be unique');
 }
 
 /**
  * The guest block.
  *
- * `machine` is deliberately optional. A statechart earns its place when there
- * are modes that reinterpret the same input — phases and adherence, which
- * arrive later. Where a guest *is* is a variable, not a state, and lives on the
- * Guest record instead.
+ * The author writes the *journey* — `guidance`, and `adherence` if they want to
+ * change it. The `location` region is generated from room adjacency rather than
+ * authored, because it is a map of the building and writing it twice would let
+ * the two drift.
  */
-function checkGuest(guest, errors, warnings) {
+function checkGuest(guest, rooms, errors, warnings) {
   if (!isObject(guest)) {
     errors.push('guest must be an object');
     return;
   }
-  if (guest.machine != null) {
-    if (!isObject(guest.machine)) {
-      errors.push('guest.machine must be an object');
-    } else if (typeof guest.machine.initial !== 'string'
-      || !isObject(guest.machine.states)
-      || !Object.keys(guest.machine.states).length) {
-      errors.push('guest.machine needs an initial state and a non-empty states map');
-    }
-  }
+
   if (isObject(guest.eligibility)) {
     for (const [key, cfg] of Object.entries(guest.eligibility)) {
       const path = `guest.eligibility.${key}.strategy`;
       checkEnum(cfg?.strategy, ELIGIBILITY_STRATEGIES, path, errors);
-      // A strategy the contract names but this build cannot evaluate is a load
-      // error, not a warning: an eligibility predicate quietly returning the
-      // wrong answer locks guests out of every room, and reads as a location bug.
       if (cfg?.strategy
         && ELIGIBILITY_STRATEGIES.includes(cfg.strategy)
         && !IMPLEMENTED_ELIGIBILITY_STRATEGIES.includes(cfg.strategy)) {
@@ -349,6 +338,101 @@ function checkGuest(guest, errors, warnings) {
     }
     if (!guest.eligibility.golden) {
       warnings.push('guest.eligibility.golden is not defined — guests default to goldenPath');
+    }
+  }
+
+  checkGuestMachine(guest.machine, rooms, errors, warnings);
+  checkGuestTimers(guest.timers, guest.machine, errors, warnings);
+}
+
+function checkGuestMachine(machine, rooms, errors, warnings) {
+  if (machine == null) {
+    warnings.push('guest.machine is not declared — guests will have a location region only');
+    return;
+  }
+  if (!isObject(machine)) {
+    errors.push('guest.machine must be an object');
+    return;
+  }
+  if (machine.location != null) {
+    errors.push('guest.machine.location is generated from room adjacency — remove it');
+  }
+  for (const region of Object.keys(machine)) {
+    if (!AUTHORED_GUEST_REGIONS.includes(region)) {
+      errors.push(
+        `guest.machine.${region} is not an authorable region `
+        + `(${AUTHORED_GUEST_REGIONS.join(', ')})`,
+      );
+    }
+  }
+  for (const region of AUTHORED_GUEST_REGIONS) {
+    const node = machine[region];
+    if (node == null) continue;
+    if (!isObject(node?.states) || !Object.keys(node.states).length) {
+      errors.push(`guest.machine.${region}.states must be a non-empty object`);
+      continue;
+    }
+    if (typeof node.initial !== 'string' || !isObject(node.states[node.initial])) {
+      errors.push(`guest.machine.${region}.initial must name one of its own states`);
+    }
+    checkRegionRefs(region, node, rooms, errors, warnings);
+  }
+}
+
+/** Room-entry transitions and path assignments must name things that exist. */
+function checkRegionRefs(region, node, rooms, errors, warnings) {
+  const roomIds = Object.keys(rooms);
+  for (const [stateId, state] of Object.entries(node.states)) {
+    const path = `guest.machine.${region}.states.${stateId}`;
+    for (const event of Object.keys(state?.on ?? {})) {
+      if (!event.startsWith('entered.')) continue;
+      const roomId = event.slice('entered.'.length);
+      if (roomId !== '*' && !roomIds.includes(roomId)) {
+        errors.push(`${path}.on["${event}"] names unknown room "${roomId}"`);
+      }
+    }
+    for (const action of [].concat(state?.entry ?? [])) {
+      if (action?.type !== 'assignPath') continue;
+      if (!Array.isArray(action.from) || !action.from.length) {
+        errors.push(`${path} assignPath needs a non-empty "from" list of path ids`);
+      }
+      checkEnum(action.strategy, PATH_ASSIGNMENT_STRATEGIES, `${path} assignPath.strategy`, errors);
+    }
+  }
+}
+
+/**
+ * Declared timers, for conditions XState's own `after` cannot express.
+ *
+ * `after` measures time since a state was last entered, so a guest who steps
+ * out of the museum and back would restart it. "Thirty minutes in the museum"
+ * has to survive leaving, so the runtime tracks it and delivers an event.
+ */
+function checkGuestTimers(timers, machine, errors, warnings) {
+  if (timers == null) return;
+  if (!isObject(timers)) {
+    errors.push('guest.timers must be an object');
+    return;
+  }
+  for (const [timerId, timer] of Object.entries(timers)) {
+    const path = `guest.timers.${timerId}`;
+    if (!isObject(timer)) {
+      errors.push(`${path} must be an object`);
+      continue;
+    }
+    if (typeof timer.afterMs !== 'number' || timer.afterMs <= 0) {
+      errors.push(`${path}.afterMs must be a positive number`);
+    }
+    if (typeof timer.event !== 'string' || !timer.event.trim()) {
+      errors.push(`${path}.event must name the event to send`);
+    }
+    if (typeof timer.sinceEntering !== 'string') {
+      errors.push(`${path}.sinceEntering must name a state, as "region.state"`);
+      continue;
+    }
+    const [region, stateId] = timer.sinceEntering.split('.');
+    if (!isObject(machine?.[region]?.states?.[stateId])) {
+      errors.push(`${path}.sinceEntering names unknown state "${timer.sinceEntering}"`);
     }
   }
 }
@@ -422,9 +506,12 @@ export function validateShowDefinition(def) {
 
   checkFloorPlan(def.floorplan, errors, warnings);
 
-  checkGuest(def.guest, errors, warnings);
-  checkPaths(def.paths, roomIds, errors, warnings);
-  checkPhases(def.phases, roomIds, errors, warnings);
+  checkAdjacency(def.rooms ?? {}, errors, warnings);
+  checkGuest(def.guest, def.rooms ?? {}, errors, warnings);
+  checkPaths(def.paths, def.rooms ?? {}, errors, warnings);
+  if (def.phases != null) {
+    errors.push('"phases" was replaced by the guidance region of guest.machine');
+  }
   checkAdherence(def.adherence, errors, warnings);
 
   return { errors, warnings };
