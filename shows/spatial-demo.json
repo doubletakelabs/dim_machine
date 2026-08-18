@@ -122,10 +122,17 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "settling",
+              "occupants.2": ".together",
+              "occupants.1": ".main"
             },
             "states": {
               "main": {
+                "on": {
+                  "DONE": "#library.settling"
+                }
+              },
+              "together": {
                 "on": {
                   "DONE": "#library.settling"
                 }
@@ -148,7 +155,7 @@
       },
       "multiGuest": {
         "policy": "collaborative",
-        "maxOccupants": 6,
+        "maxOccupants": 2,
         "atCapacity": "spectator"
       },
       "ineligible": {
@@ -246,9 +253,7 @@
         }
       },
       "multiGuest": {
-        "policy": "spectator",
-        "maxOccupants": 2,
-        "atCapacity": "spectator"
+        "policy": "spectator"
       },
       "ineligible": {
         "policy": "activateVariant"
@@ -329,9 +334,7 @@
         }
       },
       "multiGuest": {
-        "policy": "refuse",
-        "maxOccupants": 1,
-        "atCapacity": "refuse"
+        "policy": "refuse"
       },
       "ineligible": {
         "policy": "lockedMessage",

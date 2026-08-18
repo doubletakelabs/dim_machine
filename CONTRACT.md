@@ -73,9 +73,9 @@ is allowed in — that keeps them portable across shows (spec §3.1).
 | Block | Values | Status |
 |---|---|---|
 | `machine` | §3 | **live** |
-| `multiGuest.policy` | `collaborative` \| `spectator` \| `personalVariant` \| `refuse` | declared |
-| `multiGuest.maxOccupants` | positive integer; caps active participation, separate from the lock | declared |
-| `multiGuest.atCapacity` | `spectator` \| `refuse` \| `personalVariant` | declared |
+| `multiGuest.policy` | `collaborative` \| `spectator` \| `personalVariant` \| `refuse` | **live** |
+| `multiGuest.maxOccupants` | positive integer; caps participation. Only bites under `collaborative` | **live** |
+| `multiGuest.atCapacity` | `spectator` \| `refuse` \| `personalVariant` | **live** |
 | `kind` | `destination` (default) \| `hallway` — see below | **live** |
 | `adjacent` | room ids this one physically connects to; must be declared from both sides | **live** |
 | `ineligible.policy` | `ignore` \| `ambientOnly` \| `lockedMessage` \| `tease` \| `activateVariant` | `activateVariant` **live**, rest declared |
@@ -463,10 +463,55 @@ where).
 | `standing` | Means |
 |---|---|
 | `holder` | The room is running for them — however they came by it |
+| `participant` | A `collaborative` room took them in alongside its holder |
+| `spectator` | In, but watching: the room's company policy, or the overflow past capacity |
+| `personalVariant` | The room is unchanged for them; their phone differs |
 | `available` | Eligible, unheld, and the room would take them |
-| `refused` | Eligible, but it will not — someone holds it, or it is winding down |
+| `refused` | Eligible, but it will not — the room refuses company, or is full, or winding down |
 | `notTheirs` | Not eligible for this room |
 | `passingThrough` | A hallway |
+
+`reason` accompanies the standing where it is not obvious: `refuse` for a room
+that admits no company at all, `atCapacity` for one that is simply full.
+
+### Company and capacity
+
+What an eligible guest gets when a room is already running for somebody is the
+room's own business:
+
+| `policy` | Company gets |
+|---|---|
+| `collaborative` | `participant`, up to `maxOccupants`; beyond that, `atCapacity` |
+| `spectator` | `spectator` — in, but not participating |
+| `personalVariant` | `personalVariant` — the room is untouched, their phone differs |
+| `refuse` | `refused` |
+
+**Capacity counts the guests a room is running for, not the bodies in it.**
+Somebody standing in a room that is not theirs got its ineligible response and
+the room never changed for them, so they occupy no slot.
+
+**It only bites under `collaborative`.** The other policies admit no
+participants, so a cap there would be a limit that never applies — the validator
+warns about it.
+
+Standing is **derived from arrival order**, not from a membership list. So when
+a participant leaves, whoever was waiting past the cap is promoted with nothing
+tracking it — and the ordering is the same one lock succession and
+`whenAvailable` use.
+
+### Telling a room how many it is running for
+
+```jsonc
+"active": {
+  "on": { "occupants.2": ".together", "occupants.1": ".main" }
+}
+```
+
+A room may want a beat that only exists with company (spec §3.4). The count
+arrives as `occupants.<n>`, dotted like `entered.*`, so a room declares
+transitions for the counts it cares about rather than needing a guard to compare
+a number — which show JSON has no way to express. Sent only when the count
+changes, and only to a room that is running.
 
 **Derived, not recorded.** An earlier version stored the outcome at entry and
 went stale whenever the room changed underneath somebody — reading `refused` for

@@ -204,7 +204,7 @@ describe('A3 — walking into rooms', () => {
     assert.equal(guestOf(rt, a.token).currentRoom.standing, 'holder');
   });
 
-  it('a second eligible guest is refused while the first holds the room', () => {
+  it('a second eligible guest joins a collaborative room rather than being turned away', () => {
     const rt = makeRuntime();
     const a = spawnOnPath(rt, 'pathA');
     const b = spawnOnPath(rt, 'pathB');   // library is on both paths
@@ -213,11 +213,8 @@ describe('A3 — walking into rooms', () => {
     assert.equal(roomOf(rt, 'library').lockHolder, a.guestId);
 
     walkTo(rt, b.guestId, AT.library);
-    assert.equal(guestOf(rt, b.token).currentRoom.standing, 'refused');
-    const event = rt.eventLog.filter((e) => e.type === 'guest.activationRefused').at(-1);
-    assert.equal(event.reason, 'locked');
-    // A5 turns this policy into behavior; A3 only has to surface the decision.
-    assert.equal(event.multiGuestPolicy, 'collaborative');
+    assert.equal(guestOf(rt, b.token).currentRoom.standing, 'participant');
+    // One room, one holder — joining is not holding.
     assert.equal(roomOf(rt, 'library').lockHolder, a.guestId);
   });
 
@@ -271,7 +268,7 @@ describe('A3 — walking into rooms', () => {
     walkTo(rt, a.guestId, AT.library);
     rt.testAdvanceTime(50);
     walkTo(rt, b.guestId, AT.library);
-    assert.equal(guestOf(rt, b.token).currentRoom.standing, 'refused');
+    assert.equal(guestOf(rt, b.token).currentRoom.standing, 'participant');
 
     walkTo(rt, a.guestId, AT.corridor, 900);
 
@@ -329,7 +326,8 @@ describe('A3 — walking into rooms', () => {
       walkTo(rt, holder.guestId, AT.greenhouse);
       rt.testAdvanceTime(50);
       walkTo(rt, waiting.guestId, AT.greenhouse);
-      assert.equal(guestOf(rt, waiting.token).currentRoom.standing, 'refused');
+      // The greenhouse takes company as spectators.
+      assert.equal(guestOf(rt, waiting.token).currentRoom.standing, 'spectator');
       return { holder, waiting };
     }
 
@@ -371,7 +369,7 @@ describe('A3 — walking into rooms', () => {
       assert.equal(roomOf(rt, 'greenhouse').lockHolder, first.guestId);
       // The second guest is still an unsatisfied secondary occupant — that is
       // A5's multiGuest problem, not this one's.
-      assert.equal(guestOf(rt, second.token).currentRoom.standing, 'refused');
+      assert.equal(guestOf(rt, second.token).currentRoom.standing, 'spectator');
     });
 
     it('does not offer the room to an ineligible occupant', () => {

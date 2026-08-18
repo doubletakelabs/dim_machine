@@ -76,6 +76,15 @@ export const OFF_PATH_ACTIVATION_EVENT = 'ACTIVATE_OFFPATH';
 export const enteredEvent = (roomId) => `entered.${roomId}`;
 
 /**
+ * How many guests a room is currently running for, as the room machine hears it.
+ *
+ * Dotted for the same reason as `entered.*`: a room declares transitions for the
+ * counts it cares about — `occupants.2` to open a collaborative sub-state,
+ * `occupants.1` to close it again — without needing a guard to compare numbers.
+ */
+export const occupantsEvent = (count) => `occupants.${count}`;
+
+/**
  * Parallel regions of the guest machine.
  *
  * `location` mirrors the coordinator and is generated from room adjacency —

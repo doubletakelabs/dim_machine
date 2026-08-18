@@ -145,6 +145,15 @@ function checkRoom(roomId, room, errors, warnings) {
     if (multiGuest.maxOccupants != null && multiGuest.atCapacity == null) {
       warnings.push(`${path}.multiGuest sets maxOccupants without atCapacity — arrivals at capacity are undefined`);
     }
+    // Capacity only bites where guests participate. Under `spectator` or
+    // `personalVariant` company is already not participating, and under
+    // `refuse` none arrives, so a cap there reads as a limit that never applies.
+    if (multiGuest.maxOccupants != null && multiGuest.policy && multiGuest.policy !== 'collaborative') {
+      warnings.push(
+        `${path}.multiGuest.maxOccupants has no effect with policy "${multiGuest.policy}" `
+        + '— capacity caps participation, and this policy admits no participants',
+      );
+    }
   }
 
   checkEnum(room.ineligible?.policy, INELIGIBLE_POLICIES, `${path}.ineligible.policy`, errors);

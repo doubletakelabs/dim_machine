@@ -140,6 +140,14 @@ ineligible entry normally leaves the room **completely untouched** — unless th
 room declares `activateVariant`, in which case it runs its variant and the guest
 holds it.
 
+**Company and capacity (A5):** what an eligible guest gets when a room is already
+running for someone is the room's `multiGuest.policy` — `collaborative` takes
+them in as a participant up to `maxOccupants`, `spectator` and `personalVariant`
+admit them without participation, `refuse` turns them away. Capacity counts the
+guests a room is *running for*, not the bodies in it, and standing is derived
+from arrival order — so a participant leaving promotes whoever was waiting, with
+nothing tracking it. Rooms hear `occupants.<n>` when the count changes.
+
 **Journey (A6):** `location` follows the coordinator exactly, including moves
 that could not physically have happened; `guidance` advances on room entry and
 on declared timers; `adherence` flips one-way when a guest enters a routed room

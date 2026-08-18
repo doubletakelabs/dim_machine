@@ -557,6 +557,9 @@ function centroidOf(polygon) {
 function standingColour(current) {
   switch (current?.standing) {
     case 'holder': return '#58c98a';
+    case 'participant': return '#7fd6a8';
+    case 'spectator': return '#8ea2c0';
+    case 'personalVariant': return '#c58ae0';
     case 'available': return '#6ea8fe';
     case 'notTheirs': return '#e0a758';
     case 'refused': return '#e0685f';
@@ -567,6 +570,9 @@ function standingColour(current) {
 
 const STANDING_LABEL = {
   holder: 'theirs',
+  participant: 'joined in',
+  spectator: 'watching',
+  personalVariant: 'own version',
   available: 'open to them',
   refused: 'refused',
   notTheirs: 'not theirs',
@@ -575,7 +581,8 @@ const STANDING_LABEL = {
 
 function describeStanding(current) {
   if (!current) return 'not in a room';
-  return `${current.roomId}: ${STANDING_LABEL[current.standing] ?? current.standing}`;
+  const why = current.reason === 'atCapacity' ? ' (full)' : '';
+  return `${current.roomId}: ${STANDING_LABEL[current.standing] ?? current.standing}${why}`;
 }
 
 /**
@@ -712,9 +719,13 @@ function renderInspector() {
         <dt>Reset in</dt><dd>${room.resetInMs != null ? `${Math.ceil(room.resetInMs / 1000)}s` : '—'}</dd>
         <dt>Lock</dt><dd>${guestChip(room.lockHolder)}</dd>
         <dt>Last holder</dt><dd>${room.lastHolder ? guestChip(room.lastHolder) : '—'}</dd>
+        <dt>Company</dt><dd>${room.multiGuestPolicy ?? '—'}${
+          room.capacity != null ? ` <span class="muted">· max ${room.capacity}</span>` : ''}</dd>
         <dt>Inside</dt><dd>${room.occupants?.map(guestChip).join('<br>') || '—'}</dd>
         <dt>Running for</dt><dd>${room.eligibleOccupants?.length
           ? room.eligibleOccupants.map(guestChip).join('<br>')
+            + (room.capacity != null && room.eligibleOccupants.length > room.capacity
+              ? ` <span style="color:var(--warn)">· over capacity</span>` : '')
           : '<span class="muted">nobody</span>'}</dd>
         <dt>Last refusal</dt><dd>${room.lastRefuse
           ? `${guestName(room.lastRefuse.guestId)} — ${room.lastRefuse.reason}` : '—'}</dd>

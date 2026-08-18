@@ -1,6 +1,6 @@
 import { createMachine, createActor } from 'xstate';
 import { systemClock } from './clock.js';
-import { REVISIT_EVENTS, OFF_PATH_ACTIVATION_EVENT } from './contract.js';
+import { REVISIT_EVENTS, OFF_PATH_ACTIVATION_EVENT, occupantsEvent } from './contract.js';
 import { roomCentroid } from './zone-math.js';
 
 /**
@@ -105,6 +105,8 @@ export class RoomActor {
     this._resetDueAt = null;
     /** Who held the lock when this room last emptied — the only guest it will resume for. */
     this.lastHolder = null;
+    /** Last occupant count announced to the machine, so it is only told on change. */
+    this._announcedOccupants = null;
   }
 
   /** What to do when this room frees up with someone already inside (§3.5). */
@@ -181,6 +183,7 @@ export class RoomActor {
     this.state = 'idle';
     this.lastRefuse = null;
     this.lastHolder = null;
+    this._announcedOccupants = null;
   }
 
   /**
@@ -285,6 +288,7 @@ export class RoomActor {
       && event.previousRoomId !== this.roomId;
     if (left) this.handleDeparture(event.guestId);
     if (arrived) this.handleArrival(event.guestId);
+    this.announceOccupants();
     this.onStateChange();
   }
 
@@ -299,7 +303,28 @@ export class RoomActor {
   holderCandidates(excludeGuestId = null) {
     return this.coordinator
       .getRoomOccupants(this.roomId)
-      .filter((o) => o.guestId !== excludeGuestId && this.eligibleToHold(o.guestId));
+      .filter((o) => o.guestId !== excludeGuestId && this.eligibleToHold(o.guestId))
+      // Arrival order. Capacity rank, lock succession and `whenAvailable` all
+      // read this, so they answer "who was here first" the same way.
+      .sort((a, b) => (a.sinceTs ?? 0) - (b.sinceTs ?? 0));
+  }
+
+  /**
+   * Tell the machine how many guests it is running for, when that changes.
+   *
+   * A room may want to open a collaborative beat on the second arrival and
+   * close it again when they are alone — spec §3.4. Sent as `occupants.<n>` so
+   * a room declares transitions for the counts it cares about, rather than
+   * needing a guard to compare a number, which show JSON has no way to express.
+   *
+   * Counts the guests the room is running for, not the bodies in the space.
+   */
+  announceOccupants() {
+    if (!this.actor || this.kind === 'hallway') return;
+    const count = requiresLock(this.presentationRoot()) ? this.holderCandidates().length : 0;
+    if (count === this._announcedOccupants) return;
+    this._announcedOccupants = count;
+    this.actor.send({ type: occupantsEvent(count), count });
   }
 
   handleDeparture(guestId) {
@@ -423,6 +448,7 @@ export class RoomActor {
     // is no longer the previous holder's to resume.
     const interrupted = ACTIVATABLE.has(root) && root === 'settling';
     this.lastHolder = null;
+    this.announceOccupants();
     this.appendEvent({
       type: 'room.activated',
       roomId: this.roomId,
@@ -540,6 +566,8 @@ export class RoomActor {
       state: this.state,
       kind: this.kind,
       acceptsActivation: this.acceptsActivation(),
+      capacity: this.def.multiGuest?.maxOccupants ?? null,
+      multiGuestPolicy: this.def.multiGuest?.policy ?? null,
       lockHolder: lock?.guestId ?? null,
       lastHolder: this.lastHolder,
       // Everyone physically inside, and the subset the room is actually running

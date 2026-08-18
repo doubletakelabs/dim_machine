@@ -169,11 +169,45 @@ export class GuestActor {
     const room = this.roomSnapshot(roomId);
     if (room?.lockHolder === this.guestId) return { roomId, standing: 'holder' };
     if (!this.isEligible(roomId)) return { roomId, standing: 'notTheirs' };
+
     // Eligible and unheld — but "available" has to mean the room would
     // actually take them. One left running by a raw operator ACTIVATE belongs
     // to nobody and still refuses, and so does one winding down that declares
     // no way back in.
-    return { roomId, standing: room?.acceptsActivation ? 'available' : 'refused' };
+    if (!room?.lockHolder) {
+      return { roomId, standing: room?.acceptsActivation ? 'available' : 'refused' };
+    }
+
+    // Running for somebody else. What this guest gets is the room's own
+    // multi-guest policy — the room decides how it handles company.
+    return { roomId, ...this.companyStanding(roomId, room) };
+  }
+
+  /**
+   * What an eligible guest gets when the room is already running for another.
+   *
+   * Derived from arrival order rather than a membership list, so it cannot go
+   * stale and so "who is inside first" is answered the same way capacity, lock
+   * succession and `whenAvailable` answer it.
+   */
+  companyStanding(roomId, room) {
+    const multiGuest = this.show.rooms?.[roomId]?.multiGuest ?? {};
+    const policy = multiGuest.policy ?? 'refuse';
+    if (policy === 'refuse') return { standing: 'refused', reason: 'refuse' };
+    if (policy === 'spectator') return { standing: 'spectator' };
+    if (policy === 'personalVariant') return { standing: 'personalVariant' };
+
+    // Collaborative: capacity is what decides, and it counts the people the
+    // room is running for — the holder and the participants — not the bodies
+    // in the space. Somebody standing in a room that is not theirs took no slot.
+    const max = multiGuest.maxOccupants ?? Infinity;
+    const rank = (room.eligibleOccupants ?? []).indexOf(this.guestId);
+    if (rank >= 0 && rank < max) return { standing: 'participant' };
+
+    const atCapacity = multiGuest.atCapacity ?? 'refuse';
+    if (atCapacity === 'spectator') return { standing: 'spectator', reason: 'atCapacity' };
+    if (atCapacity === 'personalVariant') return { standing: 'personalVariant', reason: 'atCapacity' };
+    return { standing: 'refused', reason: 'atCapacity' };
   }
 
   ineligibleResponse(roomId) {
