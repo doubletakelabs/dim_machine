@@ -98,6 +98,9 @@ it. If you do want the demo itself snappier, `location.entryConfirmMs` in
   Phase B schedules real audio against a shared clock.
 - **Room overrides** — force `ACTIVATE` / `RELEASE` / `RESET` / `DONE`, release a lock.
 
+Open decisions, declared-but-unused config, and known warts are tracked in
+[`TECH-DEBT.md`](TECH-DEBT.md).
+
 ## Show definitions
 
 Contract **v3 only** (`contractVersion: 3`) — see `CONTRACT.md`. v1/v2 workshop
