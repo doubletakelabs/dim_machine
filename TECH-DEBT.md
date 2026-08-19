@@ -59,7 +59,8 @@ having derived standing in the first place.
 
 | Item | Notes |
 |---|---|
-| **Phone experience beyond audio** | The thin audio layer connects room and guest state to phones (CONTRACT.md §8.1). Pages, video, haptics and `setVar` are still v0.2 surfaces nothing drives — a phone shows `waiting` for the entire show while the audio works. |
+| **Phone experience beyond audio** | The thin audio layer connects room and guest state to phones (CONTRACT.md §8.1), and the status line now tracks room + standing live. Pages, video, haptics and `setVar` are still v0.2 surfaces nothing drives — a phone shows `waiting` for the entire show while the audio works. |
+| **`server/index.js` has no tests** | The WS command surface, session handling, and phone push are verified by hand against a live server. Two bugs have now hidden there (the relay rename, the unsent `state` message) and both needed a real socket to surface. A harness that boots the server on an ephemeral port and drives it over `ws` would have caught both. |
 | **Zone drawing** | 23 spaces of hand-authored polygons, all currently invented. `floorplan.image` exists so zones can be traced over a real plan; the tool does not. Has a deadline attached to it that the other items do not — venue access. |
 | **Scripted walkthrough replay** | Spec §5.4. Record the `setVirtualPosition` stream, replay against a `ManualClock`. Both the clock and the event log were built for it. This is the regression story for the behavioural matrix. |
 | **Lock-specific disconnect grace** | Spec §11 wants a lock held briefly when a holder's socket drops. `contactLossMs` covers the coordinator's side; the lock has no separate window. |

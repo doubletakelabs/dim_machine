@@ -211,6 +211,7 @@ function scheduleRoster() {
 }
 
 function sendRoster() {
+  pushPhoneStates();
   const now = Date.now();
   const rosterUsers = [];
   for (const [token, u] of users.entries()) {
@@ -247,15 +248,42 @@ function label(token) {
   return users.get(token)?.label ?? '?';
 }
 
+/**
+ * Where the runtime thinks this guest is, as one line.
+ *
+ * A phone in a pocket during a walkthrough is hard to read; naming its guest's
+ * room and standing turns the handset into its own probe.
+ */
+function phoneState(token) {
+  const guest = runtime.getGuestByToken(token);
+  const here = guest ? runtime.guestActors.get(guest.guestId)?.currentRoom() : null;
+  return here ? `${here.roomId} · ${here.standing}` : 'outside';
+}
+
+/**
+ * Push that line whenever it changes. The client has always handled a `state`
+ * message; nothing ever sent one, so the readout was fixed at whatever was true
+ * when the phone connected and only moved on refresh.
+ */
+const lastPhoneState = new Map();
+function pushPhoneStates() {
+  for (const [token, u] of users.entries()) {
+    if (!u.ws) continue;
+    const next = phoneState(token);
+    if (lastPhoneState.get(token) === next) continue;
+    lastPhoneState.set(token, next);
+    sendToUser(token, { type: 'state', state: next });
+  }
+  for (const token of lastPhoneState.keys()) {
+    if (!users.has(token)) lastPhoneState.delete(token);
+  }
+}
+
 function phoneSnapshot(token) {
   const guest = runtime.getGuestByToken(token);
-  const actor = guest ? runtime.guestActors.get(guest.guestId) : null;
-  const here = actor?.currentRoom() ?? null;
   return {
     serverTime: Date.now(),
-    // A phone in a pocket during a walkthrough is hard to read. Naming where
-    // the runtime thinks this guest is turns the handset into its own probe.
-    state: here ? `${here.roomId} · ${here.standing}` : 'outside',
+    state: phoneState(token),
     spatial: guest
       ? {
           pathId: guest.pathId,
