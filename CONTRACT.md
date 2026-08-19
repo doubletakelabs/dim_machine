@@ -76,7 +76,7 @@ is allowed in — that keeps them portable across shows (spec §3.1).
 | `multiGuest.policy` | `collaborative` \| `spectator` \| `personalVariant` \| `refuse` | **live** |
 | `multiGuest.maxOccupants` | positive integer; caps participation. Only bites under `collaborative` | **live** |
 | `multiGuest.atCapacity` | `spectator` \| `refuse` \| `personalVariant` | **live** |
-| `kind` | `destination` (default) \| `hallway` — see below | **live** |
+| `kind` | `destination` (default) \| `shared` \| `hallway` — see below | **live** |
 | `adjacent` | room ids this one physically connects to; must be declared from both sides | **live** |
 | `ineligible.policy` | `ignore` \| `ambientOnly` \| `lockedMessage` \| `tease` \| `activateVariant` | `activateVariant` **live**, rest declared |
 | `exit.policy` | `resetAfter` (default, `graceMs` 10000) \| `finish` \| `hold` \| `resetImmediate` | **live** |
@@ -103,6 +103,26 @@ requires the canonical presentation vocabulary, because room actors send these
 events and read these states by name. A machine that omits any of it produces a
 room that silently never moves, so **it is a load error, not a runtime
 surprise.**
+
+### Kinds — who the room runs for
+
+| Kind | Runs for | Holder | Company | Revisit variant |
+|---|---|---|---|---|
+| `destination` | a person | yes | `multiGuest` policy | keyed on the holder |
+| `shared` | the space | **none** | everyone is `present` | **not allowed** |
+| `hallway` | nobody | none | n/a | n/a |
+
+A **`shared`** room plays when the first eligible guest arrives, and everyone
+inside gets the same thing. Nobody holds it, because there is nothing to
+arbitrate. That is also why it can have no revisit variant: with a holder, a
+veteran arriving a second before a newcomer would choose the abbreviated version
+for a room the newcomer has never seen — the same argument that rejected
+room-side memory of having run before. The validator rejects `revisit`,
+`multiGuest` and `activateVariant` on a shared room rather than letting a show
+promise something it cannot keep.
+
+Exit policy still applies: a shared room winds down when it is running for
+nobody, which never required it to have had a holder.
 
 ### Hallways
 
@@ -463,6 +483,7 @@ where).
 | `standing` | Means |
 |---|---|
 | `holder` | The room is running for them — however they came by it |
+| `present` | In a `shared` room, which runs for the space and has no holder |
 | `participant` | A `collaborative` room took them in alongside its holder |
 | `spectator` | In, but watching: the room's company policy, or the overflow past capacity |
 | `personalVariant` | The room is unchanged for them; their phone differs |

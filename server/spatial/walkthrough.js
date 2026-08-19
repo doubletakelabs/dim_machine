@@ -160,14 +160,33 @@ export class WalkthroughDriver {
    */
   chooseTarget(guest) {
     const actor = this.runtime.guestActors.get(guest.guestId);
-    const eligible = actor ? actor.eligibleRoomIds() : Object.keys(this.runtime.def?.rooms ?? {});
-    const unseen = eligible.filter((roomId) => !guest.history(roomId).seen);
-    const candidates = unseen.length ? unseen : eligible;
-    const roomId = candidates.find((id) => id !== guest.roomId) ?? candidates[0];
+
+    // Follow the show where it is leading: while a path is assigned, guidance
+    // names the room to head for, and walking anywhere else would make the
+    // simulation contradict the thing it is supposed to be exercising.
+    const guided = actor?.guidanceTarget();
+    const roomId = guided && guided !== guest.roomId
+      ? guided
+      : this.nextUnseen(guest, actor);
+
     if (!roomId) return null;
     // Each guest gets their own spot in the room, so a crowd reads as a crowd.
     const point = this.runtime.standingSpot(roomId, guest.guestId);
     return point ? { roomId, point } : null;
+  }
+
+  /**
+   * Somewhere they have not been, or nowhere.
+   *
+   * Deliberately no fallback to rooms they have already seen. There used to be
+   * one, and a guest who had seen everything ping-ponged between the first two
+   * rooms in the show's declaration order for the rest of the night — the list
+   * is ordered, so "the first eligible room that is not this one" oscillates
+   * between exactly two. Having finished is a legitimate end state.
+   */
+  nextUnseen(guest, actor) {
+    const eligible = actor ? actor.eligibleRoomIds() : Object.keys(this.runtime.def?.rooms ?? {});
+    return eligible.find((roomId) => roomId !== guest.roomId && !guest.history(roomId).seen) ?? null;
   }
 
   startingPoint() {

@@ -366,14 +366,16 @@ export class RoomActor {
       // Let the content play out to its own end in an empty room. The lock is
       // released — nobody is coming back to it — but the machine is left alone
       // until it reaches `settling` by itself, which starts the grace timer.
-      this.coordinator.releaseLock(this.roomId);
-      this.appendEvent({ type: 'room.lockReleased', roomId: this.roomId, guestId: lastGuestId });
+      if (this.coordinator.releaseLock(this.roomId)) {
+        this.appendEvent({ type: 'room.lockReleased', roomId: this.roomId, guestId: lastGuestId });
+      }
       return;
     }
 
     // resetAfter (default) and resetImmediate both go to `settling` now; they
     // differ only in the grace time the settling timer runs for.
-    this.release(null);
+    if (this.coordinator.getLock(this.roomId)) this.release(null);
+    else if (requiresLock(this.presentationRoot())) this.actor.send({ type: 'RELEASE' });
   }
 
   handleArrival(guestId) {
@@ -416,6 +418,7 @@ export class RoomActor {
    */
   requestActivation(guestId, context = {}) {
     if (this.kind === 'hallway') return this.refuse(guestId, 'hallway');
+    if (this.kind === 'shared') return this.enterShared(guestId);
     const root = this.presentationRoot();
     if (!ACTIVATABLE.has(root)) {
       return this.refuse(guestId, this.coordinator.getLock(this.roomId) ? 'locked' : 'busy');
@@ -459,6 +462,26 @@ export class RoomActor {
       interruptedSettling: interrupted,
     });
     return { ok: true, state: this.state, interruptedSettling: interrupted };
+  }
+
+  /**
+   * A shared room plays for whoever is in it, and nobody holds it.
+   *
+   * So arrival is not a request that can be granted or refused — the first
+   * guest starts it and everyone after simply joins something already running.
+   * No lock is taken, which is what stops one guest's history choosing the
+   * room's content for everybody else's.
+   */
+  enterShared(guestId) {
+    if (requiresLock(this.presentationRoot())) {
+      return { ok: true, state: this.state, alreadyRunning: true };
+    }
+    const before = this.state;
+    this.actor.send({ type: 'ACTIVATE', guestId });
+    if (this.state === before) return this.refuse(guestId, 'rejected');
+    this.announceOccupants();
+    this.appendEvent({ type: 'room.activated', roomId: this.roomId, guestId, state: this.state, shared: true });
+    return { ok: true, state: this.state };
   }
 
   /**

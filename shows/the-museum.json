@@ -9,7 +9,7 @@
   "rooms": {
     "frontDesk": {
       "name": "Front Desk",
-      "kind": "destination",
+      "kind": "shared",
       "adjacent": [
         "calibration"
       ],
@@ -67,11 +67,6 @@
           }
         }
       },
-      "multiGuest": {
-        "policy": "collaborative",
-        "maxOccupants": 8,
-        "atCapacity": "spectator"
-      },
       "ineligible": {
         "policy": "ignore"
       },
@@ -88,7 +83,7 @@
     },
     "calibration": {
       "name": "Calibration",
-      "kind": "destination",
+      "kind": "shared",
       "adjacent": [
         "frontDesk",
         "entranceHallway"
@@ -147,11 +142,6 @@
           }
         }
       },
-      "multiGuest": {
-        "policy": "collaborative",
-        "maxOccupants": 8,
-        "atCapacity": "spectator"
-      },
       "ineligible": {
         "policy": "ignore"
       },
@@ -202,7 +192,7 @@
     },
     "maskRoom": {
       "name": "Mask Room",
-      "kind": "destination",
+      "kind": "shared",
       "adjacent": [
         "entranceHallway",
         "hallOfHeroes"
@@ -261,11 +251,6 @@
           }
         }
       },
-      "multiGuest": {
-        "policy": "collaborative",
-        "maxOccupants": 8,
-        "atCapacity": "spectator"
-      },
       "ineligible": {
         "policy": "ignore"
       },
@@ -282,7 +267,7 @@
     },
     "hallOfHeroes": {
       "name": "Hall of Heroes",
-      "kind": "destination",
+      "kind": "shared",
       "adjacent": [
         "maskRoom",
         "cyclorama"
@@ -341,11 +326,6 @@
           }
         }
       },
-      "multiGuest": {
-        "policy": "collaborative",
-        "maxOccupants": 8,
-        "atCapacity": "spectator"
-      },
       "ineligible": {
         "policy": "ignore"
       },
@@ -362,7 +342,7 @@
     },
     "cyclorama": {
       "name": "Cyclorama",
-      "kind": "destination",
+      "kind": "shared",
       "adjacent": [
         "hallOfHeroes",
         "museumHallway"
@@ -420,11 +400,6 @@
             }
           }
         }
-      },
-      "multiGuest": {
-        "policy": "collaborative",
-        "maxOccupants": 8,
-        "atCapacity": "spectator"
       },
       "ineligible": {
         "policy": "ignore"

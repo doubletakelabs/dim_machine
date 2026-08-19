@@ -103,8 +103,10 @@ it. If you do want the demo itself snappier, `location.entryConfirmMs` in
 Contract **v3 only** (`contractVersion: 3`) — see `CONTRACT.md`. v1/v2 workshop
 shows are removed.
 
-Rooms declare their **kind** (`destination` or `hallway`), **adjacency**, and
-**zones**. A destination has a machine with three canonical states — `idle`,
+Rooms declare their **kind**, **adjacency**, and **zones**. The kind says who the
+room runs *for*: a `destination` runs for a person, who holds it; a `shared` room
+runs for the space, with no holder, so everyone inside gets the same thing; a
+`hallway` is somewhere you pass through. A destination has a machine with three canonical states — `idle`,
 `active`, `settling` — handling `ACTIVATE`, `RESET`, and `RELEASE`. A hallway is
 somewhere you pass through: always eligible, never counted as seen, never a
 deviation, and exempt from the activation contract it could never satisfy.

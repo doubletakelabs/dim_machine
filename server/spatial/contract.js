@@ -11,15 +11,24 @@ export const OCCUPANCY_STATES = ['outside', 'inside'];
 export const ROOM_PRESENTATION_STATES = ['idle', 'active', 'settling'];
 
 /**
- * What kind of space a room is.
+ * What kind of space a room is — really, who the room runs *for*.
+ *
+ * A `destination` runs for a person: one guest activates it, it plays the
+ * variant their history calls for, they hold it, and company gets the room's
+ * `multiGuest` policy.
+ *
+ * A `shared` room runs for the space: it plays when the first eligible guest
+ * arrives and everyone inside gets the same thing. Nobody holds it, because
+ * there is nothing to arbitrate — which also means it can have no revisit
+ * variant, since there is no one guest whose history could choose it. A veteran
+ * arriving a second before a newcomer must not decide what the newcomer sees.
  *
  * A `hallway` is somewhere you pass through to reach somewhere else. It is
  * always eligible — you cannot deviate by using the only route between rooms —
- * never counts toward `seen`, is never a deviation, and is exempt from the
- * activation contract it could never satisfy. Guests still occupy it, and it is
- * where guidance speaks.
+ * never counts toward `seen`, and is exempt from the activation contract it
+ * could never satisfy. Guests still occupy it, and it is where guidance speaks.
  */
-export const ROOM_KINDS = ['destination', 'hallway'];
+export const ROOM_KINDS = ['destination', 'shared', 'hallway'];
 
 /**
  * Presentation roots every room machine must declare.

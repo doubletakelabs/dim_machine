@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { SpatialRuntime } from '../runtime.js';
 import { ManualClock } from '../clock.js';
+import { validateShowDefinition } from '../validate.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const demo = JSON.parse(readFileSync(join(root, 'shows/spatial-demo.json'), 'utf8'));
@@ -162,5 +163,55 @@ describe('telling the room how many it is running for', () => {
     // all — and its occupant count never counted them.
     assert.equal(roomOf(rt, 'cellar').lastRefuse, null);
     assert.equal(standing(rt, stray.guestId), 'notTheirs');
+  });
+});
+
+describe('shared rooms', () => {
+  /** A shared space runs for the room, not for a person. */
+  function sharedRuntime() {
+    return makeRuntime((s) => {
+      s.rooms.library.kind = 'shared';
+      delete s.rooms.library.multiGuest;
+      delete s.rooms.library.revisit;
+      delete s.rooms.library.machine.states.idle.on.ACTIVATE_SEEN;
+    });
+  }
+
+  it('plays for whoever is in it, with nobody holding it', () => {
+    const rt = sharedRuntime();
+    const [a, b, c] = fill(rt, 'pathA', AT.library, 3);
+    for (const g of [a, b, c]) assert.equal(standing(rt, g.guestId), 'present');
+    assert.equal(roomOf(rt, 'library').lockHolder, null);
+    assert.match(roomOf(rt, 'library').state, /^active/);
+  });
+
+  it('does not turn anyone away, whatever the numbers', () => {
+    const rt = sharedRuntime();
+    const guests = fill(rt, 'pathA', AT.library, 5);
+    assert.ok(guests.every((g) => standing(rt, g.guestId) === 'present'));
+  });
+
+  it('still winds down when the last of them leaves', () => {
+    // Exit policy is keyed on the room running for nobody, which does not
+    // require it ever to have had a holder.
+    const rt = sharedRuntime();
+    const [a, b] = fill(rt, 'pathA', AT.library, 2);
+    walk(rt, a.guestId, AT.out, 900);
+    rt.testAdvanceTime(200);
+    assert.match(roomOf(rt, 'library').state, /^active/, 'one still inside');
+
+    walk(rt, b.guestId, AT.out, 900);
+    rt.testAdvanceTime(200);
+    assert.equal(roomOf(rt, 'library').state, 'settling');
+    rt.testAdvanceTime(11000);
+    assert.equal(roomOf(rt, 'library').state, 'idle');
+  });
+
+  it('cannot promise things that need a holder', () => {
+    const bad = structuredClone(demo);
+    bad.rooms.library.kind = 'shared';
+    const { errors } = validateShowDefinition(bad);
+    assert.ok(errors.some((e) => e.includes('revisit cannot apply to a shared room')));
+    assert.ok(errors.some((e) => e.includes('multiGuest cannot apply to a shared room')));
   });
 });

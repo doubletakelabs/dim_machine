@@ -169,6 +169,9 @@ export class GuestActor {
     const room = this.roomSnapshot(roomId);
     if (room?.lockHolder === this.guestId) return { roomId, standing: 'holder' };
     if (!this.isEligible(roomId)) return { roomId, standing: 'notTheirs' };
+    // A shared room runs for the space, so everyone eligible stands the same
+    // way in it — there is no holder for anyone to be company to.
+    if ((this.show.rooms?.[roomId]?.kind) === 'shared') return { roomId, standing: 'present' };
 
     // Eligible and unheld — but "available" has to mean the room would
     // actually take them. One left running by a raw operator ACTIVATE belongs

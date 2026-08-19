@@ -110,14 +110,29 @@ describe('the journey', () => {
     assert.equal(actor.guidanceTarget(), path[0]);
   });
 
-  it('everyone shares the prologue — nobody is turned away from it', () => {
+  it('everyone shares the prologue — nobody is turned away, and nobody owns it', () => {
     // No path is assigned yet there, so gating those rooms on path membership
-    // would lock every guest out of the entrance sequence.
+    // would lock every guest out of the entrance sequence. And they run for the
+    // space rather than for a person, so there is no holder at all.
     const rt = makeRuntime();
-    const g = rt.spawnGuest();
-    walk(rt, g.guestId, 'frontDesk');
-    assert.equal(standingOf(rt, g.guestId), 'holder');
-    assert.equal(roomOf(rt, 'frontDesk').lockHolder, g.guestId);
+    const first = rt.spawnGuest();
+    const second = rt.spawnGuest();
+    walk(rt, first.guestId, 'frontDesk');
+    rt.testAdvanceTime(80);
+    walk(rt, second.guestId, 'frontDesk');
+
+    assert.equal(standingOf(rt, first.guestId), 'present');
+    assert.equal(standingOf(rt, second.guestId), 'present');
+    assert.equal(roomOf(rt, 'frontDesk').lockHolder, null);
+    assert.match(roomOf(rt, 'frontDesk').state, /^active/);
+  });
+
+  it('a shared room plays the same thing for whoever walked in second', () => {
+    // The trap this kind exists to close: with a holder, a veteran arriving a
+    // moment earlier would pick the room's content for a newcomer.
+    const rt = makeRuntime();
+    assert.equal(museum.rooms.cyclorama.kind, 'shared');
+    assert.equal(museum.rooms.cyclorama.revisit, undefined);
   });
 
   it('a declared timer survives leaving and re-entering the museum', () => {
@@ -171,9 +186,8 @@ describe('going off-path', () => {
     const g = arriveAtMuseum(rt);
     walk(rt, g.guestId, 'cyclorama');
     assert.equal(regions(rt, g.guestId).adherence, 'onPath');
-    // And it is still their room — they were never turned away from it.
-    assert.equal(standingOf(rt, g.guestId), 'holder');
-    assert.equal(roomOf(rt, 'cyclorama').lockHolder, g.guestId);
+    // And they were never turned away from it — the Cyclorama is shared.
+    assert.equal(standingOf(rt, g.guestId), 'present');
   });
 
   it('a hallway is never a deviation', () => {
@@ -224,35 +238,23 @@ describe('rooms reacting to a guest they were not sent', () => {
 describe('operator activation', () => {
   it('activates for somebody actually standing there', () => {
     const rt = makeRuntime();
-    const g = rt.spawnGuest();
-    walk(rt, g.guestId, 'frontDesk');
-    rt.releaseRoomLock('frontDesk');
+    const g = arriveAtMuseum(rt);
+    const room = museum.paths[rt.guests.get(g.guestId).pathId].rooms[0];
+    walk(rt, g.guestId, room);
+    rt.releaseRoomLock(room);
     rt.testAdvanceTime(11000);
-    assert.equal(roomOf(rt, 'frontDesk').state, 'idle');
+    assert.equal(roomOf(rt, room).state, 'idle');
 
-    const result = rt.activateForOccupant('frontDesk');
+    const result = rt.activateForOccupant(room);
     assert.equal(result.ok, true);
     assert.equal(result.guestId, g.guestId);
-    assert.equal(roomOf(rt, 'frontDesk').lockHolder, g.guestId);
+    assert.equal(roomOf(rt, room).lockHolder, g.guestId);
   });
 
   it('refuses when nobody eligible is inside, rather than running for nobody', () => {
     const rt = makeRuntime();
-    assert.deepEqual(rt.activateForOccupant('frontDesk'), { ok: false, reason: 'nobodyEligibleInside' });
-    assert.equal(roomOf(rt, 'frontDesk').state, 'idle');
-    assert.equal(roomOf(rt, 'frontDesk').lockHolder, null);
-  });
-
-  it('picks the longest-present occupant, as succession does', () => {
-    const rt = makeRuntime();
-    const first = rt.spawnGuest();
-    walk(rt, first.guestId, 'frontDesk');
-    rt.testAdvanceTime(50);
-    const second = rt.spawnGuest();
-    walk(rt, second.guestId, 'frontDesk');
-    rt.releaseRoomLock('frontDesk');
-    rt.testAdvanceTime(11000);
-
-    assert.equal(rt.activateForOccupant('frontDesk').guestId, first.guestId);
+    assert.deepEqual(rt.activateForOccupant('slop'), { ok: false, reason: 'nobodyEligibleInside' });
+    assert.equal(roomOf(rt, 'slop').state, 'idle');
+    assert.equal(roomOf(rt, 'slop').lockHolder, null);
   });
 });

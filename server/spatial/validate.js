@@ -120,6 +120,23 @@ function checkRoom(roomId, room, errors, warnings) {
   checkEnum(room.kind, ROOM_KINDS, `${path}.kind`, errors);
   const kind = room.kind ?? 'destination';
 
+  // A shared room runs for the space, so there is no one guest whose history
+  // could pick a variant, and no holder for company to be company to. Declaring
+  // either would be a promise it cannot keep — and the revisit case is the
+  // damaging one: it would let whoever walked in first decide what everybody
+  // else sees.
+  if (kind === 'shared') {
+    if (room.revisit != null) {
+      errors.push(`${path}.revisit cannot apply to a shared room — no single guest's history chooses its content`);
+    }
+    if (room.multiGuest != null) {
+      errors.push(`${path}.multiGuest cannot apply to a shared room — it has no holder for company to join`);
+    }
+    if (room.ineligible?.policy === 'activateVariant') {
+      errors.push(`${path}.ineligible "activateVariant" cannot apply to a shared room`);
+    }
+  }
+
   // A hallway is never activated, so requiring the presentation contract of it
   // would be ceremony — a machine with states that can never be entered.
   if (kind === 'hallway') {

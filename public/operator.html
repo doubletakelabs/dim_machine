@@ -49,6 +49,7 @@
   .zone { stroke: #55606f; stroke-width: 1.5; cursor: pointer; }
   .zone.idle { fill: var(--idle); fill-opacity: .55; }
   .zone.hallway { fill: #23262d; fill-opacity: .8; stroke-dasharray: 5 4; }
+  .zone.shared.active { fill: #2f8f5b; fill-opacity: .4; stroke-dasharray: 2 3; }
   .zone.active { fill: var(--active); fill-opacity: .55; }
   .zone.settling { fill: var(--settling); fill-opacity: .55; }
   .zone.selected { stroke: var(--accent); stroke-width: 2.5; }
@@ -352,7 +353,8 @@ function renderPlan() {
     const room = rooms.get(zone.roomId);
     const poly = document.createElementNS(SVG_NS, 'polygon');
     poly.setAttribute('points', zone.polygon.map((p) => p.join(',')).join(' '));
-    poly.setAttribute('class', `zone ${room?.kind === 'hallway' ? 'hallway' : roomStateClass(room?.state)}`
+    poly.setAttribute('class', `zone ${room?.kind === 'hallway' ? 'hallway'
+      : (room?.kind === 'shared' ? 'shared ' : '') + roomStateClass(room?.state)}`
       + (selection?.kind === 'room' && selection.id === zone.roomId ? ' selected' : ''));
     poly.onclick = () => { selection = { kind: 'room', id: zone.roomId }; render(); };
     poly.appendChild(title(`${zone.roomId} · zone ${zoneId}`));
@@ -557,6 +559,7 @@ function centroidOf(polygon) {
 function standingColour(current) {
   switch (current?.standing) {
     case 'holder': return '#58c98a';
+    case 'present': return '#58c98a';
     case 'participant': return '#7fd6a8';
     case 'spectator': return '#8ea2c0';
     case 'personalVariant': return '#c58ae0';
@@ -570,6 +573,7 @@ function standingColour(current) {
 
 const STANDING_LABEL = {
   holder: 'theirs',
+  present: 'in it',
   participant: 'joined in',
   spectator: 'watching',
   personalVariant: 'own version',
@@ -719,6 +723,7 @@ function renderInspector() {
         <dt>Reset in</dt><dd>${room.resetInMs != null ? `${Math.ceil(room.resetInMs / 1000)}s` : '—'}</dd>
         <dt>Lock</dt><dd>${guestChip(room.lockHolder)}</dd>
         <dt>Last holder</dt><dd>${room.lastHolder ? guestChip(room.lastHolder) : '—'}</dd>
+        <dt>Kind</dt><dd>${room.kind}${room.kind === 'shared' ? ' <span class="muted">· no holder</span>' : ''}</dd>
         <dt>Company</dt><dd>${room.multiGuestPolicy ?? '—'}${
           room.capacity != null ? ` <span class="muted">· max ${room.capacity}</span>` : ''}</dd>
         <dt>Inside</dt><dd>${room.occupants?.map(guestChip).join('<br>') || '—'}</dd>
