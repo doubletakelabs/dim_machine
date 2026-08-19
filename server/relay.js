@@ -22,14 +22,16 @@ export function validatePayload(payload) {
 }
 
 export function audienceKey(runtime, token) {
-  const zoneId = runtime.getParticipantRoomId(token);
-  return zoneId ?? '__show__';
+  // Peers are scoped to a room, not a zone — a room may own several zones and
+  // moving between them must not split the audience.
+  const roomId = runtime.getGuestRoomId(token);
+  return roomId ?? '__show__';
 }
 
 export function audienceTokens(runtime, users, token) {
-  const zoneId = runtime.getParticipantRoomId(token);
-  if (zoneId) {
-    const members = runtime.getRoomMemberTokens(zoneId);
+  const roomId = runtime.getGuestRoomId(token);
+  if (roomId) {
+    const members = runtime.getRoomMemberTokens(roomId);
     if (members.length) return members;
   }
   return [...users.keys()].filter((t) => users.get(t)?.ws);

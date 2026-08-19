@@ -99,6 +99,15 @@ a condition.** An event-driven cue director would have been the same mistake as
 have told them what to play hears nothing, forever. Reconciliation is the same
 answer as derived `standing`, applied to sound.
 
+**A rename that stopped at the edge of the rebuild.** `participant` → `guest`
+renamed the runtime and every caller inside `server/spatial/`, and missed
+`relay.js` — a carried v0.2 module reached only when a phone connects, which no
+test did. It crashed on the first real handset. The test glob compounded it by
+covering `server/spatial/__tests__` alone, so the carried modules had no tests
+that could have failed. Both are fixed; the lesson is that the v0.2 surfaces
+still in the tree (`relay.js`, `client.js`, `pages.js`) are the least-tested
+code here and the most likely to hold a stale assumption.
+
 **Sending an event into a machine from inside its own subscriber.** XState
 queues it, so a rollback check reads the state as unchanged and undoes work that
 is about to succeed. `offerToOccupants` defers for exactly this reason, and
