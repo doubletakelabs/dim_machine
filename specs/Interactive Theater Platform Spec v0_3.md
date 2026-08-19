@@ -347,6 +347,8 @@ Per room, because the right answer differs by room:
 - **`perGuest`** — each guest's audio starts when they enter. Occupants are out of phase; visuals must not be audio-locked. Use for narration-led rooms without tight visual sync.
 - `minRemainingMs` guards the "arrives at 2:50 of a 3:00 piece" case by routing to a late-arrival variant instead of ten seconds of tail.
 
+None of this block is implemented. The thin layer behaves as `perGuest`-with-seek: content is timed from room state entry, and a late arrival joins where the room actually is. That is `masterTimeline`'s join behaviour without the timeline, which is indistinguishable until projection has to stay aligned to it — so §3.7 lands with the output adapters, not before. A one-shot that finished before a guest arrived is skipped rather than replayed, which is `minRemainingMs` at its crudest setting: the tail is dropped, but there is no late-arrival variant to route to.
+
 ---
 
 ## 4. The Journey
@@ -591,13 +593,19 @@ Both speak the identical protocol and render the identical cue/page vocabulary. 
 
 ### 6.2 Phone audio layers
 
+**Built, thinly.** A guest hears at most one cue from each of three fixed slots — `room`, `guidance`, `adherence` — with a later cue in a slot replacing what was there. That is enough for guidance to speak over an ambient room without either cutting the other, and it is not yet a mixer: the duck amounts, crossfades and priorities below are still show-level configuration nobody reads. Authoring lives in CONTRACT.md §8.1.
+
+The layer that carries the design weight is `room`, because which cue a guest gets is chosen from their **standing** — the derived relation between a guest and the room they are in. One room, one state, a participant and a spectator standing in it, two different pieces of audio. This is where `multiGuest` policies stop being labels in the operator panel.
+
+The director **reconciles rather than fires**: it computes what each guest should be hearing and sends only the difference. An event-driven director leaves a guest who walked in mid-scene hearing nothing forever, because the event they needed was dispatched before they arrived. Under reconciliation, arriving late, being promoted from spectator to participant, and reconnecting a dropped phone are one operation.
+
 Audio is layered rather than a single stream, because tour guidance, room content, and transit beds coexist:
 
 | Layer | Content | Behavior |
 |---|---|---|
-| `tour` | Golden-path guidance narration | Ducks under the room layer |
-| `room` | Active room content | Scheduled per the room's audio policy (§3.7) |
-| `ambient` | Transit beds | Lowest priority |
+| `tour` | Golden-path guidance narration | Ducks under the room layer *(slot `guidance`; ducking not implemented)* |
+| `room` | Active room content | Slot `room`; §3.7 policies not implemented — content starts on state entry and late arrivals seek |
+| `ambient` | Transit beds | Authored today as hallway `cues`, which every guest passing through hears |
 
 Mixing rules (duck amounts, crossfades, priority) are show-level configuration.
 

@@ -181,8 +181,12 @@ function playAudio(cue, { seekIntoLoop = false } = {}) {
     const when = ctxTimeFor(cue.startAt);
     source.start(Math.max(when, ctx.currentTime));
     reportCueAt(cue, when);
-  } else if (cue.loop && seekIntoLoop) {
-    source.start(ctx.currentTime, ((nowServer - cue.startAt) / 1000) % buffer.duration);
+  } else if (cue.seek || (cue.loop && seekIntoLoop)) {
+    // Walked in halfway through: join the content where it actually is rather
+    // than starting it over. A one-shot that already finished is simply missed.
+    const offset = (nowServer - cue.startAt) / 1000;
+    if (!cue.loop && offset >= buffer.duration) return;
+    source.start(ctx.currentTime, cue.loop ? offset % buffer.duration : Math.max(0, offset));
   } else if (nowServer - cue.startAt < 500) {
     source.start();
   } else {
@@ -433,6 +437,9 @@ $('join').addEventListener('click', async () => {
   enableShake();
   await preload(assetList);
   joined = true;
+  // The server has been reconciling audio for this guest all along; until now we
+  // had no AudioContext to play it. Ask for a resend rather than start deaf.
+  sendMsg({ type: 'ready' });
   $('joinScreen').style.display = 'none';
   window.DIM_PAGES.render($('page'), 'waiting', { title: 'Waiting for the show…' });
   if (pendingSnapshot) {

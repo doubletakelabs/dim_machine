@@ -662,6 +662,18 @@ function routeFor(guest) {
 
 // ----------------------------------------------------------------- listings
 
+/**
+ * What this guest's phone is playing, per slot. The nearest thing to standing
+ * behind them with an ear to the handset.
+ */
+function describeCues(cues) {
+  const slots = Object.entries(cues ?? {}).filter(([, asset]) => asset);
+  if (!slots.length) return '<span class="muted">silence</span>';
+  return slots
+    .map(([slot, asset]) => `<span class="muted">${slot}</span> ${asset}`)
+    .join('<br>');
+}
+
 function renderGuests() {
   const rows = (snap?.guests ?? []).map((g) => `
     <tr class="${selection?.kind === 'guest' && selection.id === g.guestId ? 'sel' : ''}"
@@ -779,6 +791,7 @@ function renderInspector() {
       <dt>In room</dt><dd>${guest.roomId ?? '—'}${guest.zoneId ? ` (${guest.zoneId})` : ''}</dd>
       <dt>Standing</dt><dd style="color:${standingColour(guest.currentRoom)}">${describeStanding(guest.currentRoom)}</dd>
       <dt>Walking</dt><dd>${guest.walking ? describeIntent(guest) : 'no'}</dd>
+      <dt>Hearing</dt><dd>${describeCues(guest.cues)}</dd>
     </dl>
     <h2 style="margin-top:12px">Route</h2>
     ${route.length ? `<ol style="margin:0;padding-left:20px">${route.map((stop) => `

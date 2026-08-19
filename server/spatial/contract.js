@@ -178,3 +178,52 @@ export const ELIGIBILITY_STRATEGIES = [
   'inverted',
   'none',
 ];
+
+/**
+ * Audio slots a guest hears at once. One cue per slot, replaced when the slot's
+ * source state changes.
+ *
+ * `room` is what the space is doing; `guidance` is the tour talking to them;
+ * `adherence` is the show reacting to how they are following it. Three fixed
+ * slots is not a mixer — `guest.audioLayers` is still Phase B — but it is enough
+ * that guidance can speak over an ambient room without either cutting the other.
+ */
+export const CUE_SLOTS = ['room', 'guidance', 'adherence'];
+
+/**
+ * Who in a room a given cue is for, expressed in standings.
+ *
+ * A room declares its audio once per state and, if it wants, declares a
+ * different cue for a different audience of the same state. Which one a guest
+ * gets is decided from the standing the guest actor derived — so `multiGuest:
+ * "spectator"` and `atCapacity: "personalVariant"` become audible here rather
+ * than remaining labels in the operator panel.
+ */
+export const CUE_AUDIENCES = [
+  'participants',
+  'spectators',
+  'personalVariant',
+  'ineligible',
+  'occupants',
+];
+
+const AUDIENCE_STANDINGS = {
+  participants: ['holder', 'participant', 'present'],
+  spectators: ['spectator'],
+  personalVariant: ['personalVariant'],
+  ineligible: ['notTheirs', 'refused'],
+};
+
+/**
+ * A destination runs for the people it admitted, so its default audience is
+ * whoever it is running for. A shared room and a hallway run for the space, and
+ * everyone standing in them hears the same thing — which is the whole
+ * distinction between the kinds, carried into audio.
+ */
+export const defaultCueAudience = (kind) => (kind === 'destination' ? 'participants' : 'occupants');
+
+export function cueAudienceMatches(audience, standing, kind) {
+  const resolved = audience ?? defaultCueAudience(kind);
+  if (resolved === 'occupants') return true;
+  return (AUDIENCE_STANDINGS[resolved] ?? []).includes(standing);
+}

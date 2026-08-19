@@ -32,25 +32,26 @@ JSON currently cannot keep.
 
 | Field / value | Where it should land |
 |---|---|
-| `rooms.*.audio.timing` (`masterTimeline` \| `perGuest`) | Phase B |
-| `rooms.*.audio.joinPolicy` (`inProgress` \| `waitForNext` \| `restart`) | Phase B |
-| `rooms.*.audio.minRemainingMs` | Phase B — read nowhere at all |
+| `rooms.*.audio.timing` (`masterTimeline` \| `perGuest`) | Phase B. The thin layer behaves as `perGuest`-with-seek, which is `masterTimeline`'s join behaviour minus the timeline — indistinguishable until projection must stay aligned to it |
+| `rooms.*.audio.joinPolicy` (`inProgress` \| `waitForNext` \| `restart`) | Phase B. Always `inProgress` today |
+| `rooms.*.audio.minRemainingMs` | Phase B — read nowhere at all. A one-shot that already finished is dropped rather than replayed, but there is no late-arrival variant to route to |
 | `rooms.*.outputs.cues` | Phase D (TouchDesigner / DMX) |
-| `guest.audioLayers` | Phase B |
+| `guest.audioLayers` | Phase B. Three fixed slots (`room`, `guidance`, `adherence`) stand in; no ducking, crossfade, or priority |
 | `inputBindings` | Phase B (phone inputs) / Phase D (in-room devices) |
-| `ineligible.policy`: `ambientOnly`, `lockedMessage`, `tease` | Selected and reported; the *response* is Phase B audio |
+| `ineligible.policy`: `ambientOnly`, `lockedMessage`, `tease` | Still selected and reported without choosing a response — but `audience: "ineligible"` now exists, so a show can author the audio by hand. Wiring the policy to pick it is the remaining step |
 | `paths.*.guidance`: `guestDirectedPath`, `freeExplore` | Only `goldenPath` drives a target today |
 | `paths` assignment strategies `manual`, `balanced` | `nextPath` handles `roundRobin` and `random` only |
 | Eligibility strategies `roleBased`, `progressGated`, `inverted`, `custom` | Declared by the contract; naming one is a **load error**, so this fails loudly rather than silently |
 
-Two of these are dead ends rather than pending work — worth deciding whether to
-remove them instead of implementing:
+**`balanced` path assignment** is a dead end rather than pending work — worth
+deciding whether to remove it. It was for spreading occupancy, and assignment now
+happens on reaching the museum rather than at the door, which was most of its
+purpose.
 
-- **`multiGuest.atCapacity: personalVariant`** exists but is indistinguishable
-  from the `personalVariant` policy until phone audio exists.
-- **`balanced` path assignment** was for spreading occupancy. Assignment now
-  happens on reaching the museum rather than at the door, which was most of what
-  `balanced` was for.
+*Resolved by the thin audio layer:* `multiGuest.policy: spectator` and
+`atCapacity: personalVariant` were labels in the operator panel with no
+consequence. Cue audiences now make them audible, which is the whole point of
+having derived standing in the first place.
 
 ---
 
@@ -58,7 +59,7 @@ remove them instead of implementing:
 
 | Item | Notes |
 |---|---|
-| **Phone experience** | The pipe is built and empty. `public/client.js` is the v0.2 cue player — clock sync, `startAt` scheduling, join-in-progress seek, pages, audio — and it still works. But **nothing in the server ever sends a phone a cue**: room state goes to the operator output log, guest events go to the event log, and neither reaches a device. A phone can connect, sync, and receive its own spatial state; it will never be told to play anything. This is the thin audio slice. |
+| **Phone experience beyond audio** | The thin audio layer connects room and guest state to phones (CONTRACT.md §8.1). Pages, video, haptics and `setVar` are still v0.2 surfaces nothing drives — a phone shows `waiting` for the entire show while the audio works. |
 | **Zone drawing** | 23 spaces of hand-authored polygons, all currently invented. `floorplan.image` exists so zones can be traced over a real plan; the tool does not. Has a deadline attached to it that the other items do not — venue access. |
 | **Scripted walkthrough replay** | Spec §5.4. Record the `setVirtualPosition` stream, replay against a `ManualClock`. Both the clock and the event log were built for it. This is the regression story for the behavioural matrix. |
 | **Lock-specific disconnect grace** | Spec §11 wants a lock held briefly when a holder's socket drops. `contactLossMs` covers the coordinator's side; the lock has no separate window. |
@@ -72,6 +73,7 @@ remove them instead of implementing:
 |---|---|
 | **Raw operator `ACTIVATE` leaves a room running for nobody.** It bypasses `requestActivation`, so the room goes `active` with no lock and refuses every guest until `RELEASE` or `RESET`. | Deliberate: seeing a state without staging guests is worth having. Now visually separated and labelled, and joined by *Activate for occupant*, which goes through the arrival path. |
 | **The authored guest chart does not show the recovery transitions.** The runtime adds a transition for every room at the region root so the machine always matches the coordinator. | Chosen so the drawn chart shows *intent*. It is one uniform rule, documented in spec §4.1, rather than per-room surprises. |
+| **Every state change reconciles every guest's audio.** Cheap now (a few map lookups per guest, and it sends nothing when nothing differs) and correct by construction, but it is O(guests) on every tick of every room. | If it ever bites, the fix is to reconcile only guests whose room or regions moved — not to go back to firing events. |
 | **`pauseWhenEmpty` was removed rather than implemented.** XState cannot pause a delayed transition. | The honest alternative is a room-authoring pattern: a room whose content must hold for an absent guest drives its beats from runtime events rather than `after`. Recorded in spec §3.5. |
 
 ---
@@ -90,6 +92,12 @@ the *resting* states — the closed set — and deriving the rest.
 outcome of an entry and then described a moment that had passed. Fixed by
 deriving. The rule that came out of it: **what happened is an event and belongs
 in the event log; what is, is computed.**
+
+A fourth is worth adding now that audio exists: **describing a moment instead of
+a condition.** An event-driven cue director would have been the same mistake as
+`lastEntry` in a new costume — a guest who arrives after the event that would
+have told them what to play hears nothing, forever. Reconciliation is the same
+answer as derived `standing`, applied to sound.
 
 **Sending an event into a machine from inside its own subscriber.** XState
 queues it, so a rollback check reads the state as unchanged and undoes work that

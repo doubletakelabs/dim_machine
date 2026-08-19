@@ -40,6 +40,13 @@
             235
           ]
         }
+      },
+      "cues": {
+        "idle": {
+          "audio": "ambient.wav",
+          "loop": true,
+          "gain": 0.35
+        }
       }
     },
     "library": {
@@ -177,6 +184,32 @@
       "location": {
         "entryConfirmMs": 1500,
         "exitConfirmMs": 800
+      },
+      "cues": {
+        "activating": {
+          "audio": "chime.wav"
+        },
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants",
+            "loop": true
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          },
+          {
+            "audio": null,
+            "audience": "ineligible"
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "occupants"
+        }
       }
     },
     "greenhouse": {
@@ -269,6 +302,20 @@
       "location": {
         "entryConfirmMs": 1500,
         "exitConfirmMs": 800
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ]
       }
     },
     "cellar": {
@@ -350,6 +397,16 @@
       "location": {
         "entryConfirmMs": 1500,
         "exitConfirmMs": 800
+      },
+      "cues": {
+        "active": {
+          "audio": "whisper.wav",
+          "loop": true
+        },
+        "idle": {
+          "audio": "click.wav",
+          "audience": "ineligible"
+        }
       }
     }
   },
@@ -422,6 +479,16 @@
           },
           "offPath": {}
         }
+      }
+    },
+    "cues": {
+      "guidance.arriving": {
+        "audio": "chime.wav"
+      },
+      "adherence.offPath": {
+        "audio": "click.wav",
+        "loop": true,
+        "gain": 0.2
       }
     }
   },

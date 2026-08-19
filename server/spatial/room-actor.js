@@ -98,6 +98,9 @@ export class RoomActor {
     this.onStateChange = opts.onStateChange ?? (() => {});
     this.actor = null;
     this.state = 'idle';
+    /** When the room entered its current state — a cue's `startAt`, so a guest
+     *  arriving late seeks into the content instead of restarting it. */
+    this.stateSince = this.now();
     this.lastRefuse = null;
     this._unsub = null;
     /** Exit-grace timer handle, live only while the room sits in `settling`. */
@@ -143,6 +146,7 @@ export class RoomActor {
       if (next === this.state) return;
       const previous = this.state;
       this.state = next;
+      this.stateSince = this.now();
       this.emitOutput({
         type: 'roomOutput',
         roomId: this.roomId,
@@ -169,6 +173,7 @@ export class RoomActor {
     });
     this.actor.start();
     this.state = stateToString(this.actor.getSnapshot().value);
+    this.stateSince = this.now();
   }
 
   stop() {
@@ -587,6 +592,7 @@ export class RoomActor {
       name: this.name,
       centre: roomCentroid(this.def),
       state: this.state,
+      stateSince: this.stateSince,
       kind: this.kind,
       acceptsActivation: this.acceptsActivation(),
       capacity: this.def.multiGuest?.maxOccupants ?? null,

@@ -572,7 +572,106 @@ rails and stays off.
 
 ## 8. Outputs
 
-### 9.1 Room output intents — live (stub adapter)
+### 8.1 Guest audio — live (thin layer)
+
+The only path from show state to sound. Everything else in §8 is still an
+adapter stub or a carried v0.2 surface.
+
+**Rooms declare cues by state.** A `cues` block sits beside `machine`, keyed by
+the state the room is in. A key naming a root (`active`) covers its whole nested
+branch; a key naming the full dotted path (`active.together`) wins over it.
+
+```jsonc
+"library": {
+  "kind": "destination",
+  "multiGuest": { "policy": "collaborative", "maxOccupants": 2, "atCapacity": "spectator" },
+  "cues": {
+    "activating": { "audio": "chime.wav" },
+    "active": [
+      { "audio": "whisper.wav", "audience": "participants", "loop": true },
+      { "audio": "ambient.wav", "audience": "spectators", "gain": 0.25, "loop": true },
+      { "audio": null,          "audience": "ineligible" }
+    ],
+    "settling": { "audio": "chime.wav", "audience": "occupants" }
+  }
+}
+```
+
+An array is a list of alternatives for the same state; the **first whose
+audience matches the guest's standing** applies, and an entry with `audio: null`
+is an explicit silence for that audience. This is where `multiGuest` policies
+stop being labels: a spectator and a participant stand in one room, in one
+state, and hear different things.
+
+| `audience` | Standings it covers |
+|---|---|
+| `participants` | `holder`, `participant`, `present` |
+| `spectators` | `spectator` |
+| `personalVariant` | `personalVariant` |
+| `ineligible` | `notTheirs`, `refused` |
+| `occupants` | everyone inside, whatever their standing |
+
+The default is `participants` for a `destination` and `occupants` for a `shared`
+room or a `hallway` — which is the distinction between the kinds carried into
+audio: a destination runs for the people it admitted, a shared space runs for
+everyone in it. A room that puts guests in a standing it declares nothing for
+leaves them in silence, so validation warns at load.
+
+**Guests declare cues by region and state**, region-qualified because the
+parallel regions may reasonably name a state the same thing:
+
+```jsonc
+"guest": {
+  "cues": {
+    "guidance.museum":     { "audio": "chime.wav" },
+    "adherence.offPath":   { "audio": "click.wav", "loop": true, "gain": 0.2 }
+  }
+}
+```
+
+`audience` is an error here — a guest cue has exactly one listener.
+
+**Slots.** A guest hears at most one cue from each of `room`, `guidance`, and
+`adherence` at a time; a new cue in a slot replaces what was there. Three fixed
+slots is not the mixer `guest.audioLayers` describes, but it is enough for
+guidance to speak over an ambient room without either cutting the other.
+
+**Cue fields:** `audio` (asset filename, or `null` for silence), `loop`, `gain`,
+`fadeMs` (applied when the slot is vacated), `audience` (room cues only),
+`seek` (default true — see below).
+
+#### Reconciliation, not events
+
+The director does not send a cue when something happens. It computes what each
+guest should be hearing, compares that against what their phone was last told,
+and sends the difference.
+
+This is load-bearing rather than stylistic. Under an event-driven director, a
+guest who walks into a room thirty seconds after it activated missed the event
+and hears nothing for the rest of the scene. Under reconciliation, walking into
+running content, being promoted from spectator to participant when a slot frees,
+and reconnecting a phone that dropped are the same operation, and none of them
+is special-cased.
+
+A cue's `startAt` is **when its source state was entered**, not when the cue was
+sent. That is what lets a late arrival seek into content already in progress
+rather than restarting it, and it is why `startAt` must stay stable across
+reconciles. With `seek` (default), a phone joining late starts the asset at the
+matching offset; a one-shot that already finished is skipped rather than
+replayed.
+
+A phone announces `{ "type": "ready" }` once its AudioContext is unlocked and
+assets are preloaded. The server forgets what that phone was playing and
+reconciles from scratch, because a reconnected phone came back silent with no
+memory of its own.
+
+#### Not in this layer
+
+`audio.timing`, `audio.joinPolicy`, `audio.minRemainingMs`, `guest.audioLayers`,
+and `ineligible.policy` selecting a response automatically are all still Phase B
+(TECH-DEBT.md §2). `outputs.cues` — lighting, projection, DMX — is Phase D.
+
+### 8.2 Room output intents — live (stub adapter)
 
 Room actors emit intents, never device commands. Adapters translate.
 
@@ -589,7 +688,7 @@ Today the stub adapter appends to the operator output log. TouchDesigner (OSC),
 DMX, and in-room audio are Phase D — the abstraction is not deferred even though
 the adapters are.
 
-### 9.2 Phone commands — carried
+### 8.3 Phone commands — carried
 
 Unchanged from v0.2. Actions of the form
 `{ "type": "output", "command": …, "params": …, "sync": "immediate" | "scheduled" }`.
@@ -612,7 +711,7 @@ Built-in pages (props interpolate display vars with `${key}`, live-updated on
 Phone audio layers (§6.2 of the spec) are **declared**: `tour`, `room`,
 `ambient`, with mixing rules at show level. Phase B.
 
-### 9.3 Cue ownership — declared
+### 8.4 Cue ownership — declared
 
 A looping cue started on entry to state S is owned by S and auto-stopped on
 exit, unless declared `persistent`. This makes orphaned audio a runtime

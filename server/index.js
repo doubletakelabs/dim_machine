@@ -129,6 +129,12 @@ const runtime = new SpatialRuntime({
   log: opLog,
   onStateChange: scheduleRoster,
   onPositionChange: schedulePositions,
+  // The only path from show state to a phone. Everything upstream of this is
+  // reconciliation; this just addresses the envelope.
+  onCue: (guestId, cue) => {
+    const token = runtime.guests.get(guestId)?.token;
+    if (token) sendToUser(token, { type: 'cue', cue });
+  },
   onOccupancy: (ev) => {
     const who = runtime.guests.get(ev.guestId)?.label ?? ev.guestId;
     opLog(`${who} → ${ev.roomId ?? '∅'} (${ev.occupancy})`);
@@ -243,8 +249,13 @@ function label(token) {
 
 function phoneSnapshot(token) {
   const guest = runtime.getGuestByToken(token);
+  const actor = guest ? runtime.guestActors.get(guest.guestId) : null;
+  const here = actor?.currentRoom() ?? null;
   return {
     serverTime: Date.now(),
+    // A phone in a pocket during a walkthrough is hard to read. Naming where
+    // the runtime thinks this guest is turns the handset into its own probe.
+    state: here ? `${here.roomId} · ${here.standing}` : 'outside',
     spatial: guest
       ? {
           pathId: guest.pathId,
@@ -415,6 +426,14 @@ wss.on('connection', (ws) => {
         });
         sendRelaySync(token);
         sendRoster();
+        return;
+      }
+
+      case 'ready': {
+        // Phone has an unlocked AudioContext and preloaded assets. Replay
+        // whatever it should already be hearing.
+        const guest = runtime.getGuestByToken(token);
+        if (guest) runtime.resyncCues(guest.guestId);
         return;
       }
 

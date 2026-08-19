@@ -3,6 +3,7 @@ import { validateShowDefinition } from './validate.js';
 import { OccupancyCoordinator } from './coordinator.js';
 import { VirtualLocationAdapter } from './virtual-location.js';
 import { RoomActor } from './room-actor.js';
+import { CueDirector, roomCueFor, guestCueFor } from './cue-director.js';
 import { Guest } from './guest.js';
 import { GuestActor } from './guest-actor.js';
 import { buildGuestMachine } from './guest-machine.js';
@@ -31,6 +32,10 @@ export class SpatialRuntime {
   /** @param {{ log?: (line: string) => void, onStateChange?: () => void, onOccupancy?: (event: object) => void, onEvent?: (event: object) => void, clock?: object, enableTick?: boolean }} io */
   constructor(io = {}) {
     this.io = io;
+    this.director = new CueDirector({
+      emitCue: (guestId, cue) => this.io.onCue?.(guestId, cue),
+      clock: io.clock ?? systemClock,
+    });
     this.clock = io.clock ?? systemClock;
     this.enableTick = io.enableTick !== false;
     this.def = null;
@@ -119,13 +124,14 @@ export class SpatialRuntime {
         eligibleToHold: (guestId) => this.guestActors.get(guestId)?.isEligible(roomId) ?? false,
         onLockTransferred: (from, to) => this.handleLockTransferred(roomId, from, to),
         onAvailable: () => this.handleRoomAvailable(roomId),
-        onStateChange: () => this.io.onStateChange?.(),
+        onStateChange: () => this.notifyChange(),
       }));
     }
 
+    this.director.load(this.def);
     this.append({ type: 'show.loaded', showId: this.def.showId, rooms: [...this.rooms.keys()] });
     this.io.log?.(`show loaded: ${def.name ?? def.showId} (contract v3, ${this.rooms.size} rooms)`);
-    this.io.onStateChange?.();
+    this.notifyChange();
     return { errors: [], warnings, ok: true };
   }
 
@@ -143,7 +149,7 @@ export class SpatialRuntime {
     this.startTick();
     this.append({ type: 'show.started', showId: this.def.showId });
     this.io.log?.(`show started: ${this.def.name ?? this.def.showId}`);
-    this.io.onStateChange?.();
+    this.notifyChange();
     return true;
   }
 
@@ -168,7 +174,7 @@ export class SpatialRuntime {
     if (wasRunning) this.append({ type: 'show.stopped', showId: this.def?.showId ?? null });
     if (!opts.quiet) {
       this.io.log?.('show stopped');
-      this.io.onStateChange?.();
+      this.notifyChange();
     }
   }
 
@@ -222,7 +228,7 @@ export class SpatialRuntime {
       roomSnapshot: (roomId) => this.rooms.get(roomId)?.snapshot() ?? null,
       assignPath: (from, strategy) => this.nextPath(from, strategy),
       appendEvent: (event) => this.append(event),
-      onStateChange: () => this.io.onStateChange?.(),
+      onStateChange: () => this.notifyChange(),
     });
     this.guestActors.set(guestId, actor);
     if (this.running) actor.start();
@@ -234,7 +240,7 @@ export class SpatialRuntime {
     if (this.running) {
       this.io.log?.(`${guest.label} joined`);
     }
-    this.io.onStateChange?.();
+    this.notifyChange();
     return { token, guestId, label: guest.label };
   }
 
@@ -259,8 +265,9 @@ export class SpatialRuntime {
     this.guestActors.delete(guestId);
     this.walkthrough?.remove(guestId);
     this.virtualLocation?.forget(guestId);
+    this.director.dropGuest(guestId);
     this.append({ type: 'guest.left', guestId, roomId: occupied });
-    this.io.onStateChange?.();
+    this.notifyChange();
     return true;
   }
 
@@ -359,7 +366,7 @@ export class SpatialRuntime {
     if (typeof this.clock.setRate !== 'function') return null;
     this.clock.setRate(rate);
     this.append({ type: 'show.timeScale', rate: this.clock.rate });
-    this.io.onStateChange?.();
+    this.notifyChange();
     return this.clock.rate;
   }
 
@@ -387,7 +394,7 @@ export class SpatialRuntime {
     if (!next) return { ok: false, reason: 'nobodyEligibleInside' };
     const outcome = this.guestActors.get(next.guestId)?.enterRoom(roomId);
     if (outcome) this.logEntryOutcome(next.guestId, outcome);
-    this.io.onStateChange?.();
+    this.notifyChange();
     return { ok: true, guestId: next.guestId, outcome };
   }
 
@@ -397,7 +404,7 @@ export class SpatialRuntime {
     if (!room || !event) return false;
     const ok = room.send(event);
     if (ok) this.append({ type: 'room.operatorEvent', roomId, event: String(event) });
-    this.io.onStateChange?.();
+    this.notifyChange();
     return ok;
   }
 
@@ -431,7 +438,7 @@ export class SpatialRuntime {
       activatedByMe: history?.activatedByMe,
     });
     if (result.ok) guest?.recordActivation(roomId);
-    this.io.onStateChange?.();
+    this.notifyChange();
     return result;
   }
 
@@ -440,7 +447,7 @@ export class SpatialRuntime {
     const room = this.rooms.get(roomId);
     if (!room) return false;
     const result = room.release(guestId);
-    this.io.onStateChange?.();
+    this.notifyChange();
     return result.ok;
   }
 
@@ -475,7 +482,7 @@ export class SpatialRuntime {
     const outcome = this.guestActors.get(event.guestId)?.handleOccupancy(event);
     if (outcome) this.logEntryOutcome(event.guestId, outcome);
     this.io.onOccupancy?.(event);
-    this.io.onStateChange?.();
+    this.notifyChange();
   }
 
   /**
@@ -491,7 +498,7 @@ export class SpatialRuntime {
     if (!next) return;
     const outcome = this.guestActors.get(next.guestId)?.enterRoom(roomId);
     if (outcome) this.logEntryOutcome(next.guestId, outcome);
-    this.io.onStateChange?.();
+    this.notifyChange();
   }
 
   /** @param {string[]} from @param {string} strategy */
@@ -508,7 +515,7 @@ export class SpatialRuntime {
     const from = this.guests.get(fromGuestId)?.label ?? fromGuestId;
     const to = this.guests.get(toGuestId)?.label ?? toGuestId;
     this.io.log?.(`${this.def?.rooms?.[roomId]?.name ?? roomId}: ${from} left → now ${to}'s`);
-    this.io.onStateChange?.();
+    this.notifyChange();
   }
 
   logEntryOutcome(guestId, outcome) {
@@ -544,7 +551,7 @@ export class SpatialRuntime {
     if (!p) return;
     p.recordSeen({ roomId, dwellMs, at });
     this.append({ type: 'room.seen', guestId, roomId, dwellMs });
-    this.io.onStateChange?.();
+    this.notifyChange();
   }
 
   /**
@@ -563,7 +570,7 @@ export class SpatialRuntime {
     const entry = { ...intent, at: this.now() };
     this.outputLog.push(entry);
     if (this.outputLog.length > OUTPUT_LOG_CAP) this.outputLog.shift();
-    this.io.onStateChange?.();
+    this.notifyChange();
     return entry;
   }
 
@@ -621,6 +628,9 @@ export class SpatialRuntime {
     return [...this.guests.values()].map((g) => ({
       ...g.snapshot(),
       ...(this.guestActors.get(g.guestId)?.snapshot() ?? {}),
+      // What their phone is playing, so the panel can answer "what is this
+      // person actually experiencing" without anyone holding the phone.
+      cues: this.cueSnapshot(g.guestId),
       position: this.displayPosition(g.guestId),
       walking: this.walkthrough?.walkers.has(g.guestId) ?? false,
       intent: this.walkthrough?.intent(g.guestId) ?? null,
@@ -629,6 +639,66 @@ export class SpatialRuntime {
 
   getCoordinatorSnapshot() {
     return this.coordinator?.getSnapshot() ?? { occupancy: {}, byRoom: {}, locks: {} };
+  }
+
+  /**
+   * Everything a guest should be hearing right now, per slot.
+   *
+   * Computed from live state every time rather than remembered, so a guest who
+   * walks into a running room, is promoted from spectator to participant, or
+   * reconnects a dead phone all converge on the right audio without any of
+   * those being a case handled here. See cue-director.js.
+   *
+   * @returns {Map<string, object|null>}
+   */
+  desiredCues(guestId) {
+    const desired = new Map([['room', null], ['guidance', null], ['adherence', null]]);
+    const actor = this.guestActors.get(guestId);
+    if (!actor || !this.running || !this.def) return desired;
+
+    const here = actor.currentRoom();
+    if (here) {
+      const room = this.rooms.get(here.roomId);
+      const def = this.def.rooms?.[here.roomId];
+      if (room && def) {
+        desired.set('room', roomCueFor(def, room.state, here.standing, room.stateSince));
+      }
+    }
+    const regions = actor.regions();
+    for (const region of ['guidance', 'adherence']) {
+      desired.set(region, guestCueFor(this.def, region, regions[region], actor.regionSince(region)));
+    }
+    return desired;
+  }
+
+  /** Bring every phone in line with the world. Sends nothing when nothing differs. */
+  reconcileCues() {
+    for (const guestId of this.guestActors.keys()) {
+      this.director.reconcile(guestId, this.desiredCues(guestId));
+    }
+  }
+
+  /**
+   * A phone that just reconnected came back silent with no memory of what it was
+   * playing, so the director must forget too before it can resend.
+   */
+  resyncCues(guestId) {
+    this.director.resetGuest(guestId);
+    this.director.reconcile(guestId, this.desiredCues(guestId));
+  }
+
+  /** What each phone is currently playing, for the operator panel. */
+  cueSnapshot(guestId) {
+    return this.director.snapshot(guestId);
+  }
+
+  /**
+   * Single funnel for "the world moved". Audio reconciles before observers are
+   * told, so the panel and the phones never disagree about what is playing.
+   */
+  notifyChange() {
+    this.reconcileCues();
+    this.io.onStateChange?.();
   }
 
   getOperatorSnapshot() {

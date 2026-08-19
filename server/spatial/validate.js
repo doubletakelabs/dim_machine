@@ -20,6 +20,7 @@ import {
   enteredEvent,
 } from './contract.js';
 import { IMPLEMENTED_ELIGIBILITY_STRATEGIES } from './eligibility.js';
+import { CUE_AUDIENCES, CUE_SLOTS, defaultCueAudience } from './contract.js';
 
 function isObject(v) {
   return v != null && typeof v === 'object' && !Array.isArray(v);
@@ -222,6 +223,56 @@ function checkRoom(roomId, room, errors, warnings) {
   }
 
   checkRevisitVariants(roomId, room, errors);
+  checkRoomCues(roomId, room, path, errors, warnings);
+}
+
+/**
+ * Room cues (§8, thin audio layer).
+ *
+ * The failure this catches is silence: a room that declares audio for its
+ * participants and a policy that puts people in some other standing, so a guest
+ * stands in a running room hearing nothing and it looks like a routing bug.
+ */
+function checkRoomCues(roomId, room, path, errors, warnings) {
+  if (room.cues == null) return;
+  if (!isObject(room.cues)) {
+    errors.push(`${path}.cues must be an object keyed by room state`);
+    return;
+  }
+  const declaredStates = new Set(Object.keys(room.machine?.states ?? {}));
+  const audiences = new Set();
+
+  for (const [state, declared] of Object.entries(room.cues)) {
+    const options = Array.isArray(declared) ? declared : [declared];
+    const root = String(state).split('.')[0];
+    if (declaredStates.size && !declaredStates.has(root)) {
+      warnings.push(`${path}.cues["${state}"] names a state the machine never enters`);
+    }
+    options.forEach((cue, i) => {
+      const at = `${path}.cues["${state}"]${Array.isArray(declared) ? `[${i}]` : ''}`;
+      if (!isObject(cue)) {
+        errors.push(`${at} must be an object`);
+        return;
+      }
+      if (cue.audio != null && typeof cue.audio !== 'string') {
+        errors.push(`${at}.audio must be an asset filename`);
+      }
+      checkEnum(cue.audience, CUE_AUDIENCES, `${at}.audience`, errors);
+      audiences.add(cue.audience ?? defaultCueAudience(room.kind));
+    });
+  }
+
+  // A standing the room can put a guest in, with nothing declared for it, is
+  // silence for that guest. Worth a warning at load rather than a puzzled
+  // operator at runtime.
+  const heard = (a) => audiences.has(a) || audiences.has('occupants');
+  const policies = [room.multiGuest?.policy, room.multiGuest?.atCapacity];
+  if (policies.includes('spectator') && !heard('spectators')) {
+    warnings.push(`${path} makes spectators but declares no cue for them — they hear nothing`);
+  }
+  if (policies.includes('personalVariant') && !heard('personalVariant')) {
+    warnings.push(`${path} makes personalVariant guests but declares no cue for them`);
+  }
 }
 
 /**
@@ -369,6 +420,47 @@ function checkGuest(guest, rooms, errors, warnings) {
 
   checkGuestMachine(guest.machine, rooms, errors, warnings);
   checkGuestTimers(guest.timers, guest.machine, errors, warnings);
+  checkGuestCues(guest, errors, warnings);
+}
+
+/**
+ * Guest cues — audio addressed to one person rather than to a space.
+ *
+ * Keys are region-qualified (`guidance.leadingToMuseum`) because the parallel
+ * regions may reasonably name a state the same thing, and a bare state name
+ * would silently pick whichever matched first.
+ */
+function checkGuestCues(guest, errors, warnings) {
+  if (guest.cues == null) return;
+  if (!isObject(guest.cues)) {
+    errors.push('guest.cues must be an object keyed by "<region>.<state>"');
+    return;
+  }
+  for (const [key, cue] of Object.entries(guest.cues)) {
+    const [region, ...rest] = key.split('.');
+    const state = rest.join('.');
+    if (!AUTHORED_GUEST_REGIONS.includes(region) || !state) {
+      errors.push(
+        `guest.cues["${key}"] must be "<region>.<state>" `
+        + `where region is one of ${AUTHORED_GUEST_REGIONS.join(', ')}`,
+      );
+      continue;
+    }
+    if (!isObject(cue)) {
+      errors.push(`guest.cues["${key}"] must be an object`);
+      continue;
+    }
+    if (cue.audio != null && typeof cue.audio !== 'string') {
+      errors.push(`guest.cues["${key}"].audio must be an asset filename`);
+    }
+    if (cue.audience != null) {
+      errors.push(`guest.cues["${key}"].audience does not apply — a guest cue has one listener`);
+    }
+    const declared = guest.machine?.[region]?.states ?? {};
+    if (Object.keys(declared).length && !declared[state]) {
+      warnings.push(`guest.cues["${key}"] names a state ${region} never enters`);
+    }
+  }
 }
 
 function checkGuestMachine(machine, rooms, errors, warnings) {

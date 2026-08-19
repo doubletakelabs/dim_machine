@@ -35,6 +35,8 @@ export class GuestActor {
     this.assignPath = opts.assignPath ?? (() => null);
     this.clock = opts.clock ?? systemClock;
     this.appendEvent = opts.appendEvent ?? (() => {});
+    /** region → { state, at }; see syncRegions(). */
+    this._regionsSince = {};
     this.onStateChange = opts.onStateChange ?? (() => {});
     this.actor = null;
     this._unsub = null;
@@ -97,6 +99,13 @@ export class GuestActor {
   /** Mirror the machine onto the guest record, and arm any timers now due. */
   syncRegions() {
     const regions = this.regions();
+    // Region entry times, for the same reason rooms carry one: a cue's startAt
+    // must be when its source state began, not when the cue happened to be sent.
+    for (const region of ['guidance', 'adherence']) {
+      if (this._regionsSince[region]?.state !== regions[region]) {
+        this._regionsSince[region] = { state: regions[region], at: this.clock.now() };
+      }
+    }
     this.guest.regions = regions;
     this.startDueTimers(regions);
   }
@@ -335,6 +344,11 @@ export class GuestActor {
   /** The outcome of an entry, for the log. Deliberately not stored: see currentRoom(). */
   record(roomId, detail) {
     return { roomId, ...detail };
+  }
+
+  /** When the guest entered its current state in an authored region. */
+  regionSince(region) {
+    return this._regionsSince[region]?.at ?? this.clock.now();
   }
 
   snapshot() {

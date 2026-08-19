@@ -28,7 +28,9 @@ npm test           # unit tests (server/spatial)
 ```
 
 - **Test panel:** `http://localhost:4000/operator.html` → load **spatial-demo.json** → Start
-- **Phones:** `http://localhost:4000/` — cue player retained for Phase B; spatial audio layers not wired yet
+- **Phones:** `http://localhost:4000/` — connect one and it becomes a guest. Room and
+  guidance audio play through the thin audio layer (CONTRACT.md §8.1); the operator
+  panel shows what each phone is hearing, per slot
 
 ### Test panel (A8)
 

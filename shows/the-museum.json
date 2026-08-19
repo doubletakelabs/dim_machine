@@ -79,6 +79,14 @@
       "seen": {
         "dwellMs": 8000,
         "accumulate": true
+      },
+      "cues": {
+        "active": {
+          "audio": "whisper.wav"
+        },
+        "settling": {
+          "audio": "chime.wav"
+        }
       }
     },
     "calibration": {
@@ -154,6 +162,14 @@
       "seen": {
         "dwellMs": 8000,
         "accumulate": true
+      },
+      "cues": {
+        "active": {
+          "audio": "whisper.wav"
+        },
+        "settling": {
+          "audio": "chime.wav"
+        }
       }
     },
     "entranceHallway": {
@@ -187,6 +203,13 @@
             380,
             95
           ]
+        }
+      },
+      "cues": {
+        "idle": {
+          "audio": "ambient.wav",
+          "loop": true,
+          "gain": 0.3
         }
       }
     },
@@ -263,6 +286,14 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": {
+          "audio": "whisper.wav"
+        },
+        "settling": {
+          "audio": "chime.wav"
+        }
       }
     },
     "hallOfHeroes": {
@@ -338,6 +369,14 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": {
+          "audio": "whisper.wav"
+        },
+        "settling": {
+          "audio": "chime.wav"
+        }
       }
     },
     "cyclorama": {
@@ -413,6 +452,14 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": {
+          "audio": "whisper.wav"
+        },
+        "settling": {
+          "audio": "chime.wav"
+        }
       }
     },
     "museumHallway": {
@@ -456,6 +503,13 @@
             700,
             230
           ]
+        }
+      },
+      "cues": {
+        "idle": {
+          "audio": "ambient.wav",
+          "loop": true,
+          "gain": 0.3
         }
       }
     },
@@ -541,6 +595,24 @@
       },
       "revisit": {
         "whenSeen": {}
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     },
     "saas": {
@@ -620,6 +692,24 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     },
     "influence": {
@@ -699,6 +789,24 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     },
     "slop": {
@@ -780,6 +888,24 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     },
     "kin": {
@@ -859,6 +985,24 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     },
     "faerie": {
@@ -938,6 +1082,24 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     },
     "superintelligence": {
@@ -1017,6 +1179,24 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     },
     "consumption1": {
@@ -1098,6 +1278,24 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     },
     "consumption2": {
@@ -1177,6 +1375,24 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     },
     "consumption3": {
@@ -1256,6 +1472,24 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     },
     "southCorridor": {
@@ -1291,6 +1525,13 @@
             480,
             500
           ]
+        }
+      },
+      "cues": {
+        "idle": {
+          "audio": "ambient.wav",
+          "loop": true,
+          "gain": 0.3
         }
       }
     },
@@ -1372,6 +1613,24 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     },
     "adminOffice": {
@@ -1453,6 +1712,24 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     },
     "dataCenter": {
@@ -1532,6 +1809,24 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     },
     "controlRoom": {
@@ -1612,6 +1907,24 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     },
     "library": {
@@ -1691,6 +2004,24 @@
       "seen": {
         "dwellMs": 30000,
         "accumulate": true
+      },
+      "cues": {
+        "active": [
+          {
+            "audio": "whisper.wav",
+            "audience": "participants"
+          },
+          {
+            "audio": "ambient.wav",
+            "audience": "spectators",
+            "loop": true,
+            "gain": 0.25
+          }
+        ],
+        "settling": {
+          "audio": "chime.wav",
+          "audience": "participants"
+        }
       }
     }
   },
@@ -1788,6 +2119,22 @@
           },
           "offPath": {}
         }
+      }
+    },
+    "cues": {
+      "guidance.museum": {
+        "audio": "chime.wav"
+      },
+      "guidance.converge": {
+        "audio": "chime.wav"
+      },
+      "guidance.ending": {
+        "audio": "chime.wav"
+      },
+      "adherence.offPath": {
+        "audio": "click.wav",
+        "loop": true,
+        "gain": 0.2
       }
     }
   },
