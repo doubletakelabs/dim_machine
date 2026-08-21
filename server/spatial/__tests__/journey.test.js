@@ -33,6 +33,8 @@ function walk(rt, guestId, roomId, ms = MOVE_MS) {
 }
 
 const regions = (rt, guestId) => rt.guestActors.get(guestId).regions();
+/** The top of a possibly-nested region value: `prologue.arrive` → `prologue`. */
+const branch = (state) => String(state).split('.')[0];
 const roomOf = (rt, roomId) => rt.getRoomsRoster().find((r) => r.roomId === roomId);
 const standingOf = (rt, guestId) => rt.guestActors.get(guestId).currentRoom()?.standing;
 
@@ -68,9 +70,11 @@ describe('the guest machine', () => {
   it('reports outside before a guest has entered anything', () => {
     const rt = makeRuntime();
     const g = rt.spawnGuest();
-    assert.deepEqual(regions(rt, g.guestId), {
-      location: 'outside', guidance: 'prologue', adherence: 'onPath',
-    });
+    const { location, guidance, adherence } = regions(rt, g.guestId);
+    assert.deepEqual({ location, adherence }, { location: 'outside', adherence: 'onPath' });
+    // Guidance is dotted now that the prologue holds the calibration steps;
+    // this test is about the journey, not which step a guest is standing on.
+    assert.equal(branch(guidance), 'prologue');
   });
 });
 
@@ -80,7 +84,7 @@ describe('the journey', () => {
     const g = rt.spawnGuest();
     for (const roomId of PROLOGUE) {
       walk(rt, g.guestId, roomId);
-      assert.equal(regions(rt, g.guestId).guidance, 'prologue', roomId);
+      assert.equal(branch(regions(rt, g.guestId).guidance), 'prologue', roomId);
     }
     walk(rt, g.guestId, 'museumHallway');
     assert.equal(regions(rt, g.guestId).guidance, 'museum');

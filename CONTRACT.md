@@ -629,16 +629,66 @@ parallel regions may reasonably name a state the same thing:
 }
 ```
 
+Keys may name a nested state (`guidance.prologue.tapTest`) or any ancestor of
+one.
+
 `audience` is an error here — a guest cue has exactly one listener.
 
 **Slots.** A guest hears at most one cue from each of `room`, `guidance`, and
 `adherence` at a time; a new cue in a slot replaces what was there. Three fixed
-slots is not the mixer `guest.audioLayers` describes, but it is enough for
+audio slots is not the mixer `guest.audioLayers` describes, but it is enough for
 guidance to speak over an ambient room without either cutting the other.
 
-**Cue fields:** `audio` (asset filename, or `null` for silence), `loop`, `gain`,
+A fourth slot, `screen`, holds an image rather than a sound — a phone has one
+screen, so the sources compete for it instead of mixing. Guidance takes it first,
+then adherence, then the room: when the show is addressing a guest directly, the
+space they happen to be standing in should not talk over it.
+
+**Cue fields:** `audio` (asset filename, or `null` for silence), `image` (shown
+in the `screen` slot; a cue may declare either or both), `loop`, `gain`,
 `fadeMs` (applied when the slot is vacated), `audience` (room cues only),
-`seek` (default true — see below).
+`seek` (default true — see below), and `offset`/`duration` (below).
+
+**Segments.** `offset` and `duration`, in seconds, play a slice of a longer file
+rather than all of it:
+
+```jsonc
+"guidance.prologue.volume": {
+  "audio": "audio/calibrationsteps.mp3",
+  "offset": 11.38, "duration": 6.47,
+  "image": "img/02DIM.png"
+}
+```
+
+One recording can then carry a whole sequence. That matters when the sequence is
+**self-paced** — a guest who is asked to tap the screen takes as long as they
+take, and no single timeline can stay with them. Segments seek and loop within
+their own bounds, so a late-joining phone lands inside the segment, not inside
+the file.
+
+#### Input: a gesture becomes an event
+
+A phone reports what the finger did — `tap`, `swipe`, `shake` — and nothing about
+what it means. `inputBindings`, at the top level of a show, maps each to a
+guest-machine event:
+
+```jsonc
+"inputBindings": { "tap": "TAP", "swipe": "SWIPE" }
+```
+
+That single indirection keeps the client ignorant of the narrative and the
+runtime ignorant of the gesture: a state that wants a tap declares `on: { TAP:
+… }` and nothing else in the stack needs to know why. An unbound gesture is
+ignored rather than an error — most of the show asks for nothing. An input bound
+to an event no state handles is a load-time warning, because a gesture that does
+nothing looks exactly like a broken touch handler.
+
+**Sequences live on the guest, not in the room.** A room machine has one state
+for the whole space. Two guests standing in the calibration room tap at different
+moments, so the steps are nested inside the `guidance` region — which is already
+per-guest — and the room simply holds. Region values are dotted when nested
+(`prologue.tapTest`), and cue lookup falls back through the ancestors, so a cue
+on `guidance.prologue` still covers every step inside it.
 
 #### Reconciliation, not events
 

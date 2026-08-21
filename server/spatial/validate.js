@@ -20,7 +20,9 @@ import {
   enteredEvent,
 } from './contract.js';
 import { IMPLEMENTED_ELIGIBILITY_STRATEGIES } from './eligibility.js';
-import { CUE_AUDIENCES, CUE_SLOTS, defaultCueAudience } from './contract.js';
+import {
+  CUE_AUDIENCES, CUE_SLOTS, INPUT_KINDS, defaultCueAudience,
+} from './contract.js';
 
 function isObject(v) {
   return v != null && typeof v === 'object' && !Array.isArray(v);
@@ -233,6 +235,33 @@ function checkRoom(roomId, room, errors, warnings) {
  * participants and a policy that puts people in some other standing, so a guest
  * stands in a running room hearing nothing and it looks like a routing bug.
  */
+/**
+ * Shape checks shared by room and guest cues.
+ *
+ * `offset`/`duration` carve a segment out of a longer recording, which is how
+ * one file can carry a sequence the guest paces themselves through. Getting
+ * them wrong is silence, and silence is the hardest fault to diagnose on the
+ * night — so the arithmetic is checked here rather than discovered in a room.
+ */
+function checkCueMedia(cue, at, errors) {
+  if (cue.audio != null && typeof cue.audio !== 'string') {
+    errors.push(`${at}.audio must be an asset filename`);
+  }
+  if (cue.image != null && typeof cue.image !== 'string') {
+    errors.push(`${at}.image must be an asset filename`);
+  }
+  for (const field of ['offset', 'duration']) {
+    if (cue[field] == null) continue;
+    if (typeof cue[field] !== 'number' || cue[field] < 0 || !Number.isFinite(cue[field])) {
+      errors.push(`${at}.${field} must be a non-negative number of seconds`);
+    }
+    if (cue.audio == null) {
+      errors.push(`${at}.${field} applies to audio, but no audio is declared`);
+    }
+  }
+  if (cue.duration === 0) errors.push(`${at}.duration is zero — the cue would be silent`);
+}
+
 function checkRoomCues(roomId, room, path, errors, warnings) {
   if (room.cues == null) return;
   if (!isObject(room.cues)) {
@@ -254,9 +283,7 @@ function checkRoomCues(roomId, room, path, errors, warnings) {
         errors.push(`${at} must be an object`);
         return;
       }
-      if (cue.audio != null && typeof cue.audio !== 'string') {
-        errors.push(`${at}.audio must be an asset filename`);
-      }
+      checkCueMedia(cue, at, errors);
       checkEnum(cue.audience, CUE_AUDIENCES, `${at}.audience`, errors);
       audiences.add(cue.audience ?? defaultCueAudience(room.kind));
     });
@@ -421,6 +448,7 @@ function checkGuest(guest, rooms, errors, warnings) {
   checkGuestMachine(guest.machine, rooms, errors, warnings);
   checkGuestTimers(guest.timers, guest.machine, errors, warnings);
   checkGuestCues(guest, errors, warnings);
+  checkStepTiming(guest, errors, warnings);
 }
 
 /**
@@ -450,17 +478,90 @@ function checkGuestCues(guest, errors, warnings) {
       errors.push(`guest.cues["${key}"] must be an object`);
       continue;
     }
-    if (cue.audio != null && typeof cue.audio !== 'string') {
-      errors.push(`guest.cues["${key}"].audio must be an asset filename`);
-    }
+    checkCueMedia(cue, `guest.cues["${key}"]`, errors);
     if (cue.audience != null) {
       errors.push(`guest.cues["${key}"].audience does not apply — a guest cue has one listener`);
     }
     const declared = guest.machine?.[region]?.states ?? {};
-    if (Object.keys(declared).length && !declared[state]) {
+    if (Object.keys(declared).length && !resolveStatePath(declared, state)) {
       warnings.push(`guest.cues["${key}"] names a state ${region} never enters`);
     }
   }
+}
+
+/**
+ * Walk a dotted state path (`prologue.tapTest`) through nested `states` blocks.
+ * Regions nest now that a sequence can live inside one, so a cue naming a step
+ * has to be resolvable past the first segment.
+ */
+function resolveStatePath(states, path) {
+  let node = states?.[String(path).split('.')[0]];
+  for (const segment of String(path).split('.').slice(1)) {
+    node = node?.states?.[segment];
+  }
+  return node ?? null;
+}
+
+/**
+ * A self-advancing step and the audio it plays over must agree on how long they
+ * last, and nothing makes them — the `after` is in the machine and the duration
+ * is in the cue. This is precisely the drift this codebase keeps rediscovering:
+ * two places holding one fact. Warned rather than errored, because a deliberate
+ * hold past the end of the voice is a legitimate directorial choice.
+ */
+function checkStepTiming(guest, errors, warnings) {
+  for (const [key, cue] of Object.entries(guest.cues ?? {})) {
+    if (!isObject(cue) || cue.duration == null) continue;
+    const [region, ...rest] = key.split('.');
+    const node = resolveStatePath(guest.machine?.[region]?.states ?? {}, rest.join('.'));
+    const after = Object.keys(node?.after ?? {})[0];
+    if (after == null) continue;
+    const drift = Number(after) - cue.duration * 1000;
+    if (drift < 0) {
+      warnings.push(
+        `guest.cues["${key}"] runs ${cue.duration}s but ${key} advances after ${after}ms `
+        + '— the audio will be cut off',
+      );
+    } else if (drift > 3000) {
+      warnings.push(
+        `${key} holds ${Math.round(drift)}ms after its audio ends — intended, or a stale duration?`,
+      );
+    }
+  }
+}
+
+/**
+ * `inputBindings` turns a gesture into a guest-machine event. It is the only
+ * place the show says what a tap means, which is what keeps the client ignorant
+ * of the narrative and the runtime ignorant of the gesture.
+ */
+function checkInputBindings(def, errors, warnings) {
+  const bindings = def.inputBindings;
+  if (bindings == null) return;
+  if (!isObject(bindings)) {
+    errors.push('inputBindings must be an object keyed by input kind');
+    return;
+  }
+  const machine = def.guest?.machine ?? {};
+  for (const [input, event] of Object.entries(bindings)) {
+    checkEnum(input, INPUT_KINDS, `inputBindings["${input}"]`, errors);
+    if (typeof event !== 'string' || !event) {
+      errors.push(`inputBindings["${input}"] must be the name of a guest-machine event`);
+      continue;
+    }
+    // An input bound to an event nothing listens for is a gesture that does
+    // nothing — and looks exactly like a broken touch handler.
+    if (!handlesEventAnywhere(machine, event)) {
+      warnings.push(`inputBindings["${input}"] sends "${event}", which no guest state handles`);
+    }
+  }
+}
+
+function handlesEventAnywhere(machine, event) {
+  const walk = (states) => Object.values(states ?? {}).some(
+    (state) => isObject(state?.on) && event in state.on || walk(state?.states),
+  );
+  return Object.values(machine).some((region) => walk(region?.states));
 }
 
 function checkGuestMachine(machine, rooms, errors, warnings) {
@@ -626,6 +727,7 @@ export function validateShowDefinition(def) {
 
   checkAdjacency(def.rooms ?? {}, errors, warnings);
   checkGuest(def.guest, def.rooms ?? {}, errors, warnings);
+  checkInputBindings(def, errors, warnings);
   checkPaths(def.paths, def.rooms ?? {}, errors, warnings);
   if (def.phases != null) {
     errors.push('"phases" was replaced by the guidance region of guest.machine');

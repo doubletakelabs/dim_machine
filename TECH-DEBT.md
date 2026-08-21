@@ -4,7 +4,8 @@ A standing record, so none of this depends on anyone remembering it. Update it
 when an item is resolved rather than deleting the row silently — knowing a thing
 was considered and settled is worth as much as the answer.
 
-Status as of Phase A completion (A1–A6, A8, plus shared rooms). 198 tests.
+Status: Phase A complete (A1–A6, A8, plus shared rooms), plus the thin audio
+layer, screens, and phone input. 218 tests.
 
 ---
 
@@ -21,7 +22,8 @@ Nothing here is blocked technically; each needs an answer that isn't ours to giv
 | 1.5 | **Accessibility.** The show is audio-guided, so a guest who cannot hear the tour has no wayfinding at all. | Parked by request. The cheap insurance is an optional `alternatives` field (`{ text, haptic }`) on every cue *before* the cue library exists. | Nothing. Cost rises once Phase B writes cues. |
 | 1.6 | **Does the audience know they went off-path?** Legible, or purely felt? | Directorial; decides how explicit the audio around the transition is. | Recorded silently. |
 | 1.7 | **Guidance intensity.** The original spec had `"insistent"`. Agreed it is narrative rather than structural — worth revisiting if the phone needs it as authored data. | Would live on the guidance region. | Not modelled. |
-| 1.8 | **`DONE` as a room event.** Not in the contract, sent by nothing, used only by the operator button. Either give it a distinct meaning from `RELEASE` (content finished *with people still there*) or drop it. | Two events that look identical get used interchangeably. | Convention in the demo shows. |
+| 1.8 | **Calibration segment boundaries.** `calibrationsteps.mp3` is one 66s recording sliced into seven by `offset`/`duration` in the show. The current numbers were derived from silence detection, not from listening — segment 4 in particular looks too long for its screen. | A boundary that lands mid-sentence is audible and reads as a bug. | Seeded and tunable: `node tools/audition.mjs the-museum <step>` plays one. Needs ten minutes and an ear. |
+| 1.9 | **`DONE` as a room event.** Not in the contract, sent by nothing, used only by the operator button. Either give it a distinct meaning from `RELEASE` (content finished *with people still there*) or drop it. | Two events that look identical get used interchangeably. | Convention in the demo shows. |
 
 ---
 
@@ -36,8 +38,8 @@ JSON currently cannot keep.
 | `rooms.*.audio.joinPolicy` (`inProgress` \| `waitForNext` \| `restart`) | Phase B. Always `inProgress` today |
 | `rooms.*.audio.minRemainingMs` | Phase B — read nowhere at all. A one-shot that already finished is dropped rather than replayed, but there is no late-arrival variant to route to |
 | `rooms.*.outputs.cues` | Phase D (TouchDesigner / DMX) |
-| `guest.audioLayers` | Phase B. Three fixed slots (`room`, `guidance`, `adherence`) stand in; no ducking, crossfade, or priority |
-| `inputBindings` | Phase B (phone inputs) / Phase D (in-room devices) |
+| `guest.audioLayers` | Phase B. Three fixed audio slots (`room`, `guidance`, `adherence`) plus `screen` stand in; no ducking, crossfade, or priority |
+| `inputBindings` | **Live for phone gestures** (`tap`, `swipe`, `shake` → guest-machine events). In-room device inputs are still Phase D |
 | `ineligible.policy`: `ambientOnly`, `lockedMessage`, `tease` | Still selected and reported without choosing a response — but `audience: "ineligible"` now exists, so a show can author the audio by hand. Wiring the policy to pick it is the remaining step |
 | `paths.*.guidance`: `guestDirectedPath`, `freeExplore` | Only `goldenPath` drives a target today |
 | `paths` assignment strategies `manual`, `balanced` | `nextPath` handles `roundRobin` and `random` only |
@@ -47,6 +49,11 @@ JSON currently cannot keep.
 deciding whether to remove it. It was for spreading occupancy, and assignment now
 happens on reaching the museum rather than at the door, which was most of its
 purpose.
+
+*Resolved by screens and input:* `inputBindings` was a declared block nothing
+read. A gesture now becomes a show event through it, which is what let the
+calibration sequence be self-paced without the client or the runtime learning
+anything about the narrative.
 
 *Resolved by the thin audio layer:* `multiGuest.policy: spectator` and
 `atCapacity: personalVariant` were labels in the operator panel with no
@@ -59,7 +66,7 @@ having derived standing in the first place.
 
 | Item | Notes |
 |---|---|
-| **Phone experience beyond audio** | The thin audio layer connects room and guest state to phones (CONTRACT.md §8.1), and the status line now tracks room + standing live. Pages, video, haptics and `setVar` are still v0.2 surfaces nothing drives — a phone shows `waiting` for the entire show while the audio works. |
+| **Phone experience beyond audio and screens** | Audio, full-screen images and touch input are live (CONTRACT.md §8.1), and the status line tracks room + standing. Pages, video, haptics and `setVar` are still v0.2 surfaces nothing drives. |
 | **`server/index.js` has no tests** | The WS command surface, session handling, and phone push are verified by hand against a live server. Two bugs have now hidden there (the relay rename, the unsent `state` message) and both needed a real socket to surface. A harness that boots the server on an ephemeral port and drives it over `ws` would have caught both. |
 | **Zone drawing** | 23 spaces of hand-authored polygons, all currently invented. `floorplan.image` exists so zones can be traced over a real plan; the tool does not. Has a deadline attached to it that the other items do not — venue access. |
 | **Scripted walkthrough replay** | Spec §5.4. Record the `setVirtualPosition` stream, replay against a `ManualClock`. Both the clock and the event log were built for it. This is the regression story for the behavioural matrix. |
@@ -108,6 +115,12 @@ covering `server/spatial/__tests__` alone, so the carried modules had no tests
 that could have failed. Both are fixed; the lesson is that the v0.2 surfaces
 still in the tree (`relay.js`, `client.js`, `pages.js`) are the least-tested
 code here and the most likely to hold a stale assumption.
+
+**A stale server holding the port.** Twice now a fix has looked broken because
+an older `node server/index.js` was still bound to 4000 and serving the previous
+build. Both times the code was already correct. Check `lsof -ti:<port>` before
+believing a live test — and prefer a spare port over killing whatever is there,
+since it may be somebody's running rehearsal.
 
 **Sending an event into a machine from inside its own subscriber.** XState
 queues it, so a rollback check reads the state as unchanged and undoes work that

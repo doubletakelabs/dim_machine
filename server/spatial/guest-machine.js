@@ -82,11 +82,26 @@ function normaliseActions(entry) {
   });
 }
 
-/** `region.state` → the value the actor reports for that region. */
+/**
+ * `region.state` → the value the actor reports for that region.
+ *
+ * Dotted when the region is nested, the same way a room reports `active.main`.
+ * A guidance sequence with steps inside it — calibration — is otherwise
+ * indistinguishable from its own parent, and every step would resolve to the
+ * same cue. Cue lookup falls back from the full path to each ancestor, so a cue
+ * on the parent still covers the whole branch.
+ */
 export function regionState(snapshot, region) {
   const value = snapshot?.value;
   if (!value || typeof value !== 'object') return null;
-  const branch = value[region];
+  return flattenState(value[region]);
+}
+
+function flattenState(branch) {
   if (branch == null) return null;
-  return typeof branch === 'string' ? branch : Object.keys(branch)[0] ?? null;
+  if (typeof branch === 'string') return branch;
+  const [key] = Object.keys(branch);
+  if (key == null) return null;
+  const child = flattenState(branch[key]);
+  return child ? `${key}.${child}` : key;
 }

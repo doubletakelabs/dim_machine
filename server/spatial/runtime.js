@@ -3,14 +3,18 @@ import { validateShowDefinition } from './validate.js';
 import { OccupancyCoordinator } from './coordinator.js';
 import { VirtualLocationAdapter } from './virtual-location.js';
 import { RoomActor } from './room-actor.js';
-import { CueDirector, roomCueFor, guestCueFor } from './cue-director.js';
+import {
+  CueDirector, roomCueFor, guestCueFor, audioPart, screenPart,
+} from './cue-director.js';
 import { Guest } from './guest.js';
 import { GuestActor } from './guest-actor.js';
 import { buildGuestMachine } from './guest-machine.js';
 import { WalkthroughDriver } from './walkthrough.js';
 import { roomStandingSpot, slotForGuest, floorPlanExtent } from './zone-math.js';
 import { systemClock } from './clock.js';
-import { OCCUPANCY_STATES } from './contract.js';
+import {
+  OCCUPANCY_STATES, CUE_SLOTS, AUDIO_CUE_SLOTS, SCREEN_CUE_SLOT, AUTHORED_GUEST_REGIONS,
+} from './contract.js';
 
 /**
  * Coordinator wake-up granularity. A pending entry/exit confirmation can only
@@ -652,23 +656,60 @@ export class SpatialRuntime {
    * @returns {Map<string, object|null>}
    */
   desiredCues(guestId) {
-    const desired = new Map([['room', null], ['guidance', null], ['adherence', null]]);
+    const desired = new Map(CUE_SLOTS.map((slot) => [slot, null]));
     const actor = this.guestActors.get(guestId);
     if (!actor || !this.running || !this.def) return desired;
+
+    /** slot → the resolved declaration behind it, before it is split. */
+    const resolved = { room: null, guidance: null, adherence: null };
 
     const here = actor.currentRoom();
     if (here) {
       const room = this.rooms.get(here.roomId);
       const def = this.def.rooms?.[here.roomId];
       if (room && def) {
-        desired.set('room', roomCueFor(def, room.state, here.standing, room.stateSince));
+        resolved.room = roomCueFor(def, room.state, here.standing, room.stateSince);
       }
     }
     const regions = actor.regions();
-    for (const region of ['guidance', 'adherence']) {
-      desired.set(region, guestCueFor(this.def, region, regions[region], actor.regionSince(region)));
+    for (const region of AUTHORED_GUEST_REGIONS) {
+      resolved[region] = guestCueFor(this.def, region, regions[region], actor.regionSince(region));
     }
+
+    for (const slot of AUDIO_CUE_SLOTS) desired.set(slot, audioPart(resolved[slot]));
+
+    // A phone has one screen, so the sources compete for it rather than mixing.
+    // Guidance wins: when the tour is talking directly to a guest — the
+    // calibration sequence, an instruction — it is addressing them, and the room
+    // they happen to be standing in should not talk over it. Adherence sits
+    // between the two because it is also about this guest and not the space.
+    desired.set(
+      SCREEN_CUE_SLOT,
+      screenPart(resolved.guidance) ?? screenPart(resolved.adherence) ?? screenPart(resolved.room),
+    );
     return desired;
+  }
+
+  /**
+   * A gesture on a phone, on its way to becoming a show event.
+   *
+   * The phone reports what the finger did and nothing more. What a tap *means*
+   * is `inputBindings` in the show — so the calibration sequence can ask for a
+   * tap, and a later room can ask for the same tap and get a different event,
+   * without either the client or this runtime learning why.
+   *
+   * @param {string} guestId
+   * @param {string} input — one of INPUT_KINDS
+   * @returns {boolean} whether the input was bound to anything
+   */
+  guestInput(guestId, input) {
+    const actor = this.guestActors.get(guestId);
+    if (!actor || !this.running) return false;
+    const event = this.def?.inputBindings?.[input];
+    if (!event) return false;
+    actor.send(event);
+    this.notifyChange();
+    return true;
   }
 
   /** Bring every phone in line with the world. Sends nothing when nothing differs. */

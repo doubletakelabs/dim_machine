@@ -135,24 +135,38 @@ const clock = {
 let ctx = null;
 const audioBuffers = new Map();
 const videoBlobs = new Map();
+const imageUrls = new Map();
 const playing = new Map(); // assetId → { source, gainNode, timer? }
 const stopping = new Map(); // assetId → same, while fading out
 let joined = false;
 let assetList = [];
 
 const isVideoAsset = (id) => /\.(mp4|webm|mov|m4v)$/i.test(id);
+const isImageAsset = (id) => /\.(png|jpe?g|webp|gif|avif)$/i.test(id);
+
+/** Where a loaded asset of each kind lands, so `preload` stays one loop. */
+function assetStore(id) {
+  if (isVideoAsset(id)) return videoBlobs;
+  if (isImageAsset(id)) return imageUrls;
+  return audioBuffers;
+}
 
 async function preload(assets) {
-  const missing = assets.filter((id) =>
-    isVideoAsset(id) ? !videoBlobs.has(id) : !audioBuffers.has(id));
+  const missing = assets.filter((id) => !assetStore(id).has(id));
   if (!missing.length) return;
   $('loading').style.display = 'block';
   await Promise.all(missing.map(async (id) => {
     try {
       const res = await fetch(`assets/${id}`);
       if (!res.ok) throw new Error(res.status);
-      if (isVideoAsset(id)) videoBlobs.set(id, URL.createObjectURL(await res.blob()));
-      else audioBuffers.set(id, await ctx.decodeAudioData(await res.arrayBuffer()));
+      // Images and video become blob URLs so showing one is never a network
+      // round trip — a screen that arrives a beat after its narration reads as
+      // a fault, and in a dark room it is the only thing the guest can see.
+      if (isVideoAsset(id) || isImageAsset(id)) {
+        assetStore(id).set(id, URL.createObjectURL(await res.blob()));
+      } else {
+        audioBuffers.set(id, await ctx.decodeAudioData(await res.arrayBuffer()));
+      }
     } catch (e) { console.warn('asset failed:', id, e); }
   }));
   $('loading').style.display = 'none';
@@ -176,19 +190,39 @@ function playAudio(cue, { seekIntoLoop = false } = {}) {
   gainNode.gain.value = cue.gain ?? 1;
   source.connect(gainNode).connect(ctx.destination);
 
+  // A cue may name a slice of a longer file rather than the whole of it, so one
+  // recording can carry a sequence the guest paces themselves through. Every
+  // position below is relative to `base`, and `span` is the wall it stops at.
+  const base = cue.offset ?? 0;
+  const span = cue.duration != null
+    ? Math.min(cue.duration, Math.max(0, buffer.duration - base))
+    : Math.max(0, buffer.duration - base);
+  if (span <= 0) return;
+  if (source.loop) {
+    // `duration` on start() would end the source rather than wrap it, so a
+    // looping segment has to be bounded by the loop points instead.
+    source.loopStart = base;
+    source.loopEnd = base + span;
+  }
+  const play = (when, into = 0) => {
+    if (source.loop) return source.start(when, base + into);
+    if (cue.duration != null || base > 0) return source.start(when, base + into, span - into);
+    return source.start(when, into);
+  };
+
   const nowServer = clock.serverNow();
   if (cue.startAt > nowServer) {
     const when = ctxTimeFor(cue.startAt);
-    source.start(Math.max(when, ctx.currentTime));
+    play(Math.max(when, ctx.currentTime));
     reportCueAt(cue, when);
   } else if (cue.seek || (cue.loop && seekIntoLoop)) {
     // Walked in halfway through: join the content where it actually is rather
     // than starting it over. A one-shot that already finished is simply missed.
-    const offset = (nowServer - cue.startAt) / 1000;
-    if (!cue.loop && offset >= buffer.duration) return;
-    source.start(ctx.currentTime, cue.loop ? offset % buffer.duration : Math.max(0, offset));
+    const elapsed = (nowServer - cue.startAt) / 1000;
+    if (!cue.loop && elapsed >= span) return;
+    play(ctx.currentTime, cue.loop ? elapsed % span : Math.max(0, elapsed));
   } else if (nowServer - cue.startAt < 500) {
-    source.start();
+    play(ctx.currentTime);
   } else {
     return; // stale one-shot: skip
   }
@@ -256,6 +290,29 @@ function hideVideo() {
   overlay.style.display = 'none';
 }
 
+/**
+ * The screen slot. One image at a time, held until the director replaces or
+ * clears it — a screen is a state the guest is in, not a thing that flashes.
+ */
+function showImage(cue) {
+  const src = imageUrls.get(cue.assetId);
+  if (!src) return;
+  const overlay = $('imageOverlay');
+  overlay.querySelector('img').src = src;
+  overlay.style.display = 'block';
+  shownImage = cue.assetId;
+}
+
+function clearImage(assetId) {
+  // A stale clear for an image already replaced would blank the new one.
+  if (assetId && shownImage && assetId !== shownImage) return;
+  const overlay = $('imageOverlay');
+  overlay.style.display = 'none';
+  overlay.querySelector('img').removeAttribute('src');
+  shownImage = null;
+}
+let shownImage = null;
+
 function showPage(cue) {
   hideVideo();
   currentPage = { page: cue.page, props: cue.props ?? {} };
@@ -300,12 +357,72 @@ function runCue(cue, opts = {}) {
     case 'audio': playAudio(cue, opts); break;
     case 'stopAudio': stopAudio(cue.assetId ?? '*', cue.fadeMs ?? 0); break;
     case 'video': playVideo(cue, { joinInProgress: !!opts.seekIntoLoop }); break;
+    case 'image': showImage(cue); break;
+    case 'clearImage': clearImage(cue.assetId); break;
     case 'page': showPage(cue); break;
     case 'haptic': haptic(cue.pattern ?? [200]); break;
     case 'setVar': setVar(cue.key, cue.value); break;
     case 'flash': scheduleFlash(cue); break;
     case 'synctest': scheduleFlash(cue); playAudio({ ...cue, kind: 'audio', assetId: 'click.wav' }); break;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Touch gestures
+//
+// Reported raw. The phone says what the finger did and nothing about what it
+// means — `inputBindings` in the show turns a tap into an event, so the same
+// gesture can advance calibration here and do something else three rooms later
+// without this file knowing either.
+// ---------------------------------------------------------------------------
+const SWIPE_MIN_PX = 60;      // shorter than this is a slip, not a swipe
+const SWIPE_MAX_MS = 800;     // slower than this is a drag
+const TAP_MAX_PX = 12;
+const TAP_MAX_MS = 400;
+const GESTURE_MIN_GAP_MS = 400; // a nervous double-tap is one answer, not two
+
+let lastGesture = 0;
+function emitGesture(type, payload) {
+  if (!joined || Date.now() - lastGesture < GESTURE_MIN_GAP_MS) return;
+  lastGesture = Date.now();
+  window.DIM.emit(type, payload);
+}
+
+function enableGestures() {
+  const stage = $('stage');
+  let start = null;
+  const begin = (x, y) => { start = { x, y, at: Date.now() }; };
+  const end = (x, y) => {
+    if (!start) return;
+    const { x: x0, y: y0, at } = start;
+    start = null;
+    const dx = x - x0;
+    const dy = y - y0;
+    const dist = Math.hypot(dx, dy);
+    const ms = Date.now() - at;
+    if (dist >= SWIPE_MIN_PX && ms <= SWIPE_MAX_MS) {
+      const horizontal = Math.abs(dx) >= Math.abs(dy);
+      emitGesture('swipe', {
+        direction: horizontal ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'),
+        dx: Math.round(dx),
+        dy: Math.round(dy),
+      });
+    } else if (dist <= TAP_MAX_PX && ms <= TAP_MAX_MS) {
+      emitGesture('tap', { x: Math.round(x), y: Math.round(y) });
+    }
+  };
+
+  stage.addEventListener('touchstart', (e) => {
+    const t = e.changedTouches[0];
+    begin(t.clientX, t.clientY);
+  }, { passive: true });
+  stage.addEventListener('touchend', (e) => {
+    const t = e.changedTouches[0];
+    end(t.clientX, t.clientY);
+  }, { passive: true });
+  // Mouse as well, so the browser client stays a usable rehearsal tool.
+  stage.addEventListener('mousedown', (e) => begin(e.clientX, e.clientY));
+  stage.addEventListener('mouseup', (e) => end(e.clientX, e.clientY));
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +552,7 @@ $('join').addEventListener('click', async () => {
       await DeviceMotionEvent.requestPermission();
   } catch {}
   enableShake();
+  enableGestures();
   await preload(assetList);
   joined = true;
   // The server has been reconciling audio for this guest all along; until now we

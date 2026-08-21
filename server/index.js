@@ -141,8 +141,27 @@ const runtime = new SpatialRuntime({
   },
 });
 
+/**
+ * Everything a phone must hold before the show starts.
+ *
+ * Gathered from the loaded show rather than listed by hand: a cue naming an
+ * asset nobody preloaded is silence or a blank screen on the night, and the
+ * failure looks like a cue that never fired. `BASE_ASSETS` stays because the
+ * sync-test tones are used with no show loaded.
+ */
 function currentAssets() {
-  return [...BASE_ASSETS];
+  const found = new Set(BASE_ASSETS);
+  const collect = (cues) => {
+    for (const declared of Object.values(cues ?? {})) {
+      for (const option of [].concat(declared)) {
+        if (option?.audio) found.add(option.audio);
+        if (option?.image) found.add(option.image);
+      }
+    }
+  };
+  collect(runtime.def?.guest?.cues);
+  for (const room of Object.values(runtime.def?.rooms ?? {})) collect(room.cues);
+  return [...found];
 }
 
 function loadShow(file) {
@@ -462,6 +481,15 @@ wss.on('connection', (ws) => {
         // whatever it should already be hearing.
         const guest = runtime.getGuestByToken(token);
         if (guest) runtime.resyncCues(guest.guestId);
+        return;
+      }
+
+      case 'input': {
+        // A gesture on a phone. The show decides what it means; an unbound one
+        // is not an error — most of the show asks for nothing.
+        const guest = runtime.getGuestByToken(token);
+        const kind = msg.event?.type;
+        if (guest && kind) runtime.guestInput(guest.guestId, kind);
         return;
       }
 

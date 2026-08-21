@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --test server/__tests__/*.test.js server/spatial/__tests__/*.test.js",
     "start": "node server/index.js",
-    "assets": "node tools/generate-audio.js"
+    "assets": "node tools/generate-audio.js",
+    "audition": "node tools/audition.mjs"
   },
   "keywords": [],
   "author": "",

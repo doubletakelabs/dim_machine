@@ -25,7 +25,7 @@
  * so it comes from the room or region timestamp and never from `now`.
  */
 
-import { CUE_SLOTS, cueAudienceMatches } from './contract.js';
+import { CUE_SLOTS, SCREEN_CUE_SLOT, cueAudienceMatches } from './contract.js';
 
 export class CueDirector {
   /**
@@ -86,32 +86,44 @@ export class CueDirector {
       const have = current.get(slot) ?? null;
       if ((want?.key ?? null) === (have?.key ?? null)) continue;
 
+      const screen = slot === SCREEN_CUE_SLOT;
+
       // Stop first, and only when the outgoing asset is not the incoming one —
-      // re-sending the same asset would otherwise cut itself off mid-word.
+      // re-sending the same asset would otherwise cut itself off mid-word, or
+      // blank a screen for a frame before redrawing the same image.
       if (have && have.assetId !== want?.assetId) {
-        this.emitCue(guestId, {
-          cueId: `cue-${++this._seq}`,
-          kind: 'stopAudio',
-          assetId: have.assetId,
-          fadeMs: have.fadeMs ?? 400,
-        });
+        this.emitCue(guestId, screen
+          ? { cueId: `cue-${++this._seq}`, kind: 'clearImage', assetId: have.assetId, slot }
+          : {
+            cueId: `cue-${++this._seq}`,
+            kind: 'stopAudio',
+            assetId: have.assetId,
+            fadeMs: have.fadeMs ?? 400,
+          });
       }
       if (!want) {
         current.delete(slot);
         continue;
       }
-      this.emitCue(guestId, {
-        cueId: `cue-${++this._seq}`,
-        kind: 'audio',
-        assetId: want.assetId,
-        startAt: want.startAt,
-        loop: !!want.loop,
-        gain: want.gain ?? 1,
-        // Late arrivals hear the room where it actually is. A one-shot that
-        // already finished is dropped by the client rather than restarted.
-        seek: want.seek !== false,
-        slot,
-      });
+      this.emitCue(guestId, screen
+        ? { cueId: `cue-${++this._seq}`, kind: 'image', assetId: want.assetId, startAt: want.startAt, slot }
+        : {
+          cueId: `cue-${++this._seq}`,
+          kind: 'audio',
+          assetId: want.assetId,
+          startAt: want.startAt,
+          loop: !!want.loop,
+          gain: want.gain ?? 1,
+          // Late arrivals hear the room where it actually is. A one-shot that
+          // already finished is dropped by the client rather than restarted.
+          seek: want.seek !== false,
+          // A segment of a longer file. One recording can carry a whole
+          // sequence, which matters when the sequence is self-paced and a
+          // single timeline could not stay with it.
+          ...(want.offset != null ? { offset: want.offset } : {}),
+          ...(want.duration != null ? { duration: want.duration } : {}),
+          slot,
+        });
       current.set(slot, { key: want.key, assetId: want.assetId, fadeMs: want.fadeMs });
     }
   }
@@ -141,15 +153,49 @@ export function roomCueFor(room, state, standing, startAt) {
   // Rooms may sit in a nested state (`active.main`). A cue keyed on the root
   // covers the whole branch; a cue keyed on the full dotted path wins over it.
   // Reading only the dotted string here is the bug that ate `REQUIRES_LOCK`.
-  const declared = room?.cues?.[state] ?? room?.cues?.[String(state).split('.')[0]];
+  const declared = pickDeclared(room?.cues, state);
   if (!declared) return null;
   const options = Array.isArray(declared) ? declared : [declared];
   for (const option of options) {
     if (!cueAudienceMatches(option.audience, standing, room.kind)) continue;
-    if (!option.audio) return null; // an explicit silence for this audience
-    return { ...option, assetId: option.audio, startAt, key: `${state}:${option.audio}:${startAt}` };
+    // An explicit silence for this audience — and a blank screen with it.
+    if (!option.audio && !option.image) return null;
+    return { ...option, assetId: option.audio, startAt, key: `${state}:${startAt}` };
   }
   return null;
+}
+
+/**
+ * A cue may name a state exactly, or name an ancestor of it. Rooms and guest
+ * regions both nest, so both need the fallback — the calibration sequence lives
+ * at `guidance.prologue.tapTest`, and a cue on `guidance.prologue` covering the
+ * whole branch has to keep working.
+ */
+function pickDeclared(cues, state) {
+  if (!cues || state == null) return null;
+  const path = String(state).split('.');
+  for (let i = path.length; i > 0; i--) {
+    const declared = cues[path.slice(0, i).join('.')];
+    if (declared) return declared;
+  }
+  return null;
+}
+
+/**
+ * The sounding half of a resolved cue, or null if it declares only a screen.
+ * Splitting here rather than in the resolvers is what lets one authored cue
+ * put an image up and a voice over it without the director knowing they came
+ * from the same line of show JSON.
+ */
+export function audioPart(cue) {
+  if (!cue?.assetId) return null;
+  return { ...cue, key: `${cue.key}:a:${cue.assetId}` };
+}
+
+/** The visible half of a resolved cue, or null if it is sound only. */
+export function screenPart(cue) {
+  if (!cue?.image) return null;
+  return { assetId: cue.image, startAt: cue.startAt, key: `${cue.key}:i:${cue.image}` };
 }
 
 /**
@@ -159,12 +205,12 @@ export function roomCueFor(room, state, standing, startAt) {
  */
 export function guestCueFor(show, region, state, startAt) {
   if (!state) return null;
-  const declared = show?.guest?.cues?.[`${region}.${state}`];
-  if (!declared?.audio) return null;
+  const declared = pickDeclared(show?.guest?.cues, `${region}.${state}`);
+  if (!declared || (!declared.audio && !declared.image)) return null;
   return {
     ...declared,
     assetId: declared.audio,
     startAt,
-    key: `${region}.${state}:${declared.audio}:${startAt}`,
+    key: `${region}.${state}:${startAt}`,
   };
 }

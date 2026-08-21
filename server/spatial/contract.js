@@ -188,7 +188,25 @@ export const ELIGIBILITY_STRATEGIES = [
  * slots is not a mixer — `guest.audioLayers` is still Phase B — but it is enough
  * that guidance can speak over an ambient room without either cutting the other.
  */
-export const CUE_SLOTS = ['room', 'guidance', 'adherence'];
+export const CUE_SLOTS = ['room', 'guidance', 'adherence', 'screen'];
+
+/**
+ * Slots that carry sound. `screen` is the exception — it holds an image, and the
+ * director emits `image`/`clearImage` for it rather than `audio`/`stopAudio`.
+ *
+ * One screen slot rather than one per source, because a phone has one screen.
+ * Which source gets it is a precedence decision (runtime.desiredCues), not a
+ * mixing one.
+ */
+export const AUDIO_CUE_SLOTS = CUE_SLOTS.filter((slot) => slot !== 'screen');
+export const SCREEN_CUE_SLOT = 'screen';
+
+/**
+ * Gestures a phone can report. These are raw — what they *mean* is a show
+ * decision, made by `inputBindings` mapping each to a guest-machine event, so a
+ * room can ask for a tap without the client knowing why.
+ */
+export const INPUT_KINDS = ['tap', 'swipe', 'shake'];
 
 /**
  * Who in a room a given cue is for, expressed in standings.
