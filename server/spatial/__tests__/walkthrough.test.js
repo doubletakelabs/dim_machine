@@ -357,12 +357,11 @@ describe('walking a guest the show is waiting on', () => {
   const museum = JSON.parse(readFileSync(join(root, 'shows/the-museum.json'), 'utf8'));
 
   /** Stand a fresh guest on the first calibration screen, mid-question. */
-  function atAScreen({ hasPhone }) {
+  function atAScreen({ kind }) {
     const rt = new SpatialRuntime({ enableTick: false, clock: new ManualClock() });
     assert.deepEqual(rt.load(museum).errors, []);
     rt.start();
-    const g = rt.spawnGuest();
-    rt.setGuestPhone(g.guestId, hasPhone);
+    const g = rt.spawnGuest({ kind });
     rt.setVirtualPosition(g.guestId, 120, 95);
     rt.testAdvanceTime(2600);
     rt.setVirtualPosition(g.guestId, 260, 95);
@@ -374,22 +373,22 @@ describe('walking a guest the show is waiting on', () => {
   }
 
   it('reports the gestures the guest could answer with, and nothing otherwise', () => {
-    const { rt, g } = atAScreen({ hasPhone: true });
+    const { rt, g } = atAScreen({ kind: 'phone' });
     assert.deepEqual(rt.pendingInputs(g.guestId), ['tap']);
     rt.guestInput(g.guestId, 'tap');
     for (let i = 0; i < 4; i++) rt.guestInput(g.guestId, 'tap');
     assert.deepEqual(rt.pendingInputs(g.guestId), ['swipe'], 'the swipe screen wants only a swipe');
   });
 
-  it('leaves a guest with a phone alone — a person is going to answer', () => {
-    const { rt, guidance, roomId } = atAScreen({ hasPhone: true });
+  it('leaves a guest issued a phone alone — a person is going to answer', () => {
+    const { rt, guidance, roomId } = atAScreen({ kind: 'phone' });
     rt.testAdvanceTime(60_000);
     assert.equal(roomId(), 'calibration', 'not walked out from under the question');
     assert.equal(guidance(), 'prologue.calibration.step1');
   });
 
   it('answers for a guest with no phone, so the rest of the show stays reachable', () => {
-    const { rt, guidance, roomId } = atAScreen({ hasPhone: false });
+    const { rt, guidance, roomId } = atAScreen({ kind: 'simulated' });
     rt.testAdvanceTime(4000);
     assert.equal(guidance(), 'prologue.calibration.step2', 'the driver tapped');
 
@@ -399,15 +398,36 @@ describe('walking a guest the show is waiting on', () => {
   });
 
   it('says what it is waiting for, so the panel can show it', () => {
-    const { rt, g } = atAScreen({ hasPhone: false });
+    const { rt, g } = atAScreen({ kind: 'simulated' });
     rt.testAdvanceTime(120);
     const intent = rt.walkthrough.intent(g.guestId);
     assert.equal(intent.phase, 'answering');
     assert.equal(intent.pendingInput, 'tap');
   });
 
-  it('holds rather than answering when the guest has a phone', () => {
-    const { rt, g } = atAScreen({ hasPhone: true });
+  it('keeps holding for a phone that has dropped off the network', () => {
+    const { rt, g, guidance, roomId } = atAScreen({ kind: 'phone' });
+    // A handset that backgrounds or loses wifi is still in somebody's hand.
+    // Keying this on liveness rather than on what the guest is would tap
+    // through their orientation while they get the app back.
+    rt.setGuestConnected(g.guestId, false);
+    rt.testAdvanceTime(60_000);
+    assert.equal(guidance(), 'prologue.calibration.step1', 'their screen is where they left it');
+    // They do drop out of the room — that is `contactLossMs` doing its job, and
+    // is a separate fact from whether the driver may answer on their behalf.
+    assert.equal(roomId(), null);
+  });
+
+  it('never turns a spawned dot into a person', () => {
+    const { rt, g } = atAScreen({ kind: 'simulated' });
+    assert.equal(rt.guests.get(g.guestId).kind, 'simulated');
+    // There is no path from spawned to phone: a handset session spawns its own
+    // guest rather than adopting one off the plan.
+    assert.equal(typeof rt.setGuestPhone, 'undefined');
+  });
+
+  it('holds rather than answering for a guest issued a phone', () => {
+    const { rt, g } = atAScreen({ kind: 'phone' });
     rt.testAdvanceTime(120);
     assert.equal(rt.walkthrough.intent(g.guestId).phase, 'held');
   });

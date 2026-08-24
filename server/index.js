@@ -324,7 +324,8 @@ function ensurePhoneSession(token) {
     const u = users.get(token);
     if (u) return { token, ...u };
   }
-  const spawned = runtime.spawnGuest();
+  // A handset is being issued. This guest is a person from here on.
+  const spawned = runtime.spawnGuest({ kind: 'phone' });
   if (!spawned) return null;
   users.set(spawned.token, {
     guestId: spawned.guestId,
@@ -461,10 +462,6 @@ wss.on('connection', (ws) => {
           const u = users.get(token);
           u.ws = ws;
         }
-
-        // A person is now holding this guest's phone. The walkthrough driver
-        // reads this to know whose questions will get a real answer.
-        runtime.setGuestPhone(users.get(token).guestId, true);
 
         send(ws, {
           type: 'welcome',
@@ -674,7 +671,6 @@ wss.on('connection', (ws) => {
       if (p) {
         p.connected = false;
         runtime.coordinator?.setConnected(p.guestId, false);
-        runtime.setGuestPhone(p.guestId, false);
       }
       notifyRelayPeerLeft(token);
       sendRoster();

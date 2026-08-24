@@ -13,7 +13,8 @@
  */
 export class Guest {
   /**
-   * @param {{ guestId: string, token: string, label: string, pathId?: string|null }} init
+   * @param {{ guestId: string, token: string, label: string, pathId?: string|null,
+   *          kind?: 'phone' | 'simulated' }} init
    */
   constructor(init) {
     this.guestId = init.guestId;
@@ -26,14 +27,13 @@ export class Guest {
     this.adherenceScore = 0;
     this.connected = true;
     /**
-     * Whether a phone is actually attached to this guest right now.
+     * Whether this guest is a person with a handset or a dot on the plan.
      *
-     * Distinct from `connected`, which is about location contact and is true
-     * for a guest the operator spawned to drag around the plan. This one
-     * answers "is there a person holding a handset" — which is the difference
-     * between a question the show can wait on and one nobody will ever answer.
+     * Fixed at creation, and not the same fact as `connected` — a phone that
+     * has backgrounded still belongs to somebody standing in a room. See
+     * GUEST_KINDS.
      */
-    this.hasPhone = false;
+    this.kind = init.kind ?? 'simulated';
     // Read-model of coordinator occupancy.
     this.roomId = /** @type {string | null} */ (null);
     this.zoneId = /** @type {string | null} */ (null);
@@ -111,7 +111,7 @@ export class Guest {
       zoneId: this.zoneId,
       occupancy: this.occupancy,
       connected: this.connected,
-      hasPhone: this.hasPhone,
+      kind: this.kind,
       visitHistory: this.visitHistory,
     };
   }

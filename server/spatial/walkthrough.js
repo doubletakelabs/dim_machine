@@ -164,15 +164,20 @@ export class WalkthroughDriver {
   /**
    * Sit still while the show waits on this guest.
    *
-   * A guest holding a phone is left alone: a person is going to answer, and
-   * answering for them is the bug this exists to avoid. A simulated guest has
-   * nobody to tap for them, so the driver taps — which is the honest
-   * simulation, and keeps the rest of the show reachable in a load test.
+   * A guest issued a phone is left alone: a person is going to answer, and
+   * answering for them is the bug this exists to avoid. Deliberately keyed on
+   * what the guest *is* rather than on whether their socket is up this second —
+   * a backgrounded handset is still in somebody's hand, and tapping through
+   * their orientation while they get the app back is precisely the fault.
+   *
+   * A simulated guest has nobody to tap for them, so the driver taps. That is
+   * the honest simulation, and it keeps the rest of the show reachable in a
+   * load test rather than stranding every dot on the first screen.
    */
   answerOrWait(walker, guest, pending, now) {
     walker.target = null;
 
-    if (guest.hasPhone) {
+    if (guest.kind === 'phone') {
       walker.phase = 'held';
       walker.waitUntil = now + this.config.pauseMs;
       return;

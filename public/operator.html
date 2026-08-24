@@ -797,7 +797,7 @@ function renderInspector() {
       <dt>Walking</dt><dd>${guest.walking ? describeIntent(guest) : 'no'}</dd>
       <dt>Hearing</dt><dd>${describeCues(guest.cues)}</dd>
       <dt>Waiting on</dt><dd>${guest.pendingInputs?.length
-        ? `<span style="color:#e0b050">${guest.pendingInputs.join(' or ')}</span>${guest.hasPhone ? '' : ' <span class="muted">(no phone attached)</span>'}`
+        ? `<span style="color:#e0b050">${guest.pendingInputs.join(' or ')}</span>${guest.kind === 'phone' ? '' : ' <span class="muted">(simulated — the driver will answer)</span>'}`
         : '<span class="muted">—</span>'}</dd>
     </dl>
     <h2 style="margin-top:12px">Route</h2>

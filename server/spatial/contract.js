@@ -202,6 +202,20 @@ export const AUDIO_CUE_SLOTS = CUE_SLOTS.filter((slot) => slot !== 'screen');
 export const SCREEN_CUE_SLOT = 'screen';
 
 /**
+ * What a guest is.
+ *
+ * `phone` means a handset was issued for this guest — a person is carrying it,
+ * and the show can ask them things. `simulated` is a dot the operator spawned to
+ * exercise the building with.
+ *
+ * Fixed when the guest is created, and deliberately not the same fact as
+ * `connected`. A phone that has backgrounded or lost wifi still belongs to
+ * somebody standing in a room; treating that moment as "nobody is holding this"
+ * is how a tool for standing in for people ends up acting on a person.
+ */
+export const GUEST_KINDS = ['phone', 'simulated'];
+
+/**
  * Gestures a phone can report. These are raw — what they *mean* is a show
  * decision, made by `inputBindings` mapping each to a guest-machine event, so a
  * room can ask for a tap without the client knowing why.

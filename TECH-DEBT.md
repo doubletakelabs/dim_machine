@@ -5,7 +5,7 @@ when an item is resolved rather than deleting the row silently — knowing a thi
 was considered and settled is worth as much as the answer.
 
 Status: Phase A complete (A1–A6, A8, plus shared rooms), plus the thin audio
-layer, screens, phone input, and screen sequences. 232 tests.
+layer, screens, phone input, and screen sequences. 234 tests.
 
 ---
 
@@ -122,9 +122,17 @@ adopts every guest in the show — including someone holding an actual handset. 
 walked a real guest out of a room mid-question, because a room's dwell time was
 the only thing it knew about how long to stay. The runtime could not tell the two
 apart: `connected` is about location contact and is true for a spawned dot.
-Fixed by giving a guest `hasPhone` and teaching the driver that a show waiting on
-a gesture is a reason to stop. The general shape to watch for: **a tool for
-standing in for people, pointed at a person.**
+
+Fixed twice, and the second fix is the interesting one. The first attempt tracked
+whether a socket was attached — which is *liveness*, and would have tapped
+through somebody's orientation while their handset was backgrounded. A guest now
+carries `kind` (`phone` | `simulated`), fixed when they are created and never
+changed; a handset session spawns its own guest rather than adopting a dot off
+the plan. The driver answers for simulated guests and never for people.
+
+Two lessons: **a tool for standing in for people, pointed at a person** — and
+when a check keeps needing exceptions, the question being asked is probably about
+identity, not about state.
 
 **A stale server holding the port.** Twice now a fix has looked broken because
 an older `node server/index.js` was still bound to 4000 and serving the previous

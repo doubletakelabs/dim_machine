@@ -209,7 +209,7 @@ export class SpatialRuntime {
     }
   }
 
-  spawnGuest({ label } = {}) {
+  spawnGuest({ label, kind } = {}) {
     if (!this.def) return null;
     const guestId = `u-${randomUUID().slice(0, 8)}`;
     const token = randomUUID();
@@ -223,7 +223,9 @@ export class SpatialRuntime {
       token,
       label: label ?? `Guest ${num}`,
       pathId: null,
-
+      // A guest issued a handset is one the show can ask things of. A spawned
+      // dot is not, and never becomes one.
+      kind: kind ?? 'simulated',
     });
 
     this.guests.set(guestId, guest);
@@ -642,7 +644,7 @@ export class SpatialRuntime {
       // What the show is holding this guest for, and whether anyone is there to
       // provide it — the pair of facts that explains a guest who has stopped.
       pendingInputs: this.pendingInputs(g.guestId),
-      hasPhone: g.hasPhone,
+      kind: g.kind,
       position: this.displayPosition(g.guestId),
       walking: this.walkthrough?.walkers.has(g.guestId) ?? false,
       intent: this.walkthrough?.intent(g.guestId) ?? null,
@@ -710,17 +712,6 @@ export class SpatialRuntime {
    * @param {string} input — one of INPUT_KINDS
    * @returns {boolean} whether the input was bound to anything
    */
-  /**
-   * Whether a phone is attached to this guest, as the server sees it.
-   * @returns {boolean} whether the guest existed
-   */
-  setGuestPhone(guestId, hasPhone) {
-    const guest = this.guests.get(guestId);
-    if (!guest) return false;
-    guest.hasPhone = !!hasPhone;
-    return true;
-  }
-
   /**
    * Inputs the guest's machine would act on right now.
    *
