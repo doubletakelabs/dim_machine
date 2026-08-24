@@ -13,6 +13,11 @@ const DEFAULTS = {
   maxDwellMs: 40000,
   /** How long to wait before setting off again when there is nowhere to go. */
   pauseMs: 2000,
+  /**
+   * How long a simulated guest takes to answer a screen that wants a gesture.
+   * Long enough to read a line of type and reach for the glass.
+   */
+  answerMs: 3500,
   stepMs: 120,
 };
 
@@ -57,6 +62,7 @@ export class WalkthroughDriver {
       if (!this.walkers.has(guestId)) {
         this.walkers.set(guestId, {
           guestId, target: null, waitUntil: 0, phase: 'idle', dwellRoomId: null,
+          pendingInput: null,
         });
       }
     }
@@ -110,6 +116,14 @@ export class WalkthroughDriver {
   advanceWalker(walker, guest, now) {
     if (now < walker.waitUntil) return;
 
+    // The show has asked this guest for a gesture and is holding for it.
+    // Walking them out of the room would be the simulation answering by
+    // leaving — and for a guest with a handset in their hand, it looks like the
+    // show wandering off mid-question.
+    const pending = this.runtime.pendingInputs(guest.guestId);
+    if (pending.length) return this.answerOrWait(walker, guest, pending, now);
+    if (walker.phase === 'answering' || walker.phase === 'held') walker.phase = 'idle';
+
     if (!walker.target) {
       const target = this.chooseTarget(guest);
       if (!target) {
@@ -145,6 +159,35 @@ export class WalkthroughDriver {
       position.x + (dx / distance) * stepDistance,
       position.y + (dy / distance) * stepDistance,
     );
+  }
+
+  /**
+   * Sit still while the show waits on this guest.
+   *
+   * A guest holding a phone is left alone: a person is going to answer, and
+   * answering for them is the bug this exists to avoid. A simulated guest has
+   * nobody to tap for them, so the driver taps — which is the honest
+   * simulation, and keeps the rest of the show reachable in a load test.
+   */
+  answerOrWait(walker, guest, pending, now) {
+    walker.target = null;
+
+    if (guest.hasPhone) {
+      walker.phase = 'held';
+      walker.waitUntil = now + this.config.pauseMs;
+      return;
+    }
+    if (walker.phase !== 'answering') {
+      walker.phase = 'answering';
+      walker.pendingInput = pending[0];
+      walker.waitUntil = now + this.config.answerMs;
+      return;
+    }
+    // Re-read rather than trusting what was pending when the pause began — the
+    // guest may have been moved, or answered from a real phone meanwhile.
+    this.runtime.guestInput(guest.guestId, pending[0]);
+    walker.phase = 'idle';
+    walker.pendingInput = null;
   }
 
   /** Long enough that this room's `seen` threshold is comfortably crossed. */
@@ -204,7 +247,8 @@ export class WalkthroughDriver {
       phase: walker.phase,
       targetRoomId: walker.target?.roomId ?? null,
       dwellRoomId: walker.dwellRoomId,
-      movesInMs: walker.phase === 'dwelling' || walker.phase === 'done' ? remaining : null,
+      pendingInput: walker.pendingInput ?? null,
+      movesInMs: ['dwelling', 'done', 'answering'].includes(walker.phase) ? remaining : null,
     };
   }
 

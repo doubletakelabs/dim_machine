@@ -25,6 +25,15 @@ export class Guest {
     this.adherence = /** @type {'golden' | 'drifting' | 'cursed'} */ ('golden');
     this.adherenceScore = 0;
     this.connected = true;
+    /**
+     * Whether a phone is actually attached to this guest right now.
+     *
+     * Distinct from `connected`, which is about location contact and is true
+     * for a guest the operator spawned to drag around the plan. This one
+     * answers "is there a person holding a handset" — which is the difference
+     * between a question the show can wait on and one nobody will ever answer.
+     */
+    this.hasPhone = false;
     // Read-model of coordinator occupancy.
     this.roomId = /** @type {string | null} */ (null);
     this.zoneId = /** @type {string | null} */ (null);
@@ -102,6 +111,7 @@ export class Guest {
       zoneId: this.zoneId,
       occupancy: this.occupancy,
       connected: this.connected,
+      hasPhone: this.hasPhone,
       visitHistory: this.visitHistory,
     };
   }

@@ -352,3 +352,63 @@ describe('operator overrides', () => {
     assert.equal(rt.timeScale(), 1);
   });
 });
+
+describe('walking a guest the show is waiting on', () => {
+  const museum = JSON.parse(readFileSync(join(root, 'shows/the-museum.json'), 'utf8'));
+
+  /** Stand a fresh guest on the first calibration screen, mid-question. */
+  function atAScreen({ hasPhone }) {
+    const rt = new SpatialRuntime({ enableTick: false, clock: new ManualClock() });
+    assert.deepEqual(rt.load(museum).errors, []);
+    rt.start();
+    const g = rt.spawnGuest();
+    rt.setGuestPhone(g.guestId, hasPhone);
+    rt.setVirtualPosition(g.guestId, 120, 95);
+    rt.testAdvanceTime(2600);
+    rt.setVirtualPosition(g.guestId, 260, 95);
+    rt.testAdvanceTime(2600);
+    const guidance = () => rt.guestActors.get(g.guestId).regions().guidance;
+    assert.equal(guidance(), 'prologue.calibration.step1');
+    rt.walkthrough.start();
+    return { rt, g, guidance, roomId: () => rt.guests.get(g.guestId).roomId };
+  }
+
+  it('reports the gestures the guest could answer with, and nothing otherwise', () => {
+    const { rt, g } = atAScreen({ hasPhone: true });
+    assert.deepEqual(rt.pendingInputs(g.guestId), ['tap']);
+    rt.guestInput(g.guestId, 'tap');
+    for (let i = 0; i < 4; i++) rt.guestInput(g.guestId, 'tap');
+    assert.deepEqual(rt.pendingInputs(g.guestId), ['swipe'], 'the swipe screen wants only a swipe');
+  });
+
+  it('leaves a guest with a phone alone — a person is going to answer', () => {
+    const { rt, guidance, roomId } = atAScreen({ hasPhone: true });
+    rt.testAdvanceTime(60_000);
+    assert.equal(roomId(), 'calibration', 'not walked out from under the question');
+    assert.equal(guidance(), 'prologue.calibration.step1');
+  });
+
+  it('answers for a guest with no phone, so the rest of the show stays reachable', () => {
+    const { rt, guidance, roomId } = atAScreen({ hasPhone: false });
+    rt.testAdvanceTime(4000);
+    assert.equal(guidance(), 'prologue.calibration.step2', 'the driver tapped');
+
+    rt.testAdvanceTime(30_000);
+    assert.equal(guidance(), 'prologue.done', 'including the swipe screen');
+    assert.notEqual(roomId(), 'calibration', 'and then walks on');
+  });
+
+  it('says what it is waiting for, so the panel can show it', () => {
+    const { rt, g } = atAScreen({ hasPhone: false });
+    rt.testAdvanceTime(120);
+    const intent = rt.walkthrough.intent(g.guestId);
+    assert.equal(intent.phase, 'answering');
+    assert.equal(intent.pendingInput, 'tap');
+  });
+
+  it('holds rather than answering when the guest has a phone', () => {
+    const { rt, g } = atAScreen({ hasPhone: true });
+    rt.testAdvanceTime(120);
+    assert.equal(rt.walkthrough.intent(g.guestId).phase, 'held');
+  });
+});

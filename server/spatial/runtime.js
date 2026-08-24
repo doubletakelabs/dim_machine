@@ -639,6 +639,10 @@ export class SpatialRuntime {
       // What their phone is playing, so the panel can answer "what is this
       // person actually experiencing" without anyone holding the phone.
       cues: this.cueSnapshot(g.guestId),
+      // What the show is holding this guest for, and whether anyone is there to
+      // provide it — the pair of facts that explains a guest who has stopped.
+      pendingInputs: this.pendingInputs(g.guestId),
+      hasPhone: g.hasPhone,
       position: this.displayPosition(g.guestId),
       walking: this.walkthrough?.walkers.has(g.guestId) ?? false,
       intent: this.walkthrough?.intent(g.guestId) ?? null,
@@ -706,6 +710,34 @@ export class SpatialRuntime {
    * @param {string} input — one of INPUT_KINDS
    * @returns {boolean} whether the input was bound to anything
    */
+  /**
+   * Whether a phone is attached to this guest, as the server sees it.
+   * @returns {boolean} whether the guest existed
+   */
+  setGuestPhone(guestId, hasPhone) {
+    const guest = this.guests.get(guestId);
+    if (!guest) return false;
+    guest.hasPhone = !!hasPhone;
+    return true;
+  }
+
+  /**
+   * Inputs the guest's machine would act on right now.
+   *
+   * Empty most of the time — the show asks for a gesture rarely. When it is not
+   * empty the show has asked this guest a question and is holding for the
+   * answer, which is a state anything moving guests around needs to respect.
+   *
+   * @returns {string[]} input kinds, from `inputBindings`
+   */
+  pendingInputs(guestId) {
+    const actor = this.guestActors.get(guestId);
+    if (!actor || !this.running) return [];
+    return Object.entries(this.def?.inputBindings ?? {})
+      .filter(([, event]) => actor.canAccept(event))
+      .map(([input]) => input);
+  }
+
   guestInput(guestId, input) {
     const actor = this.guestActors.get(guestId);
     if (!actor || !this.running) return false;

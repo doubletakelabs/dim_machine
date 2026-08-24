@@ -462,6 +462,10 @@ wss.on('connection', (ws) => {
           u.ws = ws;
         }
 
+        // A person is now holding this guest's phone. The walkthrough driver
+        // reads this to know whose questions will get a real answer.
+        runtime.setGuestPhone(users.get(token).guestId, true);
+
         send(ws, {
           type: 'welcome',
           token,
@@ -670,6 +674,7 @@ wss.on('connection', (ws) => {
       if (p) {
         p.connected = false;
         runtime.coordinator?.setConnected(p.guestId, false);
+        runtime.setGuestPhone(p.guestId, false);
       }
       notifyRelayPeerLeft(token);
       sendRoster();

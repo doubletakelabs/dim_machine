@@ -347,6 +347,17 @@ export class GuestActor {
   }
 
   /** When the guest entered its current state in an authored region. */
+  /** Would the machine act on this event as it stands? */
+  canAccept(event) {
+    const snap = this.actor?.getSnapshot();
+    if (!snap) return false;
+    try {
+      return snap.can({ type: event });
+    } catch {
+      return false;
+    }
+  }
+
   regionSince(region) {
     return this._regionsSince[region]?.at ?? this.clock.now();
   }

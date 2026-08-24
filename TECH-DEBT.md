@@ -5,7 +5,7 @@ when an item is resolved rather than deleting the row silently — knowing a thi
 was considered and settled is worth as much as the answer.
 
 Status: Phase A complete (A1–A6, A8, plus shared rooms), plus the thin audio
-layer, screens, phone input, and screen sequences. 227 tests.
+layer, screens, phone input, and screen sequences. 232 tests.
 
 ---
 
@@ -115,6 +115,16 @@ covering `server/spatial/__tests__` alone, so the carried modules had no tests
 that could have failed. Both are fixed; the lesson is that the v0.2 surfaces
 still in the tree (`relay.js`, `client.js`, `pages.js`) are the least-tested
 code here and the most likely to hold a stale assumption.
+
+**A simulation tool acting on a real participant.** The walkthrough driver was
+built when every guest was a dot on a floor plan, and `start()` with no arguments
+adopts every guest in the show — including someone holding an actual handset. It
+walked a real guest out of a room mid-question, because a room's dwell time was
+the only thing it knew about how long to stay. The runtime could not tell the two
+apart: `connected` is about location contact and is true for a spawned dot.
+Fixed by giving a guest `hasPhone` and teaching the driver that a show waiting on
+a gesture is a reason to stop. The general shape to watch for: **a tool for
+standing in for people, pointed at a person.**
 
 **A stale server holding the port.** Twice now a fix has looked broken because
 an older `node server/index.js` was still bound to 4000 and serving the previous
