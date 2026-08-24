@@ -20,6 +20,7 @@ import {
   enteredEvent,
 } from './contract.js';
 import { IMPLEMENTED_ELIGIBILITY_STRATEGIES } from './eligibility.js';
+import { expandSequences } from './sequence.js';
 import {
   CUE_AUDIENCES, CUE_SLOTS, INPUT_KINDS, defaultCueAudience,
 } from './contract.js';
@@ -685,13 +686,18 @@ function checkAdherence(adherence, errors, warnings) {
  * Validate a contract v3 show definition.
  * @returns {{ errors: string[], warnings: string[] }}
  */
-export function validateShowDefinition(def) {
-  const errors = [];
-  const warnings = [];
-
-  if (!isObject(def)) {
+export function validateShowDefinition(raw) {
+  if (!isObject(raw)) {
     return { errors: ['definition must be a JSON object'], warnings: [] };
   }
+
+  // Validate the show as the runtime will see it, not as it was typed. A
+  // sequence is a shorthand for states and cues that do not exist until it is
+  // expanded, and checking the shorthand would report every one of them missing.
+  const expansion = expandSequences(raw);
+  const def = expansion.def;
+  const errors = [...expansion.errors];
+  const warnings = [...expansion.warnings];
 
   if (def.contractVersion !== CONTRACT_VERSION) {
     errors.push(

@@ -1,71 +1,97 @@
 #!/usr/bin/env node
 /**
- * Audition the audio segments a show declares.
+ * Walk a show's screen sequences on the desk: what each step shows, what it
+ * plays, and what ends it.
  *
- * Segment boundaries are the one part of a self-paced sequence that cannot be
- * derived — only heard. This plays each one in turn so they can be tuned by ear
- * against the show JSON, rather than by counting silences in a waveform.
+ * The advance rule lives in the image filename, so the deck and the machine
+ * cannot drift — but that also means nothing in the show JSON states it plainly.
+ * This prints it.
  *
- *   node tools/audition.mjs the-museum                 # list every segment
- *   node tools/audition.mjs the-museum tapTest         # play one
- *   node tools/audition.mjs the-museum --all           # play them in order
+ *   node tools/audition.mjs the-museum                # every sequence
+ *   node tools/audition.mjs the-museum calibration    # play one, in order
  *
- * Needs ffplay (brew install ffmpeg).
+ * Playing needs ffplay (brew install ffmpeg).
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { advanceForStep } from '../server/spatial/sequence.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const assetsDir = join(root, 'public', 'assets');
 const [showName, target] = process.argv.slice(2);
 
 if (!showName) {
-  console.error('usage: node tools/audition.mjs <show> [stepName|--all]');
+  console.error('usage: node tools/audition.mjs <show> [sequenceName]');
   process.exit(1);
 }
 
 const show = JSON.parse(readFileSync(join(root, 'shows', `${showName}.json`), 'utf8'));
 
-const segments = Object.entries(show.guest?.cues ?? {})
-  .filter(([, cue]) => cue?.duration != null)
-  .map(([key, cue]) => ({
-    key,
-    step: key.split('.').pop(),
-    asset: cue.audio,
-    image: cue.image,
-    offset: cue.offset ?? 0,
-    duration: cue.duration,
-  }));
+/** Every `sequence` in the guest machine, with the path that names it. */
+function findSequences(states, path = []) {
+  const found = [];
+  for (const [id, state] of Object.entries(states ?? {})) {
+    if (!state || typeof state !== 'object') continue;
+    if (Array.isArray(state.sequence)) {
+      found.push({ name: id, path: [...path, id].join('.'), state });
+    }
+    if (state.states) found.push(...findSequences(state.states, [...path, id]));
+  }
+  return found;
+}
 
-if (!segments.length) {
-  console.log(`${showName} declares no segmented audio.`);
+const sequences = Object.entries(show.guest?.machine ?? {})
+  .filter(([region]) => region !== 'location')
+  .flatMap(([region, block]) => findSequences(block?.states, [region]));
+
+if (!sequences.length) {
+  console.log(`${showName} declares no sequences.`);
   process.exit(0);
 }
 
-const play = ({ asset, offset, duration }) => spawnSync(
+const describe = (advance) => {
+  if (!advance) return '?? no rule';
+  return advance.kind === 'delay' ? `after ${advance.ms}ms` : `on ${advance.input}`;
+};
+
+const duration = (asset) => {
+  if (!asset) return '';
+  const path = join(assetsDir, asset);
+  if (!existsSync(path)) return '  MISSING';
+  const out = spawnSync('ffprobe', [
+    '-v', 'error', '-show_entries', 'format=duration', '-of',
+    'default=noprint_wrappers=1:nokey=1', path,
+  ], { encoding: 'utf8' });
+  const secs = Number(out.stdout);
+  return Number.isFinite(secs) ? `${secs.toFixed(2)}s` : '';
+};
+
+const play = (asset) => spawnSync(
   'ffplay',
-  ['-nodisp', '-autoexit', '-loglevel', 'error', '-ss', String(offset), '-t', String(duration),
-    join(root, 'public', 'assets', asset)],
+  ['-nodisp', '-autoexit', '-loglevel', 'error', join(assetsDir, asset)],
   { stdio: 'inherit' },
 );
 
-const chosen = target && target !== '--all'
-  ? segments.filter((s) => s.step === target || s.key === target)
-  : segments;
+const chosen = target
+  ? sequences.filter((s) => s.name === target || s.path === target)
+  : sequences;
 
 if (!chosen.length) {
-  console.error(`no segment named "${target}". Known: ${segments.map((s) => s.step).join(', ')}`);
+  console.error(`no sequence named "${target}". Known: ${sequences.map((s) => s.name).join(', ')}`);
   process.exit(1);
 }
 
-for (const seg of chosen) {
-  const end = (seg.offset + seg.duration).toFixed(2);
-  console.log(
-    `${seg.step.padEnd(12)} ${String(seg.offset.toFixed(2)).padStart(6)}s → ${end.padStart(6)}s`
-    + `  (${seg.duration.toFixed(2)}s)  ${seg.image ?? ''}`,
-  );
-  if (target) play(seg);
+for (const seq of chosen) {
+  console.log(`\n${seq.path}  →  ${seq.state.onComplete ?? '(nothing follows)'}`);
+  seq.state.sequence.forEach((step, i) => {
+    console.log(
+      `  ${String(i + 1).padStart(2)}. ${describe(advanceForStep(step)).padEnd(14)}`
+      + `${(step.image ?? '—').padEnd(34)}${(step.audio ?? '—').padEnd(34)}${duration(step.audio)}`,
+    );
+    if (target && step.audio) play(step.audio);
+  });
 }
 
-if (!target) console.log('\nPass a step name to hear one, or --all to hear them in order.');
+if (!target) console.log('\nPass a sequence name to hear it in order.');

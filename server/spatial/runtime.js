@@ -9,6 +9,7 @@ import {
 import { Guest } from './guest.js';
 import { GuestActor } from './guest-actor.js';
 import { buildGuestMachine } from './guest-machine.js';
+import { expandSequences } from './sequence.js';
 import { WalkthroughDriver } from './walkthrough.js';
 import { roomStandingSpot, slotForGuest, floorPlanExtent } from './zone-math.js';
 import { systemClock } from './clock.js';
@@ -80,11 +81,14 @@ export class SpatialRuntime {
   }
 
   load(def) {
+    // The validator expands sequences itself and reports on the result, so a
+    // show file is checkable exactly as authored. Expanding again here is a pure
+    // function of the same input, and what the runtime actually runs.
     const { errors, warnings } = validateShowDefinition(def);
     if (errors.length) return { errors, warnings, ok: false };
 
     this.stop({ quiet: true });
-    this.def = structuredClone(def);
+    this.def = expandSequences(def).def;
     this.globals = Object.fromEntries(
       Object.entries(def.globals ?? {}).map(([k, g]) => [k, g.initial ?? null]),
     );

@@ -5,7 +5,7 @@ when an item is resolved rather than deleting the row silently — knowing a thi
 was considered and settled is worth as much as the answer.
 
 Status: Phase A complete (A1–A6, A8, plus shared rooms), plus the thin audio
-layer, screens, and phone input. 218 tests.
+layer, screens, phone input, and screen sequences. 227 tests.
 
 ---
 
@@ -22,8 +22,7 @@ Nothing here is blocked technically; each needs an answer that isn't ours to giv
 | 1.5 | **Accessibility.** The show is audio-guided, so a guest who cannot hear the tour has no wayfinding at all. | Parked by request. The cheap insurance is an optional `alternatives` field (`{ text, haptic }`) on every cue *before* the cue library exists. | Nothing. Cost rises once Phase B writes cues. |
 | 1.6 | **Does the audience know they went off-path?** Legible, or purely felt? | Directorial; decides how explicit the audio around the transition is. | Recorded silently. |
 | 1.7 | **Guidance intensity.** The original spec had `"insistent"`. Agreed it is narrative rather than structural — worth revisiting if the phone needs it as authored data. | Would live on the guidance region. | Not modelled. |
-| 1.8 | **Calibration segment boundaries.** `calibrationsteps.mp3` is one 66s recording sliced into seven by `offset`/`duration` in the show. The current numbers were derived from silence detection, not from listening — segment 4 in particular looks too long for its screen. | A boundary that lands mid-sentence is audible and reads as a bug. | Seeded and tunable: `node tools/audition.mjs the-museum <step>` plays one. Needs ten minutes and an ear. |
-| 1.9 | **`DONE` as a room event.** Not in the contract, sent by nothing, used only by the operator button. Either give it a distinct meaning from `RELEASE` (content finished *with people still there*) or drop it. | Two events that look identical get used interchangeably. | Convention in the demo shows. |
+| 1.8 | **`DONE` as a room event.** Not in the contract, sent by nothing, used only by the operator button. Either give it a distinct meaning from `RELEASE` (content finished *with people still there*) or drop it. | Two events that look identical get used interchangeably. | Convention in the demo shows. |
 
 ---
 
@@ -34,6 +33,7 @@ JSON currently cannot keep.
 
 | Field / value | Where it should land |
 |---|---|
+| Cue `offset`/`duration` | Live, but nothing uses it — the calibration clips are discrete files now. Kept because a long uncut take is a normal thing to be handed |
 | `rooms.*.audio.timing` (`masterTimeline` \| `perGuest`) | Phase B. The thin layer behaves as `perGuest`-with-seek, which is `masterTimeline`'s join behaviour minus the timeline — indistinguishable until projection must stay aligned to it |
 | `rooms.*.audio.joinPolicy` (`inProgress` \| `waitForNext` \| `restart`) | Phase B. Always `inProgress` today |
 | `rooms.*.audio.minRemainingMs` | Phase B — read nowhere at all. A one-shot that already finished is dropped rather than replayed, but there is no late-arrival variant to route to |

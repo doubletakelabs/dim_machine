@@ -653,18 +653,14 @@ in the `screen` slot; a cue may declare either or both), `loop`, `gain`,
 rather than all of it:
 
 ```jsonc
-"guidance.prologue.volume": {
-  "audio": "audio/calibrationsteps.mp3",
-  "offset": 11.38, "duration": 6.47,
-  "image": "img/02DIM.png"
-}
+"guidance.someStep": { "audio": "long-take.mp3", "offset": 11.38, "duration": 6.47 }
 ```
 
-One recording can then carry a whole sequence. That matters when the sequence is
-**self-paced** — a guest who is asked to tap the screen takes as long as they
-take, and no single timeline can stay with them. Segments seek and loop within
-their own bounds, so a late-joining phone lands inside the segment, not inside
-the file.
+One recording can then carry several beats. Segments seek and loop within their
+own bounds, so a late-joining phone lands inside the segment rather than inside
+the file. Nothing in the current shows uses this — the calibration clips are
+discrete files — but a long take that has not been cut up is a normal thing to
+be handed.
 
 #### Input: a gesture becomes an event
 
@@ -687,8 +683,58 @@ nothing looks exactly like a broken touch handler.
 for the whole space. Two guests standing in the calibration room tap at different
 moments, so the steps are nested inside the `guidance` region — which is already
 per-guest — and the room simply holds. Region values are dotted when nested
-(`prologue.tapTest`), and cue lookup falls back through the ancestors, so a cue
-on `guidance.prologue` still covers every step inside it.
+(`prologue.calibration.step3`), and cue lookup falls back through the ancestors,
+so a cue on `guidance.prologue` still covers every step inside it.
+
+#### Sequences
+
+A run of screens is declared as a list rather than a state per screen. A guidance
+state carrying `sequence` is expanded at load into exactly the states and cues
+somebody would otherwise have written by hand:
+
+```jsonc
+"calibration": {
+  "sequence": [
+    { "image": "img/calibration_01_ontap.png",   "audio": "audio/calibrationsteps_01.mp3" },
+    { "image": "img/calibration_06_onswipe.png", "audio": "audio/calibrationsteps_06.mp3" }
+  ],
+  "onComplete": "done"
+}
+```
+
+becomes `step1`, `step2`, … each waiting for its own gesture, with a generated
+cue per step. Nothing downstream knows a sequence existed — validation, the
+machine builder and the cue director all see an ordinary show. `onComplete` names
+a sibling of the sequence state; without one, the last screen stays up and the
+show warns at load.
+
+**What ends a step comes from the image filename.**
+
+| Suffix | Step ends on |
+|---|---|
+| `_ontap` | a tap |
+| `_onswipe` | a swipe |
+| `_onshake` | a shake |
+| `_ondelay2500` | 2500ms, no input |
+
+The rule travels with the artwork, so re-cutting the deck is dropping files in
+and listing them rather than editing a state machine to match. This is a
+deliberate exception to logic-as-data: the rule is a property of the screen
+itself — that one *says* TAP THE SCREEN — and holding it anywhere else means two
+places that can disagree. `"advance": "swipe"` or `"advance": 2500` on the step
+overrides the filename where a filename cannot carry the truth.
+
+Both failure modes are load errors rather than runtime surprises: a filename with
+no readable rule, and a step waiting on a gesture `inputBindings` never binds —
+which would strand a guest in a room and look exactly like a broken touch
+handler.
+
+Pairing one screen to one clip is this sequence's shape, not the mechanism's. A
+step may carry an image with no audio, audio with no image, or a slice of a
+longer recording via `offset`/`duration`.
+
+`node tools/audition.mjs <show> [sequence]` prints what each step shows, plays
+and waits for — and plays the clips in order when given a sequence name.
 
 #### Reconciliation, not events
 

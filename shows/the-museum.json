@@ -2080,43 +2080,41 @@
             "states": {
               "arrive": {
                 "on": {
-                  "entered.calibration": "headphones"
+                  "entered.calibration": "calibration"
                 }
               },
-              "headphones": {
-                "after": {
-                  "11780": "volume"
-                }
-              },
-              "volume": {
-                "after": {
-                  "6870": "lanyard"
-                }
-              },
-              "lanyard": {
-                "after": {
-                  "4920": "interface"
-                }
-              },
-              "interface": {
-                "after": {
-                  "10780": "tapTest"
-                }
-              },
-              "tapTest": {
-                "on": {
-                  "TAP": "swipeTest"
-                }
-              },
-              "swipeTest": {
-                "on": {
-                  "SWIPE": "ready"
-                }
-              },
-              "ready": {
-                "after": {
-                  "14880": "done"
-                }
+              "calibration": {
+                "sequence": [
+                  {
+                    "image": "img/calibration_01_ontap.png",
+                    "audio": "audio/calibrationsteps_01.mp3"
+                  },
+                  {
+                    "image": "img/calibration_02_ontap.png",
+                    "audio": "audio/calibrationsteps_02.mp3"
+                  },
+                  {
+                    "image": "img/calibration_03_ontap.png",
+                    "audio": "audio/calibrationsteps_03.mp3"
+                  },
+                  {
+                    "image": "img/calibration_04_ontap.png",
+                    "audio": "audio/calibrationsteps_04.mp3"
+                  },
+                  {
+                    "image": "img/calibration_05_ontap.png",
+                    "audio": "audio/calibrationsteps_05.mp3"
+                  },
+                  {
+                    "image": "img/calibration_06_onswipe.png",
+                    "audio": "audio/calibrationsteps_06.mp3"
+                  },
+                  {
+                    "image": "img/calibration_07_ontap.png",
+                    "audio": "audio/calibrationsteps_07.mp3"
+                  }
+                ],
+                "onComplete": "done"
               },
               "done": {}
             }
@@ -2159,48 +2157,6 @@
       }
     },
     "cues": {
-      "guidance.prologue.headphones": {
-        "audio": "audio/calibrationsteps.mp3",
-        "offset": 0.0,
-        "duration": 11.38,
-        "image": "img/01DIM.png"
-      },
-      "guidance.prologue.volume": {
-        "audio": "audio/calibrationsteps.mp3",
-        "offset": 11.38,
-        "duration": 6.47,
-        "image": "img/02DIM.png"
-      },
-      "guidance.prologue.lanyard": {
-        "audio": "audio/calibrationsteps.mp3",
-        "offset": 17.85,
-        "duration": 4.52,
-        "image": "img/03DIM.png"
-      },
-      "guidance.prologue.interface": {
-        "audio": "audio/calibrationsteps.mp3",
-        "offset": 22.37,
-        "duration": 10.38,
-        "image": "img/04DIM.png"
-      },
-      "guidance.prologue.tapTest": {
-        "audio": "audio/calibrationsteps.mp3",
-        "offset": 32.75,
-        "duration": 10.99,
-        "image": "img/05DIM.png"
-      },
-      "guidance.prologue.swipeTest": {
-        "audio": "audio/calibrationsteps.mp3",
-        "offset": 43.74,
-        "duration": 7.74,
-        "image": "img/06DIM.png"
-      },
-      "guidance.prologue.ready": {
-        "audio": "audio/calibrationsteps.mp3",
-        "offset": 51.48,
-        "duration": 14.48,
-        "image": "img/07DIM.png"
-      },
       "guidance.museum": {
         "audio": "chime.wav"
       },
