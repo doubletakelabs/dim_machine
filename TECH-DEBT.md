@@ -67,6 +67,7 @@ having derived standing in the first place.
 | Item | Notes |
 |---|---|
 | **Phone experience beyond audio and screens** | Audio, full-screen images and touch input are live (CONTRACT.md §8.1), and the status line tracks room + standing. Pages, video, haptics and `setVar` are still v0.2 surfaces nothing drives. |
+| **The phone client has no tests** | `public/client.js` is a plain browser script with no way to load it headless, so gesture recognition, cue execution and asset loading are verified by hand on a handset. Two faults have hidden here. Making the recogniser importable (or adding a headless browser) is the cheapest first step. |
 | **`server/index.js` has no tests** | The WS command surface, session handling, and phone push are verified by hand against a live server. Two bugs have now hidden there (the relay rename, the unsent `state` message) and both needed a real socket to surface. A harness that boots the server on an ephemeral port and drives it over `ws` would have caught both. |
 | **Zone drawing** | 23 spaces of hand-authored polygons, all currently invented. `floorplan.image` exists so zones can be traced over a real plan; the tool does not. Has a deadline attached to it that the other items do not — venue access. |
 | **Scripted walkthrough replay** | Spec §5.4. Record the `setVirtualPosition` stream, replay against a `ManualClock`. Both the clock and the event log were built for it. This is the regression story for the behavioural matrix. |
@@ -133,6 +134,13 @@ the plan. The driver answers for simulated guests and never for people.
 Two lessons: **a tool for standing in for people, pointed at a person** — and
 when a check keeps needing exceptions, the question being asked is probably about
 identity, not about state.
+
+**A listener attached below the thing it needs to hear.** Touch handlers sat on
+`#stage`; a screen cue covers the viewport with a fixed overlay that is the
+stage's *sibling*, so taps bubbled to `<body>` and never crossed the listener.
+The handler was deaf at exactly the moment a tap mattered, and worked fine in
+every other moment. Now on `document`, above anything that can fill the screen.
+The class: **an event listener scoped to a box, in a UI built out of overlays.**
 
 **A stale server holding the port.** Twice now a fix has looked broken because
 an older `node server/index.js` was still bound to 4000 and serving the previous

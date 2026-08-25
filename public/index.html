@@ -77,7 +77,10 @@
     #status {
       padding: 8px 12px; font-size: 11px; color: #8888a0;
       display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
-      border-top: 1px solid #1d1d28; font-variant-numeric: tabular-nums; z-index: 6;
+      border-top: 1px solid #1d1d28; font-variant-numeric: tabular-nums;
+      /* Above the screen overlay, which is full-bleed by design. `z-index` on a
+         static element does nothing, which is why this needs `position`. */
+      position: relative; z-index: 10; background: rgba(11, 11, 16, 0.88);
     }
     .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #e74c3c; margin-right: 4px; }
     .dot.ok { background: #2ecc71; }
@@ -102,6 +105,7 @@
     <span>offset <b id="offset">–</b></span>
     <span>rtt <b id="rtt">–</b></span>
     <span>drift <b id="drift">–</b></span>
+    <span>gesture <b id="gesture">–</b></span>
   </div>
   <script src="page-loader.js"></script>
   <script src="pages.js"></script>

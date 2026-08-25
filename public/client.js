@@ -376,21 +376,32 @@ function runCue(cue, opts = {}) {
 // without this file knowing either.
 // ---------------------------------------------------------------------------
 const SWIPE_MIN_PX = 60;      // shorter than this is a slip, not a swipe
-const SWIPE_MAX_MS = 800;     // slower than this is a drag
-const TAP_MAX_PX = 12;
-const TAP_MAX_MS = 400;
+const SWIPE_MAX_MS = 900;     // slower than this is a drag
+/**
+ * A finger that stayed put is a tap, however long it rested there.
+ *
+ * There was a 400ms ceiling on this and it was wrong: told to TAP THE SCREEN,
+ * people press deliberately, and a firm press is easily half a second. A guest
+ * whose tap is rejected for being *too committed* has no way to know that, and
+ * the only feedback available is a screen that refuses to move.
+ */
+const TAP_MAX_PX = 20;        // a fingertip wobbles; this is not a mouse
 const GESTURE_MIN_GAP_MS = 400; // a nervous double-tap is one answer, not two
 
 let lastGesture = 0;
 function emitGesture(type, payload) {
   if (!joined || Date.now() - lastGesture < GESTURE_MIN_GAP_MS) return;
   lastGesture = Date.now();
+  // Shown on the phone itself. A gesture that never left the handset and one
+  // the show ignored look identical from the floor without this.
+  const el = $('gesture');
+  if (el) el.textContent = type;
   window.DIM.emit(type, payload);
 }
 
 function enableGestures() {
-  const stage = $('stage');
   let start = null;
+  let lastTouchAt = 0;
   const begin = (x, y) => { start = { x, y, at: Date.now() }; };
   const end = (x, y) => {
     if (!start) return;
@@ -407,22 +418,43 @@ function enableGestures() {
         dx: Math.round(dx),
         dy: Math.round(dy),
       });
-    } else if (dist <= TAP_MAX_PX && ms <= TAP_MAX_MS) {
+    } else if (dist <= TAP_MAX_PX) {
       emitGesture('tap', { x: Math.round(x), y: Math.round(y) });
     }
+    // Anything else — a slow short drag — is a finger changing its mind.
   };
 
-  stage.addEventListener('touchstart', (e) => {
+  // On `document`, not on the stage. A screen cue covers the viewport with a
+  // fixed overlay that is the stage's *sibling*, so a tap on it never bubbles
+  // through the stage — which made the listener deaf at exactly the moment a
+  // tap matters. Anything that fills the screen from now on has the same shape,
+  // so the listener belongs above all of them.
+  const control = (e) => e.target?.closest?.('button, a, input, select, textarea');
+
+  document.addEventListener('touchstart', (e) => {
+    if (control(e)) return;
     const t = e.changedTouches[0];
     begin(t.clientX, t.clientY);
   }, { passive: true });
-  stage.addEventListener('touchend', (e) => {
+  document.addEventListener('touchend', (e) => {
+    lastTouchAt = Date.now();
+    if (control(e)) return;
     const t = e.changedTouches[0];
     end(t.clientX, t.clientY);
   }, { passive: true });
-  // Mouse as well, so the browser client stays a usable rehearsal tool.
-  stage.addEventListener('mousedown', (e) => begin(e.clientX, e.clientY));
-  stage.addEventListener('mouseup', (e) => end(e.clientX, e.clientY));
+
+  // Mouse as well, so the browser client stays a usable rehearsal tool. A touch
+  // on iOS also fires a synthetic mouse pair a beat later; ignore those rather
+  // than counting one finger twice.
+  const afterTouch = () => Date.now() - lastTouchAt < 700;
+  document.addEventListener('mousedown', (e) => {
+    if (afterTouch() || control(e)) return;
+    begin(e.clientX, e.clientY);
+  });
+  document.addEventListener('mouseup', (e) => {
+    if (afterTouch() || control(e)) return;
+    end(e.clientX, e.clientY);
+  });
 }
 
 // ---------------------------------------------------------------------------
