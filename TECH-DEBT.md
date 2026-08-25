@@ -5,7 +5,7 @@ when an item is resolved rather than deleting the row silently — knowing a thi
 was considered and settled is worth as much as the answer.
 
 Status: Phase A complete (A1–A6, A8, plus shared rooms), plus the thin audio
-layer, screens, phone input, and screen sequences. 236 tests.
+layer, screens, phone input, and screen sequences. 237 tests.
 
 ---
 
@@ -133,9 +133,18 @@ carries `kind` (`phone` | `simulated`), fixed when they are created and never
 changed; a handset session spawns its own guest rather than adopting a dot off
 the plan. The driver answers for simulated guests and never for people.
 
-Two lessons: **a tool for standing in for people, pointed at a person** — and
-when a check keeps needing exceptions, the question being asked is probably about
-identity, not about state.
+Fixed a third time, and the third one is about *who asked*. Refusing to walk a
+phone guest at all also broke the operator's own Walk button — the fix had
+flattened "adopt everybody on a timer" and "somebody selected this handset and
+pressed a button" into one rule. They are not the same act. The default sweep
+skips phone guests; naming one is honoured; and the driver still never answers
+their screens, whoever asked for them to be walked.
+
+Three lessons: **a tool for standing in for people, pointed at a person**; when a
+check keeps needing exceptions, the question is probably about identity rather
+than state; and **automatic and requested are different acts even when they call
+the same function** — a rule that cannot tell them apart will be wrong in one
+direction or the other.
 
 **Reconciliation is only as good as its picture of the other end.** A phone that
 slept came back to silence: the AudioContext was suspended and every buffer

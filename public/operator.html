@@ -614,6 +614,7 @@ function describeIntent(guest) {
   // The show is holding for a gesture. Without this the guest simply stops,
   // which reads as the driver having got stuck.
   if (intent.phase === 'answering') return `answering ${intent.pendingInput ?? ''} in ${secs}`;
+  if (intent.phase === 'held') return 'held — waiting on the person';
   return 'idle';
 }
 
@@ -799,7 +800,7 @@ function renderInspector() {
       <dt>Walking</dt><dd>${guest.walking
         ? describeIntent(guest)
         : guest.kind === 'phone'
-          ? '<span class="muted">no — carried by a person</span>'
+          ? '<span class="muted">no — carried by a person (Walk to drive them)</span>'
           : 'no'}</dd>
       <dt>Hearing</dt><dd>${describeCues(guest.cues)}</dd>
       <dt>Waiting on</dt><dd>${guest.pendingInputs?.length

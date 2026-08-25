@@ -380,7 +380,7 @@ describe('walking a guest the show is waiting on', () => {
     assert.deepEqual(rt.pendingInputs(g.guestId), ['swipe'], 'the swipe screen wants only a swipe');
   });
 
-  it('never adopts a guest carrying a phone', () => {
+  it('does not sweep up a phone guest when walking everyone', () => {
     const { rt, g, guidance, roomId } = atAScreen({ kind: 'phone' });
     assert.equal(rt.walkthrough.walkers.has(g.guestId), false);
     rt.testAdvanceTime(60_000);
@@ -388,21 +388,34 @@ describe('walking a guest the show is waiting on', () => {
     assert.equal(guidance(), 'prologue.calibration.step1');
   });
 
-  it('will not adopt a phone guest even when named outright', () => {
-    const { rt, g, roomId } = atAScreen({ kind: 'phone' });
+  it('walks a phone guest an operator named — that is a decision, not a timer', () => {
+    const { rt, g } = atAScreen({ kind: 'phone' });
     rt.walkthrough.start([g.guestId]);
-    assert.equal(rt.walkthrough.walkers.has(g.guestId), false);
-    rt.testAdvanceTime(60_000);
-    assert.equal(roomId(), 'calibration');
+    assert.equal(rt.walkthrough.walkers.has(g.guestId), true);
   });
 
-  it('drops a walker that has since been issued a handset', () => {
-    const { rt, g, roomId } = atAScreen({ kind: 'simulated' });
-    assert.equal(rt.walkthrough.walkers.has(g.guestId), true);
-    rt.guests.get(g.guestId).kind = 'phone';
+  it('but still will not answer their screens for them', () => {
+    const { rt, g, guidance, roomId } = atAScreen({ kind: 'phone' });
+    rt.walkthrough.start([g.guestId]);
     rt.testAdvanceTime(60_000);
-    assert.equal(rt.walkthrough.walkers.has(g.guestId), false);
-    assert.equal(roomId(), 'calibration', 'and stops where they stood');
+    assert.equal(guidance(), 'prologue.calibration.step1', 'nobody tapped for them');
+    assert.equal(roomId(), 'calibration', 'and they are not walked out of the question');
+    assert.equal(rt.walkthrough.intent(g.guestId).phase, 'held');
+  });
+
+  it('walks a named phone guest on once the person has answered', () => {
+    const { rt, g, guidance, roomId } = atAScreen({ kind: 'phone' });
+    rt.walkthrough.start([g.guestId]);
+    rt.testAdvanceTime(5000);
+    assert.equal(roomId(), 'calibration');
+
+    for (let i = 0; i < 5; i++) rt.guestInput(g.guestId, 'tap');
+    rt.guestInput(g.guestId, 'swipe');
+    rt.testAdvanceTime(6000);            // the last screen's own delay
+    assert.equal(guidance(), 'prologue.done');
+
+    rt.testAdvanceTime(40_000);
+    assert.notEqual(roomId(), 'calibration', 'now there is nothing holding them');
   });
 
   it('answers for a guest with no phone, so the rest of the show stays reachable', () => {
@@ -444,7 +457,7 @@ describe('walking a guest the show is waiting on', () => {
     assert.equal(typeof rt.setGuestPhone, 'undefined');
   });
 
-  it('reports no walker at all for a guest issued a phone', () => {
+  it('reports no walker for a phone guest nobody asked to walk', () => {
     const { rt, g } = atAScreen({ kind: 'phone' });
     rt.testAdvanceTime(120);
     assert.equal(rt.walkthrough.intent(g.guestId), null);
