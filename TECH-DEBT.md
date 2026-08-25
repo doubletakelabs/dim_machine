@@ -22,7 +22,9 @@ Nothing here is blocked technically; each needs an answer that isn't ours to giv
 | 1.5 | **Accessibility.** The show is audio-guided, so a guest who cannot hear the tour has no wayfinding at all. | Parked by request. The cheap insurance is an optional `alternatives` field (`{ text, haptic }`) on every cue *before* the cue library exists. | Nothing. Cost rises once Phase B writes cues. |
 | 1.6 | **Does the audience know they went off-path?** Legible, or purely felt? | Directorial; decides how explicit the audio around the transition is. | Recorded silently. |
 | 1.7 | **Guidance intensity.** The original spec had `"insistent"`. Agreed it is narrative rather than structural — worth revisiting if the phone needs it as authored data. | Would live on the guidance region. | Not modelled. |
-| 1.8 | **`DONE` as a room event.** Not in the contract, sent by nothing, used only by the operator button. Either give it a distinct meaning from `RELEASE` (content finished *with people still there*) or drop it. | Two events that look identical get used interchangeably. | Convention in the demo shows. |
+| 1.8 | **Should a sequence list its screens, or read the folder?** Renaming a screen means editing the show too, because the show names the file. A sequence could instead take `img/calibration_*` and order by filename — the deck becomes the folder, and dropping a file in is the whole edit. | Removes the mismatch that produced the blank screen, at the cost of the server scanning the filesystem to decide show structure. | The show lists each step explicitly. |
+| 1.9 | **What does `ondelay` measure from?** Currently from the moment the screen appears. It could reasonably mean "N ms after the narration ends", which is what a screen carrying a long clip usually wants. | `calibration_07_ondelay5000` shows for 5s over an 18.55s clip, cutting it 13.6s short. | Measured from screen entry. `npm run audition` flags the mismatch. |
+| 1.10 | **`DONE` as a room event.** Not in the contract, sent by nothing, used only by the operator button. Either give it a distinct meaning from `RELEASE` (content finished *with people still there*) or drop it. | Two events that look identical get used interchangeably. | Convention in the demo shows. |
 
 ---
 
@@ -134,6 +136,15 @@ the plan. The driver answers for simulated guests and never for people.
 Two lessons: **a tool for standing in for people, pointed at a person** — and
 when a check keeps needing exceptions, the question being asked is probably about
 identity, not about state.
+
+**A name in two places, only one of which anybody edits.** A screen was renamed
+on disk to change its advance rule; the show still named the old file, so the cue
+pointed at a 404 and the guest got a blank screen with the narration playing over
+it. Nothing checked that a cued asset existed — the gap was even named in a
+commit message and not built. Missing assets are now listed at load and held on
+the operator panel rather than scrolling past in the log. The open question is
+whether a sequence should read its deck from the folder instead of listing it,
+which would remove the second place entirely (§1.9).
 
 **A listener attached below the thing it needs to hear.** Touch handlers sat on
 `#stage`; a screen cue covers the viewport with a fixed overlay that is the

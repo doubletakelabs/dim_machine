@@ -90,6 +90,9 @@
   <span class="pill" id="connInfo">connecting…</span>
 </header>
 
+<div id="assetWarning" style="display:none;padding:10px 14px;background:#5c1f1f;color:#ffd9d9;
+  font-size:12px;line-height:1.5;border-bottom:1px solid #7a2a2a"></div>
+
 <main>
   <div>
     <div class="card">
@@ -836,6 +839,15 @@ function renderOutputs() {
 }
 
 function render() {
+  // A missing asset is a blank screen or silence in a room, and neither shows
+  // up anywhere else. It stays on screen rather than scrolling past in the log.
+  const missing = showMeta?.missingAssets ?? [];
+  $('assetWarning').innerHTML = missing.length
+    ? `<b>${missing.length} missing asset${missing.length > 1 ? 's' : ''}</b> — `
+      + `${missing.join(', ')}<br><span style="opacity:.75">Guests will get a blank screen or silence where these are cued.</span>`
+    : '';
+  $('assetWarning').style.display = missing.length ? 'block' : 'none';
+
   $('showInfo').textContent = showMeta?.loaded
     ? `${showMeta.name} · ${showMeta.running ? 'running' : 'stopped'} · ${showMeta.roomCount} rooms`
     : 'no show';

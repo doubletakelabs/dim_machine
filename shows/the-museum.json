@@ -2110,7 +2110,7 @@
                     "audio": "audio/calibrationsteps_06.mp3"
                   },
                   {
-                    "image": "img/calibration_07_ontap.png",
+                    "image": "img/calibration_07_ondelay5000.png",
                     "audio": "audio/calibrationsteps_07.mp3"
                   }
                 ],

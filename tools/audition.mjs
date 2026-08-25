@@ -83,15 +83,31 @@ if (!chosen.length) {
   process.exit(1);
 }
 
+const warnings = [];
+
 for (const seq of chosen) {
   console.log(`\n${seq.path}  →  ${seq.state.onComplete ?? '(nothing follows)'}`);
   seq.state.sequence.forEach((step, i) => {
+    const advance = advanceForStep(step);
+    const secs = duration(step.audio);
     console.log(
-      `  ${String(i + 1).padStart(2)}. ${describe(advanceForStep(step)).padEnd(14)}`
-      + `${(step.image ?? '—').padEnd(34)}${(step.audio ?? '—').padEnd(34)}${duration(step.audio)}`,
+      `  ${String(i + 1).padStart(2)}. ${describe(advance).padEnd(14)}`
+      + `${(step.image ?? '—').padEnd(34)}${(step.audio ?? '—').padEnd(34)}${secs}`,
     );
+
+    // A delay shorter than its own narration cuts the voice off mid-sentence.
+    // Only checkable here, because it needs the file rather than the show.
+    const audioMs = parseFloat(secs) * 1000;
+    if (advance?.kind === 'delay' && Number.isFinite(audioMs) && advance.ms < audioMs - 250) {
+      warnings.push(
+        `  step ${i + 1} leaves after ${advance.ms}ms but its audio runs ${secs}`
+        + ` — ${((audioMs - advance.ms) / 1000).toFixed(1)}s will be cut off`,
+      );
+    }
     if (target && step.audio) play(step.audio);
   });
 }
+
+if (warnings.length) console.log(`\n⚠ ${warnings.length} timing problem(s):\n${warnings.join('\n')}`);
 
 if (!target) console.log('\nPass a sequence name to hear it in order.');

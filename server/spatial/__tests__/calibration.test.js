@@ -104,8 +104,9 @@ describe('expanding a sequence into a machine', () => {
   it('sends the last screen out of the sequence, not to a sibling step', () => {
     const { def } = expand();
     // A bare `onComplete` names a sibling of the sequence itself, so it has to
-    // resolve absolutely — XState would look for it among the steps.
-    assert.deepEqual(calibration(def).states.step7.on, { TAP: '#guest.guidance.prologue.done' });
+    // resolve absolutely — XState would look for it among the steps. The last
+    // screen leaves on a delay, so the target hangs off `after`.
+    assert.deepEqual(calibration(def).states.step7.after, { 5000: '#guest.guidance.prologue.done' });
   });
 
   it('generates the cue for each step, pairing screen with clip', () => {
@@ -187,14 +188,16 @@ describe('the calibration sequence, running', () => {
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step7');
   });
 
-  it('leaves the sequence when the last screen is dismissed', () => {
+  it('leaves the sequence when the last screen has had its time', () => {
     const { rt, cues } = makeRuntime();
     const g = arrive(rt, cues);
     for (let i = 0; i < 5; i++) rt.guestInput(g.guestId, 'tap');
     rt.guestInput(g.guestId, 'swipe');
     cues.length = 0;
 
-    rt.guestInput(g.guestId, 'tap');
+    rt.testAdvanceTime(4900);
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step7', 'not a moment early');
+    rt.testAdvanceTime(200);
     assert.equal(guidance(rt, g.guestId), 'prologue.done');
     assert.ok(
       cues.some((c) => c.kind === 'clearImage'),

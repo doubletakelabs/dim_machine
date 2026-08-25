@@ -164,6 +164,19 @@ function currentAssets() {
   return [...found];
 }
 
+/**
+ * Cue assets the show names that are not on disk.
+ *
+ * A missing asset is silence or a blank screen, and both are invisible until a
+ * guest is standing in the room staring at one. Nothing checked this and a
+ * renamed screen shipped straight through — so this is deliberately reported at
+ * load, where a name is still a thing somebody just typed.
+ */
+function missingAssets() {
+  return currentAssets().filter((asset) => !existsSync(join(assetsDir, asset)));
+}
+let assetProblems = [];
+
 function loadShow(file) {
   const path = showPath(file);
   let def;
@@ -180,6 +193,8 @@ function loadShow(file) {
     return;
   }
   loadedShowFile = basename(file);
+  assetProblems = missingAssets();
+  for (const asset of assetProblems) opLog(`✗ missing asset: ${asset}`);
   broadcast({ type: 'assets', assets: currentAssets() }, 'phones');
   sendRoster();
 }
@@ -256,7 +271,7 @@ function sendRoster() {
     type: 'roster',
     users: rosterUsers,
     spatial: runtime.getOperatorSnapshot(),
-    show: { ...runtime.rosterInfo(), file: loadedShowFile },
+    show: { ...runtime.rosterInfo(), file: loadedShowFile, missingAssets: assetProblems },
     shows: listShows(),
   }, 'operators');
 }
