@@ -380,11 +380,29 @@ describe('walking a guest the show is waiting on', () => {
     assert.deepEqual(rt.pendingInputs(g.guestId), ['swipe'], 'the swipe screen wants only a swipe');
   });
 
-  it('leaves a guest issued a phone alone — a person is going to answer', () => {
-    const { rt, guidance, roomId } = atAScreen({ kind: 'phone' });
+  it('never adopts a guest carrying a phone', () => {
+    const { rt, g, guidance, roomId } = atAScreen({ kind: 'phone' });
+    assert.equal(rt.walkthrough.walkers.has(g.guestId), false);
     rt.testAdvanceTime(60_000);
-    assert.equal(roomId(), 'calibration', 'not walked out from under the question');
+    assert.equal(roomId(), 'calibration', 'a person is not moved by a timer');
     assert.equal(guidance(), 'prologue.calibration.step1');
+  });
+
+  it('will not adopt a phone guest even when named outright', () => {
+    const { rt, g, roomId } = atAScreen({ kind: 'phone' });
+    rt.walkthrough.start([g.guestId]);
+    assert.equal(rt.walkthrough.walkers.has(g.guestId), false);
+    rt.testAdvanceTime(60_000);
+    assert.equal(roomId(), 'calibration');
+  });
+
+  it('drops a walker that has since been issued a handset', () => {
+    const { rt, g, roomId } = atAScreen({ kind: 'simulated' });
+    assert.equal(rt.walkthrough.walkers.has(g.guestId), true);
+    rt.guests.get(g.guestId).kind = 'phone';
+    rt.testAdvanceTime(60_000);
+    assert.equal(rt.walkthrough.walkers.has(g.guestId), false);
+    assert.equal(roomId(), 'calibration', 'and stops where they stood');
   });
 
   it('answers for a guest with no phone, so the rest of the show stays reachable', () => {
@@ -426,9 +444,9 @@ describe('walking a guest the show is waiting on', () => {
     assert.equal(typeof rt.setGuestPhone, 'undefined');
   });
 
-  it('holds rather than answering for a guest issued a phone', () => {
+  it('reports no walker at all for a guest issued a phone', () => {
     const { rt, g } = atAScreen({ kind: 'phone' });
     rt.testAdvanceTime(120);
-    assert.equal(rt.walkthrough.intent(g.guestId).phase, 'held');
+    assert.equal(rt.walkthrough.intent(g.guestId), null);
   });
 });

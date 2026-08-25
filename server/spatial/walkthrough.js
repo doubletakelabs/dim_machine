@@ -55,9 +55,18 @@ export class WalkthroughDriver {
     this.config = { ...this.config, ...patch };
   }
 
-  /** @param {string[]} [guestIds] — defaults to every guest currently in the show */
+  /**
+   * @param {string[]} [guestIds] — defaults to every simulated guest in the show
+   *
+   * Never a guest carrying a phone, even when one is named explicitly. A person
+   * walking the building is the location source; moving them from here would be
+   * the simulation overruling the room they are actually standing in. The
+   * operator moves a phone guest by dragging their dot, which is a decision
+   * somebody made rather than a timer expiring.
+   */
   start(guestIds) {
-    const ids = guestIds ?? [...this.runtime.guests.keys()];
+    const ids = (guestIds ?? [...this.runtime.guests.keys()])
+      .filter((guestId) => this.runtime.guests.get(guestId)?.kind !== 'phone');
     for (const guestId of ids) {
       if (!this.walkers.has(guestId)) {
         this.walkers.set(guestId, {
@@ -105,7 +114,10 @@ export class WalkthroughDriver {
     const now = this.clock.now();
     for (const walker of this.walkers.values()) {
       const guest = this.runtime.guests.get(walker.guestId);
-      if (!guest) {
+      // A phone guest can only be here if one was adopted before a handset was
+      // issued for them. Drop rather than walk: the invariant is that this
+      // driver moves dots and nothing else.
+      if (!guest || guest.kind === 'phone') {
         this.walkers.delete(walker.guestId);
         continue;
       }
@@ -118,11 +130,10 @@ export class WalkthroughDriver {
 
     // The show has asked this guest for a gesture and is holding for it.
     // Walking them out of the room would be the simulation answering by
-    // leaving — and for a guest with a handset in their hand, it looks like the
-    // show wandering off mid-question.
+    // leaving.
     const pending = this.runtime.pendingInputs(guest.guestId);
-    if (pending.length) return this.answerOrWait(walker, guest, pending, now);
-    if (walker.phase === 'answering' || walker.phase === 'held') walker.phase = 'idle';
+    if (pending.length) return this.answerOrWait(walker, pending, now);
+    if (walker.phase === 'answering') walker.phase = 'idle';
 
     if (!walker.target) {
       const target = this.chooseTarget(guest);
@@ -164,24 +175,14 @@ export class WalkthroughDriver {
   /**
    * Sit still while the show waits on this guest.
    *
-   * A guest issued a phone is left alone: a person is going to answer, and
-   * answering for them is the bug this exists to avoid. Deliberately keyed on
-   * what the guest *is* rather than on whether their socket is up this second —
-   * a backgrounded handset is still in somebody's hand, and tapping through
-   * their orientation while they get the app back is precisely the fault.
-   *
-   * A simulated guest has nobody to tap for them, so the driver taps. That is
-   * the honest simulation, and it keeps the rest of the show reachable in a
+   * Only simulated guests reach this — a phone guest is never adopted at all —
+   * and a simulated guest has nobody to tap for them. So the driver taps. That
+   * is the honest simulation, and it keeps the rest of the show reachable in a
    * load test rather than stranding every dot on the first screen.
    */
-  answerOrWait(walker, guest, pending, now) {
+  answerOrWait(walker, pending, now) {
     walker.target = null;
 
-    if (guest.kind === 'phone') {
-      walker.phase = 'held';
-      walker.waitUntil = now + this.config.pauseMs;
-      return;
-    }
     if (walker.phase !== 'answering') {
       walker.phase = 'answering';
       walker.pendingInput = pending[0];
@@ -190,7 +191,7 @@ export class WalkthroughDriver {
     }
     // Re-read rather than trusting what was pending when the pause began — the
     // guest may have been moved, or answered from a real phone meanwhile.
-    this.runtime.guestInput(guest.guestId, pending[0]);
+    this.runtime.guestInput(walker.guestId, pending[0]);
     walker.phase = 'idle';
     walker.pendingInput = null;
   }

@@ -5,7 +5,7 @@ when an item is resolved rather than deleting the row silently — knowing a thi
 was considered and settled is worth as much as the answer.
 
 Status: Phase A complete (A1–A6, A8, plus shared rooms), plus the thin audio
-layer, screens, phone input, and screen sequences. 234 tests.
+layer, screens, phone input, and screen sequences. 236 tests.
 
 ---
 
@@ -136,6 +136,14 @@ the plan. The driver answers for simulated guests and never for people.
 Two lessons: **a tool for standing in for people, pointed at a person** — and
 when a check keeps needing exceptions, the question being asked is probably about
 identity, not about state.
+
+**Reconciliation is only as good as its picture of the other end.** A phone that
+slept came back to silence: the AudioContext was suspended and every buffer
+source dead, while the server — comparing the world against what that phone was
+*last told* — saw no difference and sent nothing. The phone was correct as far as
+anyone knew, and quiet. The `ready` resync existed for exactly this and was only
+ever sent once, on first join. The rule: **whenever a client may have lost what
+it was told, it has to say so** — a reconnect, a wake, a resumed context.
 
 **A name in two places, only one of which anybody edits.** A screen was renamed
 on disk to change its advance rule; the show still named the old file, so the cue

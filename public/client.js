@@ -402,7 +402,12 @@ function emitGesture(type, payload) {
 function enableGestures() {
   let start = null;
   let lastTouchAt = 0;
-  const begin = (x, y) => { start = { x, y, at: Date.now() }; };
+  const begin = (x, y) => {
+    // iOS will refuse to resume an AudioContext outside a user gesture, so every
+    // touch is an opportunity worth taking whether or not it becomes a gesture.
+    resumeAudio();
+    start = { x, y, at: Date.now() };
+  };
   const end = (x, y) => {
     if (!start) return;
     const { x: x0, y: y0, at } = start;
@@ -474,6 +479,44 @@ function enableShake() {
 }
 
 // ---------------------------------------------------------------------------
+// Waking up
+//
+// A phone that slept lost two things at once, and either alone is silence.
+//
+// The AudioContext is suspended by the OS and does not come back on its own;
+// every buffer source that was playing is dead with it. And the server has been
+// reconciling against what this phone was last *told*, so it sees no difference
+// and sends nothing — the phone is correct as far as anyone knows, and silent.
+//
+// Both are the same fix: resume the context, forget what we thought was playing,
+// and ask to be told again. That is the reconnect path, which already works,
+// pointed at a phone that never disconnected.
+// ---------------------------------------------------------------------------
+async function resumeAudio() {
+  if (ctx?.state !== 'suspended') return;
+  try { await ctx.resume(); } catch (e) { console.warn('resume failed', e); }
+}
+
+let lastResync = 0;
+async function resync() {
+  // A single wake can fire visibilitychange, pageshow and focus together, and
+  // three resyncs in a row would restart the audio three times.
+  if (!joined || Date.now() - lastResync < 1000) return;
+  lastResync = Date.now();
+  await resumeAudio();
+  // Sources that died with the context cannot be stopped or restarted, and the
+  // director is about to re-send everything. Drop them rather than leak them.
+  stopAudio('*', 0);
+  // The screen deliberately stays up: it is still correct, and blanking it while
+  // the network comes back would be a black screen for no reason.
+  sendMsg({ type: 'ready' });
+}
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden) resync(); });
+window.addEventListener('pageshow', () => resync());
+window.addEventListener('focus', () => resync());
+
+// ---------------------------------------------------------------------------
 // WebSocket + snapshot resync
 // ---------------------------------------------------------------------------
 let ws = null;
@@ -492,6 +535,10 @@ function connect() {
     reconnectDelay = 500;
     setConn(true);
     sendMsg({ type: 'hello', token: getToken() });
+    // A reconnect, not a first connect: the server has been reconciling against
+    // what this phone was last told, so it will send nothing — and what we were
+    // told is long dead. Ask for the whole picture again.
+    if (joined) resync();
     clearInterval(pingTimer);
     let burst = 8;
     const ping = () => sendMsg({ type: 'ping', t0: Date.now() });

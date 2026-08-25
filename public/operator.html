@@ -614,7 +614,6 @@ function describeIntent(guest) {
   // The show is holding for a gesture. Without this the guest simply stops,
   // which reads as the driver having got stuck.
   if (intent.phase === 'answering') return `answering ${intent.pendingInput ?? ''} in ${secs}`;
-  if (intent.phase === 'held') return 'waiting on the phone';
   return 'idle';
 }
 
@@ -797,7 +796,11 @@ function renderInspector() {
       <dt>Eligible</dt><dd>${guest.eligibleRooms?.join(', ') || '—'}</dd>
       <dt>In room</dt><dd>${guest.roomId ?? '—'}${guest.zoneId ? ` (${guest.zoneId})` : ''}</dd>
       <dt>Standing</dt><dd style="color:${standingColour(guest.currentRoom)}">${describeStanding(guest.currentRoom)}</dd>
-      <dt>Walking</dt><dd>${guest.walking ? describeIntent(guest) : 'no'}</dd>
+      <dt>Walking</dt><dd>${guest.walking
+        ? describeIntent(guest)
+        : guest.kind === 'phone'
+          ? '<span class="muted">no — carried by a person</span>'
+          : 'no'}</dd>
       <dt>Hearing</dt><dd>${describeCues(guest.cues)}</dd>
       <dt>Waiting on</dt><dd>${guest.pendingInputs?.length
         ? `<span style="color:#e0b050">${guest.pendingInputs.join(' or ')}</span>${guest.kind === 'phone' ? '' : ' <span class="muted">(simulated — the driver will answer)</span>'}`
