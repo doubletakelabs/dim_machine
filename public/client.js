@@ -479,6 +479,62 @@ function enableShake() {
 }
 
 // ---------------------------------------------------------------------------
+// Keeping the screen awake
+//
+// A phone that sleeps mid-show is not a small annoyance: the AudioContext is
+// suspended, the socket drops, and the guest has to be woken and resynced before
+// they hear anything again. Everything about that recovery works, and none of it
+// should ever have to run.
+//
+// Two mechanisms, because the good one is not available where this actually runs.
+//
+// `navigator.wakeLock` is the real API, and it needs a **secure context** — so it
+// exists on localhost and over https, and is simply undefined on the
+// `http://192.168.x.x` a phone uses on the venue wifi. Where it does exist, the
+// OS releases the lock whenever the page is hidden, so it has to be taken again
+// on every return to visibility.
+//
+// The fallback is the old trick: a muted, inline, looping video. iOS will not
+// sleep while one is playing, and a *muted* video does not claim the audio
+// session, so it cannot interfere with the show. 64×64 black, 1.8KB.
+//
+// Neither is as reliable as Auto-Lock: Never on a handset you issue and control.
+// This is for the phones you did not set up.
+// ---------------------------------------------------------------------------
+let wakeLock = null;
+let keepAwakeMode = 'off';
+
+async function keepAwake() {
+  if (navigator.wakeLock) {
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      // Released by the OS on every hide, so it is retaken rather than assumed.
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+      setKeepAwake('wakeLock');
+      return;
+    } catch (e) {
+      console.warn('wakeLock refused', e);
+    }
+  }
+  playKeepAwakeVideo();
+}
+
+function playKeepAwakeVideo() {
+  const video = $('keepAwake');
+  if (!video) return setKeepAwake('unavailable');
+  video.play().then(() => setKeepAwake('video')).catch((e) => {
+    console.warn('keep-awake video refused', e);
+    setKeepAwake('unavailable');
+  });
+}
+
+function setKeepAwake(mode) {
+  keepAwakeMode = mode;
+  const el = $('awake');
+  if (el) el.textContent = mode === 'wakeLock' ? 'lock' : mode;
+}
+
+// ---------------------------------------------------------------------------
 // Self-reported room — browser test mode
 //
 // There are no beacons yet, so the handset says where it is. That makes a real
@@ -527,6 +583,9 @@ async function resync() {
   // three resyncs in a row would restart the audio three times.
   if (!joined || Date.now() - lastResync < 1000) return;
   lastResync = Date.now();
+  // The OS drops a screen lock every time the page is hidden. Retaking it here
+  // rather than on its own listener keeps one path for "we just came back".
+  if (!wakeLock) keepAwake();
   await resumeAudio();
   // Sources that died with the context cannot be stopped or restarted, and the
   // director is about to re-send everything. Drop them rather than leak them.
@@ -663,6 +722,7 @@ $('join').addEventListener('click', async () => {
   } catch {}
   enableShake();
   enableGestures();
+  await keepAwake();
   await preload(assetList);
   joined = true;
   // The server has been reconciling audio for this guest all along; until now we

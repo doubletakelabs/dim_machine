@@ -90,6 +90,10 @@
   <div id="flash"></div>
   <div id="videoOverlay"><video playsinline></video></div>
   <div id="imageOverlay"><img alt=""></div>
+  <!-- Keeps iOS awake where the Wake Lock API is unavailable (plain http).
+       Muted, so it never claims the audio session. See keepAwake() in client.js. -->
+  <video id="keepAwake" src="assets/keepawake.mp4" muted loop playsinline
+    style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;bottom:0;left:0"></video>
   <div id="stage">
     <div id="page"></div>
     <div id="joinScreen">
@@ -106,6 +110,7 @@
     <span>rtt <b id="rtt">–</b></span>
     <span>drift <b id="drift">–</b></span>
     <span>gesture <b id="gesture">–</b></span>
+    <span>awake <b id="awake">–</b></span>
     <!-- Standing in for BLE: the handset reports which room it is in, so one
          person can walk the real building and the show follows them. -->
     <span>room <select id="roomPick" style="background:#14141f;color:#e7e9ee;border:1px solid #2a2a38;
