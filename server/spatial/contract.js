@@ -242,14 +242,37 @@ export const INPUT_MODES = ['gestures', 'stream'];
 export const EXPERIENCE_INTENTS = ['drag', 'release', 'tap', 'hold', 'swipe'];
 
 /**
- * What the show tells a room's experience about its own life.
+ * What is true of a room right now, as its experience hears it.
  *
- * `attract` is the important one. Left to itself a piece infers "nobody is here"
- * from having no sockets connected, and that is wrong in a show: a guest can be
- * standing in the room as a spectator, or before the room has activated, or on
- * somebody else's path. The show knows which, and the socket count does not.
+ * Conditions, not commands: reconciled, idempotent, and safe to re-send at any
+ * moment — which is what lets a piece that just restarted be correct on the
+ * first message it gets.
+ *
+ * `attract` is the one pieces get wrong. Left to itself a piece infers "nobody
+ * is here" from having no sockets connected, and that is wrong in a show: a
+ * guest can be standing in the room as a spectator, before the room has
+ * activated, or on somebody else's path. The show knows which; the socket count
+ * does not.
+ *
+ * `settling` is not a slower `attract`. A room in exit grace has two ways out —
+ * the guest returns and the room resumes, or the grace expires and it resets —
+ * and holding the piece exactly as they left it is the difference between
+ * walking back into your own session and finding it wiped.
  */
-export const EXPERIENCE_LIFECYCLE = ['attract', 'live', 'settling', 'reset'];
+export const EXPERIENCE_LIFECYCLE = ['attract', 'live', 'settling'];
+
+/**
+ * Things that happen to a room, as distinct from things that are true of it.
+ *
+ * `reset` is the only one so far, and it is genuinely an event: the room has
+ * returned to rest and whatever the last guest built should not be waiting for
+ * the next one. It cannot be a lifecycle value, because a state is re-sent on
+ * every reconnect and a piece would wipe itself every time the link flapped.
+ *
+ * Missing one while disconnected is harmless — a piece that was down through a
+ * reset came back with nothing to clear.
+ */
+export const EXPERIENCE_EVENTS = ['reset'];
 
 /**
  * Colours handed to drivers, in order. An experience uses them to tint whatever

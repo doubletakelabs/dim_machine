@@ -128,6 +128,10 @@ wss.on('connection', (ws) => {
         show.lifecycle = m.state;
         return toWalls({ t: 'lifecycle', state: m.state });
       }
+      // An event, not a state. Clear whatever the last guest built. Nothing is
+      // re-sent on reconnect, and nothing needs to be: a piece that was down
+      // through a reset came back with nothing to clear.
+      if (m.t === 'reset') return toWalls({ t: 'reset' });
       if (m.t === 'drivers') {
         // Replace. Never merge. A driver no longer in the set is no longer a
         // driver, whatever socket they still happen to be holding open.

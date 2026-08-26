@@ -83,6 +83,8 @@ export class SpatialRuntime {
     this.experiences = new Map();
     /** roomId → guestId → { driverId, hue, secret } — stable while they stay. */
     this._drivers = new Map();
+    /** roomId → last presentation state seen, so a reset can be spotted once. */
+    this._roomStateWas = new Map();
     /** Injected so tests drive a link without a socket; see experience-link.js. */
     this.openExperienceSocket = io.openExperienceSocket ?? null;
     /** Show-clock instant the show started, for elapsed-time display. */
@@ -135,6 +137,7 @@ export class SpatialRuntime {
     for (const link of this.experiences.values()) link.stop();
     this.experiences.clear();
     this._drivers.clear();
+    this._roomStateWas.clear();
     for (const [roomId, room] of Object.entries(this.def.rooms ?? {})) {
       if (!room.experience) continue;
       this.experiences.set(roomId, new ExperienceLink({
@@ -827,15 +830,34 @@ export class SpatialRuntime {
     return this.experienceDrivers(roomId).length ? 'live' : 'attract';
   }
 
-  /** Bring every room experience in line with the show. */
+  /**
+   * Bring every room experience in line with the show.
+   *
+   * Conditions are reconciled; a reset is fired once. The distinction matters
+   * because a state is re-sent on every reconnect, and an experience that wiped
+   * itself each time the link flapped would lose a guest's session to a network
+   * blip rather than to them leaving.
+   */
   reconcileExperiences() {
     for (const [roomId, link] of this.experiences) {
+      const state = String(this.rooms.get(roomId)?.state ?? 'idle').split('.')[0];
+      const previous = this._roomStateWas.get(roomId);
+      this._roomStateWas.set(roomId, state);
+
       link.reconcile({
         lifecycle: this.experienceLifecycle(roomId),
         drivers: this.experienceDrivers(roomId).map(({ driverId, hue, secret }) => ({
           driverId, hue, secret,
         })),
       });
+
+      // The room has come back to rest, so whatever the last guest built should
+      // not be waiting for the next one. Deliberately keyed on reaching `idle`
+      // rather than on leaving `settling`: settling also ends when the guest
+      // walks back in, and that is the case where the piece must *not* wipe.
+      if (previous !== undefined && previous !== state && state === 'idle') {
+        link.event('reset');
+      }
     }
   }
 

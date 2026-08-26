@@ -178,6 +178,54 @@ describe('the link to a room experience', () => {
     assert.ok(link._attempt > 0, 'and keeps reaching for it');
   });
 
+  it('fires reset once, when the room actually comes back to rest', () => {
+    const { rt, server } = makeRuntime();
+    const g = driverIn(rt);
+    const socket = server.latest();
+    assert.equal(socket.of('reset').length, 0, 'not while somebody is in there');
+
+    rt.sendGuestToRoom(g.guestId, 'museumHallway');
+    rt.testAdvanceTime(3000);
+    assert.equal(socket.last('lifecycle').state, 'settling');
+    assert.equal(socket.of('reset').length, 0, 'nor during grace — they may walk back in');
+
+    rt.testAdvanceTime(30_000);
+    assert.equal(socket.last('lifecycle').state, 'attract');
+    assert.equal(socket.of('reset').length, 1, 'once the grace has actually expired');
+
+    // And not again on every subsequent reconcile. A piece that wiped itself
+    // repeatedly would be indistinguishable from one that never held state.
+    for (let i = 0; i < 5; i++) rt.notifyChange();
+    assert.equal(socket.of('reset').length, 1);
+  });
+
+  it('does not reset a guest who came back inside the grace', () => {
+    const { rt, server } = makeRuntime();
+    const g = driverIn(rt);
+    const socket = server.latest();
+
+    rt.sendGuestToRoom(g.guestId, 'museumHallway');
+    rt.testAdvanceTime(3000);
+    assert.equal(socket.last('lifecycle').state, 'settling');
+
+    rt.sendGuestToRoom(g.guestId, 'influence');
+    rt.testAdvanceTime(3000);
+    // Walking back into your own session and finding it wiped is the whole
+    // reason `reset` is an event and not the end of `settling`.
+    assert.equal(socket.of('reset').length, 0);
+    assert.equal(socket.last('lifecycle').state, 'live');
+  });
+
+  it('never sends a lifecycle that is a command rather than a condition', () => {
+    const { rt, server } = makeRuntime();
+    driverIn(rt);
+    rt.testAdvanceTime(60_000);
+    const states = new Set(server.latest().of('lifecycle').map((m) => m.state));
+    for (const state of states) {
+      assert.ok(['attract', 'live', 'settling'].includes(state), `lifecycle "${state}"`);
+    }
+  });
+
   it('respects a cap the experience itself declares', () => {
     const { rt, server } = makeRuntime();
     server.latest().reply({ t: 'ready', experienceId: 'influence-clickfarm', version: '1.0.0', maxDrivers: 1 });

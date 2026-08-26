@@ -29,6 +29,9 @@ ws.onmessage = (e) => {
   if (m.t === 'drag') vy -= m.dy * 900;
   if (m.t === 'release') vy -= m.vy * 300;
   if (m.t === 'tap') $('dot').style.background = `hsl(${Math.random() * 360} 70% 55%)`;
+  // State is held through `settling` and cleared only here, so a guest who
+  // stepped out for four seconds walks back into their own session.
+  if (m.t === 'reset') { y = 0; vy = 0; $('dot').style.background = '#2a2a38'; }
 };
 
 (function frame() {

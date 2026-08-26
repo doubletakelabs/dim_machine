@@ -184,6 +184,19 @@ link.send({ t: 'drivers', drivers: [B] });
 await wait(400);
 check(child.exitCode === null, 'accepts a shrinking driver set');
 
+// Exit grace, then rest. A piece that treats `settling` as a slower attract
+// wipes a guest who only stepped into the corridor for a moment.
+link.send({ t: 'lifecycle', state: 'settling' });
+await wait(200);
+link.send({ t: 'lifecycle', state: 'live' });
+await wait(200);
+check(child.exitCode === null, 'survives settling and a guest returning');
+link.send({ t: 'lifecycle', state: 'settling' });
+link.send({ t: 'reset' });
+link.send({ t: 'lifecycle', state: 'attract' });
+await wait(400);
+check(child.exitCode === null, 'survives a reset');
+
 // ------------------------------------------------------------- calibration
 
 const before = await get('/calibration');

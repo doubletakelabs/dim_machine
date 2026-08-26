@@ -100,24 +100,51 @@ when four people are in the room. Use it to protect your piece.
 
 ### Then it tells you two things, repeatedly
 
-**Lifecycle.** What the room is doing:
+**Lifecycle.** What is *true* of the room. Three conditions, re-sent whenever
+they change and on every reconnect:
 
 ```json
-{ "t": "lifecycle", "state": "attract" | "live" | "settling" | "reset" }
+{ "t": "lifecycle", "state": "attract" | "live" | "settling" }
 ```
 
 | State | What it means | What your piece should do |
 |---|---|---|
 | `attract` | Nobody is driving | Run your attract loop. **A still piece reads as broken.** |
 | `live` | Somebody is driving now | Respond to input |
-| `settling` | They have stepped out; the room is holding its exit grace | Wind down gracefully — do not snap to attract, they may come back |
-| `reset` | Return to a known state | Clear state so the next guest gets a clean piece |
+| `settling` | They have stepped out; the room is holding its exit grace | Hold everything exactly as they left it |
 
 > **This is the single most important thing to change.** Almost every standalone
 > piece infers "nobody is here" from having no sockets connected. In a show that
 > is wrong: a guest can be standing in your room as a spectator, before the room
 > activates, or on someone else's path. **The show knows. The socket count does
 > not.** Drive your attract loop from `lifecycle`, never from connection count.
+
+**`settling` is not a slower `attract`.** A room in exit grace has two ways out,
+and they are opposites:
+
+- the guest walks back in → `live` again, and everything they built should still
+  be there
+- the grace expires → `attract`, preceded by a `reset`
+
+So hold state through `settling`. Someone stepping into a corridor for four
+seconds and returning to a wiped piece is the fault this distinction prevents.
+
+**Reset.** What *happened* to the room. Sent once, never repeated:
+
+```json
+{ "t": "reset" }
+```
+
+The room has come back to rest and whatever the last guest built should not be
+waiting for the next one. Clear your state; `attract` follows immediately.
+
+> Deliberately not a lifecycle value. A state is re-sent on every reconnect, so
+> a piece would wipe itself every time the link flapped — losing a guest's
+> session to a network blip rather than to them leaving. Conditions are
+> reconciled; events fire once.
+>
+> If you were disconnected when a reset fired, you missed it and that is fine:
+> a piece that was down through a reset came back with nothing to clear.
 
 **Drivers.** Who may drive:
 
@@ -290,6 +317,7 @@ must pass:
 - [ ] honours `drivers` as a **set**, replacing rather than accumulating
 - [ ] never assigns its own driver ids, hues, or caps
 - [ ] obeys `lifecycle`, and runs attract on command rather than on socket count
+- [ ] **holds state through `settling`**, and clears it on `reset`
 - [ ] accepts a driver presenting a valid `driverId` + `secret`
 - [ ] **refuses** a driver presenting a wrong or unknown secret
 - [ ] relays every intent in `inputs`, and ignores ones it did not declare
@@ -306,10 +334,10 @@ BROKER LINK                            DRIVER LINK
 DIM → you                              phone → you
   hello   {role:'broker', roomId,        hello   {role:'driver', driverId, secret}
            experienceId, contract}       drag    {dx, dy}        fractions of screen
-  lifecycle {state}                      release {vx, vy}        screens/sec
+  lifecycle {state}      ← condition    release {vx, vy}        screens/sec
   drivers {drivers:[{driverId,           tap     {}
            hue, secret}]}  ← full set    hold    {on}
-                                         swipe   {direction, dx, dy}
+  reset   {}             ← event         swipe   {direction, dx, dy}
 you → DIM
   ready   {experienceId, version,      you → phone
            maxDrivers, accepts}          claim   {driverId, hue}
@@ -318,6 +346,7 @@ you → DIM
 
 Two rules underneath all of it:
 
-1. **State, not events.** Every message from the show is the whole truth, so
-   arriving late or restarting is never a special case.
+1. **Conditions are reconciled; events fire once.** `lifecycle` and `drivers`
+   are the whole truth every time, so arriving late or restarting is never a
+   special case. `reset` is the one thing that genuinely *happened*.
 2. **The show owns who and when. You own what it looks and feels like.**

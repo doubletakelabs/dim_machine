@@ -31,7 +31,7 @@
  * for the operator panel, and never blocks anything.
  */
 
-import { EXPERIENCE_LIFECYCLE } from './contract.js';
+import { EXPERIENCE_LIFECYCLE, EXPERIENCE_EVENTS } from './contract.js';
 
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
@@ -90,6 +90,25 @@ export class ExperienceLink {
       drivers: desired.drivers ?? [],
     };
     this._flush();
+  }
+
+  /**
+   * Something happened, as opposed to something being true.
+   *
+   * Sent once and never repeated — no dedupe, no resend on reconnect. A piece
+   * that was offline when this fired came back with nothing to act on anyway.
+   *
+   * @param {string} name — one of EXPERIENCE_EVENTS
+   */
+  event(name) {
+    if (!EXPERIENCE_EVENTS.includes(name) || this.state !== 'ready') return false;
+    try {
+      this.socket.send(JSON.stringify({ t: name }));
+      return true;
+    } catch (err) {
+      this.lastError = err.message;
+      return false;
+    }
   }
 
   _flush() {
