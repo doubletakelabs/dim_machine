@@ -281,11 +281,11 @@ says the mapping looks off.
 Run the harness from the DIM Machine repo:
 
 ```
-node tools/experience-harness.mjs ws://localhost:8080 --port 7000
+node tools/experience-harness.mjs ws://localhost:8080
 ```
 
 It connects to your server **as a broker** — the same role, the same messages —
-and serves a control page at `http://<lan-ip>:7000/`:
+and serves a control page at `http://<lan-ip>:7420/`:
 
 - lifecycle buttons: attract / live / settling / reset
 - add and remove drivers, up to your declared `maxDrivers`

@@ -2,7 +2,7 @@
 /**
  * Stand in for the show, so a room experience can be built without one.
  *
- *   node tools/experience-harness.mjs ws://localhost:8080 [--port 7000]
+ *   node tools/experience-harness.mjs ws://localhost:8080 [--port 7420]
  *
  * Connects to the experience **as a broker** — the same role, the same messages,
  * the same socket the show uses. Then serves a control page with lifecycle
@@ -21,7 +21,9 @@ import { networkInterfaces } from 'node:os';
 
 const args = process.argv.slice(2);
 const endpoint = args.find((a) => a.startsWith('ws://') || a.startsWith('wss://')) ?? 'ws://localhost:8080';
-const PORT = Number(args[args.indexOf('--port') + 1]) || 7000;
+// Not 7000: macOS AirPlay Receiver holds it, and the failure is an EADDRINUSE
+// stack trace that looks like the harness is broken.
+const PORT = Number(args[args.indexOf('--port') + 1]) || 7420;
 const HUES = [190, 28, 320, 95, 265, 55];
 
 const state = { lifecycle: 'attract', drivers: [], remote: null, linked: false };
@@ -118,6 +120,13 @@ const PANEL = (ip) => `<!doctype html><meta charset="utf-8"><title>Experience ha
     Attract must come from here, not from the socket count — a guest can stand in
     the room without driving.
   </p>
+  <hr style="border:0;border-top:1px solid #1d1d28;margin:14px 0">
+  <button id="reset">send reset</button>
+  <p class="muted" style="margin:6px 0 0;font-size:12px">
+    An event, not a state. The piece should clear what the last guest built —
+    and should <em>not</em> clear it merely for going to <code>settling</code>,
+    because they may walk back in.
+  </p>
 </div>
 <div class="card">
   <div class="muted" style="margin-bottom:8px">Drivers</div>
@@ -135,7 +144,7 @@ const ws=new WebSocket('ws://'+location.host);
 ws.onopen=()=>ws.send(JSON.stringify({t:'panel'}));
 let s={};
 ws.onmessage=(e)=>{s=JSON.parse(e.data);render();};
-const LIFE=['attract','live','settling','reset'];
+const LIFE=['attract','live','settling'];
 function render(){
   $('link').innerHTML = s.linked
     ? '<span style="color:#58c98a">linked</span> — '+(s.remote
@@ -149,6 +158,7 @@ function render(){
     ? s.drivers.map((d)=>'<span class="chip" style="background:hsl('+d.hue+' 60% 30%)">'+d.driverId+'</span>').join('')
     : '<span class="muted">none — the experience should be in attract</span>';
 }
+$('reset').onclick=()=>ws.send(JSON.stringify({t:'reset'}));
 $('add').onclick=()=>ws.send(JSON.stringify({t:'addDriver'}));
 $('clear').onclick=()=>ws.send(JSON.stringify({t:'clearDrivers'}));
 </script>`;
@@ -252,10 +262,20 @@ new WebSocketServer({ server: http }).on('connection', (ws) => {
     try { m = JSON.parse(raw); } catch { return; }
     if (m.t === 'panel') { panels.add(ws); return announce(); }
     if (m.t === 'lifecycle') { state.lifecycle = m.state; push(); return announce(); }
+    // Fired once, never reconciled — exactly as the show sends it.
+    if (m.t === 'reset') { return broker?.readyState === 1 && broker.send(JSON.stringify({ t: 'reset' })); }
     if (m.t === 'addDriver') return addDriver();
     if (m.t === 'clearDrivers') { state.drivers = []; push(); return announce(); }
   });
   ws.on('close', () => panels.delete(ws));
+});
+
+http.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n  port ${PORT} is taken — try: node tools/experience-harness.mjs ${endpoint} --port ${PORT + 1}\n`);
+    process.exit(1);
+  }
+  throw err;
 });
 
 http.listen(PORT, () => {
