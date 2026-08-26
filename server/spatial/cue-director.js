@@ -25,7 +25,9 @@
  * so it comes from the room or region timestamp and never from `now`.
  */
 
-import { CUE_SLOTS, SCREEN_CUE_SLOT, cueAudienceMatches } from './contract.js';
+import {
+  CUE_SLOTS, SCREEN_CUE_SLOT, EXPERIENCE_CUE_SLOT, cueAudienceMatches,
+} from './contract.js';
 
 export class CueDirector {
   /**
@@ -87,12 +89,15 @@ export class CueDirector {
       if ((want?.key ?? null) === (have?.key ?? null)) continue;
 
       const screen = slot === SCREEN_CUE_SLOT;
+      const experience = slot === EXPERIENCE_CUE_SLOT;
 
       // Stop first, and only when the outgoing asset is not the incoming one —
       // re-sending the same asset would otherwise cut itself off mid-word, or
       // blank a screen for a frame before redrawing the same image.
       if (have && have.assetId !== want?.assetId) {
-        this.emitCue(guestId, screen
+        this.emitCue(guestId, experience
+          ? { cueId: `cue-${++this._seq}`, kind: 'endExperience', assetId: have.assetId, slot }
+          : screen
           ? { cueId: `cue-${++this._seq}`, kind: 'clearImage', assetId: have.assetId, slot }
           : {
             cueId: `cue-${++this._seq}`,
@@ -105,7 +110,21 @@ export class CueDirector {
         current.delete(slot);
         continue;
       }
-      this.emitCue(guestId, screen
+      this.emitCue(guestId, experience
+        ? {
+          cueId: `cue-${++this._seq}`,
+          kind: 'experience',
+          slot,
+          assetId: want.assetId,
+          endpoint: want.endpoint,
+          experienceId: want.experienceId,
+          inputMode: want.inputMode,
+          inputs: want.inputs,
+          driverId: want.driverId,
+          hue: want.hue,
+          secret: want.secret,
+        }
+        : screen
         ? { cueId: `cue-${++this._seq}`, kind: 'image', assetId: want.assetId, startAt: want.startAt, slot }
         : {
           cueId: `cue-${++this._seq}`,

@@ -359,6 +359,8 @@ function runCue(cue, opts = {}) {
     case 'video': playVideo(cue, { joinInProgress: !!opts.seekIntoLoop }); break;
     case 'image': showImage(cue); break;
     case 'clearImage': clearImage(cue.assetId); break;
+    case 'experience': openExperience(cue); break;
+    case 'endExperience': closeExperience(); break;
     case 'page': showPage(cue); break;
     case 'haptic': haptic(cue.pattern ?? [200]); break;
     case 'setVar': setVar(cue.key, cue.value); break;
@@ -375,6 +377,24 @@ function runCue(cue, opts = {}) {
 // gesture can advance calibration here and do something else three rooms later
 // without this file knowing either.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Input modes
+//
+// `gestures` is the show: discrete, recognised here, sent as one event, routed
+// through inputBindings into the guest statechart. A swipe advances a screen.
+//
+// `stream` hands the surface to a room's experience — a wall, a projection, a
+// piece with its own physics running on a machine in that room. Movement is
+// reported continuously to *that* server, and the statechart hears none of it.
+// It must not: a drag feeding a statechart would transition it sixty times a
+// second.
+//
+// One at a time, because a 200px flick is otherwise both a `drag` stream and a
+// terminal `swipe left`, and something fires twice.
+// ---------------------------------------------------------------------------
+let inputMode = 'gestures';
+let experience = null;   // { ws, endpoint, driverId, hue, accepts }
+
 const SWIPE_MIN_PX = 60;      // shorter than this is a slip, not a swipe
 const SWIPE_MAX_MS = 900;     // slower than this is a drag
 /**
@@ -390,12 +410,17 @@ const GESTURE_MIN_GAP_MS = 400; // a nervous double-tap is one answer, not two
 
 let lastGesture = 0;
 function emitGesture(type, payload) {
-  if (!joined || Date.now() - lastGesture < GESTURE_MIN_GAP_MS) return;
-  lastGesture = Date.now();
+  if (!joined) return;
   // Shown on the phone itself. A gesture that never left the handset and one
   // the show ignored look identical from the floor without this.
   const el = $('gesture');
   if (el) el.textContent = type;
+
+  if (inputMode === 'stream') return sendToExperience({ t: type, ...payload });
+  // The gap guard is for the statechart only: a nervous double-tap is one
+  // answer to a screen. An experience wants every tap it is given.
+  if (Date.now() - lastGesture < GESTURE_MIN_GAP_MS) return;
+  lastGesture = Date.now();
   window.DIM.emit(type, payload);
 }
 
@@ -407,8 +432,11 @@ function enableGestures() {
     // touch is an opportunity worth taking whether or not it becomes a gesture.
     resumeAudio();
     start = { x, y, at: Date.now() };
+    if (inputMode === 'stream') streamBegin(x, y);
   };
+  const move = (x, y) => { if (inputMode === 'stream') streamMove(x, y); };
   const end = (x, y) => {
+    if (inputMode === 'stream') streamEnd();
     if (!start) return;
     const { x: x0, y: y0, at } = start;
     start = null;
@@ -441,6 +469,10 @@ function enableGestures() {
     const t = e.changedTouches[0];
     begin(t.clientX, t.clientY);
   }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    const t = e.changedTouches[0];
+    move(t.clientX, t.clientY);
+  }, { passive: true });
   document.addEventListener('touchend', (e) => {
     lastTouchAt = Date.now();
     if (control(e)) return;
@@ -455,6 +487,10 @@ function enableGestures() {
   document.addEventListener('mousedown', (e) => {
     if (afterTouch() || control(e)) return;
     begin(e.clientX, e.clientY);
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (afterTouch() || !start) return;
+    move(e.clientX, e.clientY);
   });
   document.addEventListener('mouseup', (e) => {
     if (afterTouch() || control(e)) return;
@@ -476,6 +512,105 @@ function enableShake() {
       window.DIM.emit('shake');
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// The link to a room's experience
+//
+// A second socket, straight to the machine in that room. Deliberately not
+// through the show server: a finger reports around sixty times a second, and a
+// detour would be jitter bought for nothing. What the show *does* own is who
+// may drive — it tells the room server, and hands us the matching secret.
+// ---------------------------------------------------------------------------
+function openExperience(cue) {
+  if (experience?.endpoint === cue.endpoint && experience?.driverId === cue.driverId) return;
+  closeExperience();
+
+  const accepts = cue.inputs ?? null;
+  const ws = new WebSocket(cue.endpoint);
+  experience = { ws, endpoint: cue.endpoint, driverId: cue.driverId, hue: cue.hue, accepts };
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({
+      t: 'hello', role: 'driver', driverId: cue.driverId, secret: cue.secret,
+    }));
+    setExperienceStatus('linked');
+  };
+  // No reconnect loop here. If the room server drops us the show will notice
+  // and re-cue, or the guest has walked out and should not be driving anyway —
+  // a phone reconnecting on its own to a wall in a room it has left is the
+  // fault this avoids.
+  ws.onclose = () => { if (experience?.ws === ws) setExperienceStatus('dropped'); };
+  ws.onerror = () => setExperienceStatus('unreachable');
+
+  inputMode = cue.inputMode ?? 'stream';
+}
+
+function closeExperience() {
+  const link = experience;
+  experience = null;
+  inputMode = 'gestures';
+  setExperienceStatus('–');
+  try { link?.ws?.close(); } catch { /* already gone */ }
+}
+
+function sendToExperience(message) {
+  const link = experience;
+  if (!link || link.ws.readyState !== 1) return;
+  // A piece declares what it consumes; sending it a hold it never asked for is
+  // noise on a socket that is carrying a thumb.
+  if (link.accepts && !link.accepts.includes(message.t)) return;
+  link.ws.send(JSON.stringify(message));
+}
+
+function setExperienceStatus(text) {
+  const el = $('link');
+  if (el) el.textContent = text;
+}
+
+/**
+ * Continuous movement, normalised to this phone's own screen so device size
+ * drops out, and rAF-throttled so a fast finger cannot outrun a frame.
+ */
+const stream = { down: false, x: 0, y: 0, dx: 0, dy: 0, at: 0, vx: 0, vy: 0, queued: false };
+
+function streamBegin(x, y) {
+  stream.down = true;
+  stream.x = x; stream.y = y;
+  stream.dx = 0; stream.dy = 0;
+  stream.vx = 0; stream.vy = 0;
+  stream.at = Date.now();
+}
+
+function streamMove(x, y) {
+  if (!stream.down) return;
+  const now = Date.now();
+  const dt = Math.max(1, now - stream.at);
+  const dx = x - stream.x;
+  const dy = y - stream.y;
+  // Velocity in screens per second, measured here rather than derived at the
+  // other end from a jittered stream.
+  stream.vx = (dx / innerWidth) / (dt / 1000);
+  stream.vy = (dy / innerHeight) / (dt / 1000);
+  stream.x = x; stream.y = y; stream.at = now;
+  stream.dx += dx; stream.dy += dy;
+  if (stream.queued) return;
+  stream.queued = true;
+  requestAnimationFrame(() => {
+    stream.queued = false;
+    if (!stream.dx && !stream.dy) return;
+    sendToExperience({ t: 'drag', dx: stream.dx / innerWidth, dy: stream.dy / innerHeight });
+    stream.dx = 0; stream.dy = 0;
+  });
+}
+
+function streamEnd() {
+  if (!stream.down) return;
+  stream.down = false;
+  // Stale velocity means a finger that stopped before lifting, which is a
+  // deliberate halt rather than a fling.
+  const still = Date.now() - stream.at > 120;
+  sendToExperience({ t: 'release', vx: still ? 0 : stream.vx, vy: still ? 0 : stream.vy });
 }
 
 // ---------------------------------------------------------------------------

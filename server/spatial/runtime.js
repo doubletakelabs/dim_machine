@@ -14,8 +14,16 @@ import { WalkthroughDriver } from './walkthrough.js';
 import { roomStandingSpot, slotForGuest, floorPlanExtent } from './zone-math.js';
 import { systemClock } from './clock.js';
 import {
-  OCCUPANCY_STATES, CUE_SLOTS, AUDIO_CUE_SLOTS, SCREEN_CUE_SLOT, AUTHORED_GUEST_REGIONS,
+  OCCUPANCY_STATES, CUE_SLOTS, AUDIO_CUE_SLOTS, SCREEN_CUE_SLOT, EXPERIENCE_CUE_SLOT,
+  AUTHORED_GUEST_REGIONS, DRIVER_HUES,
 } from './contract.js';
+import { ExperienceLink } from './experience-link.js';
+
+/**
+ * Standings that get to drive a room's experience. A spectator watches somebody
+ * else's hand; a guest the room is not running for is not in it at all.
+ */
+const DRIVING_STANDINGS = ['holder', 'participant', 'present'];
 
 /**
  * Coordinator wake-up granularity. A pending entry/exit confirmation can only
@@ -34,7 +42,7 @@ const OUTPUT_LOG_CAP = 200;
  * Guest actors wired in A3 (see guest.js).
  */
 export class SpatialRuntime {
-  /** @param {{ log?: (line: string) => void, onStateChange?: () => void, onOccupancy?: (event: object) => void, onEvent?: (event: object) => void, clock?: object, enableTick?: boolean }} io */
+  /** @param {{ log?: (line: string) => void, onStateChange?: () => void, onOccupancy?: (event: object) => void, onEvent?: (event: object) => void, clock?: object, enableTick?: boolean, openExperienceSocket?: (url: string) => object }} io */
   constructor(io = {}) {
     this.io = io;
     this.director = new CueDirector({
@@ -71,6 +79,12 @@ export class SpatialRuntime {
     this.virtualLocation = null;
     /** @type {WalkthroughDriver | null} */
     this.walkthrough = null;
+    /** roomId → ExperienceLink, for rooms that hand their interaction to a piece. */
+    this.experiences = new Map();
+    /** roomId → guestId → { driverId, hue, secret } — stable while they stay. */
+    this._drivers = new Map();
+    /** Injected so tests drive a link without a socket; see experience-link.js. */
+    this.openExperienceSocket = io.openExperienceSocket ?? null;
     /** Show-clock instant the show started, for elapsed-time display. */
     this.startedAt = null;
     this._tickHandle = null;
@@ -117,6 +131,20 @@ export class SpatialRuntime {
     });
 
     this.walkthrough = new WalkthroughDriver({ runtime: this, clock: this.clock });
+
+    for (const link of this.experiences.values()) link.stop();
+    this.experiences.clear();
+    this._drivers.clear();
+    for (const [roomId, room] of Object.entries(this.def.rooms ?? {})) {
+      if (!room.experience) continue;
+      this.experiences.set(roomId, new ExperienceLink({
+        roomId,
+        config: room.experience,
+        clock: this.clock,
+        openSocket: this.openExperienceSocket,
+        onChange: () => this.io.onStateChange?.(),
+      }));
+    }
     this.guestMachineConfig = buildGuestMachine(this.def);
 
     for (const roomId of Object.keys(this.def.rooms)) {
@@ -155,6 +183,10 @@ export class SpatialRuntime {
       this.guestActors.get(p.guestId)?.start();
     }
     this.startTick();
+    // The wall in a room may already be running, may be off, may come up in an
+    // hour. None of that is this call's problem — the link keeps trying and the
+    // show never waits on it.
+    for (const link of this.experiences.values()) link.start();
     this.append({ type: 'show.started', showId: this.def.showId });
     this.io.log?.(`show started: ${this.def.name ?? this.def.showId}`);
     this.notifyChange();
@@ -176,6 +208,7 @@ export class SpatialRuntime {
       }
     }
     this.walkthrough?.stop();
+    for (const link of this.experiences.values()) link.stop();
     for (const actor of this.guestActors.values()) actor.stop();
     this.startedAt = null;
     for (const room of this.rooms.values()) room.stop();
@@ -690,6 +723,8 @@ export class SpatialRuntime {
 
     for (const slot of AUDIO_CUE_SLOTS) desired.set(slot, audioPart(resolved[slot]));
 
+    desired.set(EXPERIENCE_CUE_SLOT, this.experienceCueFor(guestId, here));
+
     // A phone has one screen, so the sources compete for it rather than mixing.
     // Guidance wins: when the tour is talking directly to a guest — the
     // calibration sequence, an instruction — it is addressing them, and the room
@@ -714,6 +749,101 @@ export class SpatialRuntime {
    * @param {string} input — one of INPUT_KINDS
    * @returns {boolean} whether the input was bound to anything
    */
+  // -------------------------------------------------------------------------
+  // Room experiences
+  //
+  // A room may hand its interaction to a separate piece running its own server
+  // in that room. The show tells it who is driving and what the room is doing;
+  // the guest's finger goes straight from their phone to that server, never
+  // through here. See experience-link.js.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Who is driving this room's experience, as a set rather than a sequence of
+   * changes — the experience is a separate program that may restart at any time,
+   * and the first message it gets has to be the whole truth.
+   *
+   * A driver id and hue stay with a guest for as long as they are in the room:
+   * an experience tints things by hue, and a colour that shuffled when somebody
+   * else walked in would read as the piece glitching.
+   */
+  experienceDrivers(roomId) {
+    const def = this.def?.rooms?.[roomId]?.experience;
+    if (!def) return [];
+    let assigned = this._drivers.get(roomId);
+    if (!assigned) {
+      assigned = new Map();
+      this._drivers.set(roomId, assigned);
+    }
+
+    const driving = [];
+    for (const guest of this.guests.values()) {
+      const here = this.guestActors.get(guest.guestId)?.currentRoom();
+      if (here?.roomId !== roomId) continue;
+      if (!DRIVING_STANDINGS.includes(here.standing)) continue;
+      driving.push(guest.guestId);
+    }
+
+    for (const guestId of assigned.keys()) {
+      if (!driving.includes(guestId)) assigned.delete(guestId);
+    }
+
+    const cap = Math.min(
+      def.maxDrivers ?? DRIVER_HUES.length,
+      this.experiences.get(roomId)?.remote?.maxDrivers ?? DRIVER_HUES.length,
+    );
+    const out = [];
+    for (const guestId of driving) {
+      if (out.length >= cap) break;
+      if (!assigned.has(guestId)) {
+        const taken = new Set([...assigned.values()].map((d) => d.hue));
+        assigned.set(guestId, {
+          driverId: `d-${randomUUID().slice(0, 8)}`,
+          hue: DRIVER_HUES.find((h) => !taken.has(h)) ?? DRIVER_HUES[assigned.size % DRIVER_HUES.length],
+          // Not security — this is a closed network. It stops the room server
+          // taking orders from anything that happens to find the port.
+          secret: randomUUID(),
+          guestId,
+        });
+      }
+      out.push(assigned.get(guestId));
+    }
+    return out;
+  }
+
+  /**
+   * What the room is doing, in the four words an experience understands.
+   *
+   * `attract` is the one that matters: a piece left to itself infers "nobody is
+   * here" from having no sockets, which is wrong whenever a guest is standing
+   * in the room without driving.
+   */
+  experienceLifecycle(roomId) {
+    const room = this.rooms.get(roomId);
+    if (!room || !this.running) return 'attract';
+    const state = String(room.state).split('.')[0];
+    if (state === 'settling') return 'settling';
+    if (state === 'idle') return 'attract';
+    return this.experienceDrivers(roomId).length ? 'live' : 'attract';
+  }
+
+  /** Bring every room experience in line with the show. */
+  reconcileExperiences() {
+    for (const [roomId, link] of this.experiences) {
+      link.reconcile({
+        lifecycle: this.experienceLifecycle(roomId),
+        drivers: this.experienceDrivers(roomId).map(({ driverId, hue, secret }) => ({
+          driverId, hue, secret,
+        })),
+      });
+    }
+  }
+
+  /** Every room experience's health, for the operator panel. */
+  experienceSnapshot() {
+    return [...this.experiences.values()].map((link) => link.snapshot());
+  }
+
   /**
    * Put a guest in a room, or nowhere.
    *
@@ -773,6 +903,38 @@ export class SpatialRuntime {
     return true;
   }
 
+  /**
+   * The connection details a phone needs to drive this room's experience, or
+   * null if it should not be driving anything.
+   *
+   * A cue slot rather than a message, so a phone that drops and comes back is
+   * handed to the experience again by the same reconcile that restores its
+   * audio — being connected is a state, not an event that happened once.
+   *
+   * `phoneEndpoint` exists because the two ends may not share an address: the
+   * show server can reach a room machine on one route while a handset on the
+   * guest wifi needs another.
+   */
+  experienceCueFor(guestId, here) {
+    if (!here) return null;
+    const config = this.def?.rooms?.[here.roomId]?.experience;
+    if (!config) return null;
+    const driver = this.experienceDrivers(here.roomId).find((d) => d.guestId === guestId);
+    if (!driver) return null;
+    return {
+      assetId: `${here.roomId}:${driver.driverId}`,
+      key: `${here.roomId}:${driver.driverId}`,
+      endpoint: config.phoneEndpoint ?? config.endpoint,
+      experienceId: config.experienceId ?? null,
+      inputMode: config.inputMode ?? 'stream',
+      inputs: config.inputs ?? null,
+      driverId: driver.driverId,
+      hue: driver.hue,
+      secret: driver.secret,
+      startAt: this.rooms.get(here.roomId)?.stateSince ?? this.now(),
+    };
+  }
+
   /** Bring every phone in line with the world. Sends nothing when nothing differs. */
   reconcileCues() {
     for (const guestId of this.guestActors.keys()) {
@@ -799,6 +961,7 @@ export class SpatialRuntime {
    * told, so the panel and the phones never disagree about what is playing.
    */
   notifyChange() {
+    this.reconcileExperiences();
     this.reconcileCues();
     this.io.onStateChange?.();
   }
@@ -823,6 +986,7 @@ export class SpatialRuntime {
         rate: this.timeScale(),
       },
       walkthrough: this.walkthrough?.status() ?? null,
+      experiences: this.experienceSnapshot(),
       recentEvents: this.eventLog.slice(-30),
       outputLog: this.outputLog.slice(-50),
     };

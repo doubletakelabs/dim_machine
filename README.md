@@ -103,6 +103,16 @@ it. If you do want the demo itself snappier, `location.entryConfirmMs` in
 Open decisions, declared-but-unused config, and known warts are tracked in
 [`TECH-DEBT.md`](TECH-DEBT.md).
 
+**Room experiences.** A room can hand its interaction to a separate piece —
+a wall, a projection — running its own server on a machine in that room. The
+contract for building one is [`docs/ROOM-EXPERIENCE.md`](docs/ROOM-EXPERIENCE.md),
+with a conforming reference in `docs/experience-template/`.
+
+```
+node tools/experience-harness.mjs ws://localhost:8080   # develop against a fake show
+node tools/verify-experience.mjs ./the-piece            # check it before it ships
+```
+
 ## Show definitions
 
 Contract **v3 only** (`contractVersion: 3`) — see `CONTRACT.md`. v1/v2 workshop

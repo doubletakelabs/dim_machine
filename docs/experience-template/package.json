@@ -1,0 +1,6 @@
+{
+  "name": "reference-experience",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": { "ws": "^8.21.0" }
+}

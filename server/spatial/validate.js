@@ -22,7 +22,7 @@ import {
 import { IMPLEMENTED_ELIGIBILITY_STRATEGIES } from './eligibility.js';
 import { expandSequences } from './sequence.js';
 import {
-  CUE_AUDIENCES, CUE_SLOTS, INPUT_KINDS, defaultCueAudience,
+  CUE_AUDIENCES, CUE_SLOTS, INPUT_KINDS, INPUT_MODES, EXPERIENCE_INTENTS, defaultCueAudience,
 } from './contract.js';
 
 function isObject(v) {
@@ -227,6 +227,7 @@ function checkRoom(roomId, room, errors, warnings) {
 
   checkRevisitVariants(roomId, room, errors);
   checkRoomCues(roomId, room, path, errors, warnings);
+  checkRoomExperience(roomId, room, path, errors, warnings);
 }
 
 /**
@@ -261,6 +262,52 @@ function checkCueMedia(cue, at, errors) {
     }
   }
   if (cue.duration === 0) errors.push(`${at}.duration is zero — the cue would be silent`);
+}
+
+/**
+ * A room that hands its interaction to a separate piece.
+ *
+ * The endpoint is the one piece of a show that is genuinely about *this
+ * building* rather than about the work — a machine's address on a network. It
+ * still lives in the show rather than in code, because the alternative is an
+ * install detail hiding in a source file where nobody looks for it.
+ */
+function checkRoomExperience(roomId, room, path, errors, warnings) {
+  const experience = room.experience;
+  if (experience == null) return;
+  const at = `${path}.experience`;
+  if (!isObject(experience)) {
+    errors.push(`${at} must be an object`);
+    return;
+  }
+  requireString(experience, 'experienceId', at, errors);
+  if (typeof experience.endpoint !== 'string' || !/^wss?:\/\//.test(experience.endpoint)) {
+    errors.push(`${at}.endpoint must be a ws:// or wss:// URL`);
+  }
+  for (const field of ['phoneEndpoint']) {
+    if (experience[field] != null && !/^wss?:\/\//.test(experience[field])) {
+      errors.push(`${at}.${field} must be a ws:// or wss:// URL`);
+    }
+  }
+  checkEnum(experience.inputMode, INPUT_MODES, `${at}.inputMode`, errors);
+  for (const intent of experience.inputs ?? []) {
+    checkEnum(intent, EXPERIENCE_INTENTS, `${at}.inputs`, errors);
+  }
+  if (experience.maxDrivers != null
+    && (!Number.isInteger(experience.maxDrivers) || experience.maxDrivers < 1)) {
+    errors.push(`${at}.maxDrivers must be a positive integer`);
+  }
+  // A hallway is passed through; a shared room runs for the space. Neither has
+  // the holder an experience needs in order to know whose hand it is following.
+  if (room.kind === 'hallway') {
+    warnings.push(`${at} is on a hallway — guests pass through and will barely hold a driver slot`);
+  }
+  if (experience.inputMode === 'gestures') {
+    warnings.push(
+      `${at}.inputMode is "gestures", so nothing streams to the experience — `
+      + 'it will be told who is driving and hear no input',
+    );
+  }
 }
 
 function checkRoomCues(roomId, room, path, errors, warnings) {

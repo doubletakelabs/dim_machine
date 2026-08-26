@@ -1,7 +1,7 @@
 // DIM Machine — v0.3 spatial runtime (Phase A).
 // WebSocket bridge for operator panel, simulated guests, and phones (Phase B+).
 import express from 'express';
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -125,6 +125,9 @@ let loadedShowFile = null;
 const showClock = new ScaledClock(1);
 
 const runtime = new SpatialRuntime({
+  // How the show reaches a room's own server. Injected rather than imported by
+  // the runtime so tests drive the protocol without a network.
+  openExperienceSocket: (url) => new WebSocket(url),
   clock: showClock,
   log: opLog,
   onStateChange: scheduleRoster,

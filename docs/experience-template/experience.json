@@ -1,0 +1,11 @@
+{
+  "contract": 1,
+  "experienceId": "reference-experience",
+  "name": "Reference Experience",
+  "version": "1.0.0",
+  "entry": { "wall": "/wall.html" },
+  "inputs": ["drag", "release", "tap"],
+  "maxDrivers": 4,
+  "media": { "dir": "media", "required": false },
+  "calibration": { "file": "calibration.json" }
+}

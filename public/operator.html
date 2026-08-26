@@ -87,6 +87,7 @@
   <span class="spacer"></span>
   <span class="pill" id="clockInfo" style="font-family:ui-monospace,Menlo,monospace">—</span>
   <span class="pill" id="showInfo">no show</span>
+  <span class="pill" id="expInfo" style="display:none"></span>
   <span class="pill" id="connInfo">connecting…</span>
 </header>
 
@@ -619,6 +620,26 @@ function describeIntent(guest) {
 
 const shortId = (id) => String(id ?? '').replace(/^u-/, '').slice(0, 6);
 
+/** A room whose interaction lives on another machine, and whether it answered. */
+function describeExperience(roomId) {
+  const link = (snap?.experiences ?? []).find((l) => l.roomId === roomId);
+  if (!link) return '';
+  const ok = link.state === 'ready';
+  return `
+    <h2 style="margin-top:12px">Experience</h2>
+    <dl>
+      <dt>Piece</dt><dd>${link.remote?.experienceId ?? link.experienceId ?? '—'}${
+        link.remote?.version ? ` <span class="muted">v${link.remote.version}</span>` : ''}</dd>
+      <dt>Endpoint</dt><dd style="font-family:ui-monospace,Menlo,monospace">${link.endpoint ?? '—'}</dd>
+      <dt>Link</dt><dd style="color:${ok ? '#58c98a' : '#e0705a'}">${link.state}${
+        link.lastError && !ok ? ` <span class="muted">${link.lastError}</span>` : ''}</dd>
+      <dt>Telling it</dt><dd>${link.lifecycle} · ${link.drivers} driver${link.drivers === 1 ? '' : 's'}</dd>
+    </dl>
+    ${ok ? '' : '<p class="muted" style="margin:6px 0 0;font-size:11px">'
+      + 'The show carries on without it — the room admits guests and plays its audio. '
+      + 'Reconnecting on a backoff.</p>'}`;
+}
+
 /**
  * Always name a guest the way the guest list names them.
  *
@@ -767,7 +788,7 @@ function renderInspector() {
       <p class="muted" style="margin:6px 0 0;font-size:11px">
         Raw events poke the machine directly — useful to see a state, but
         ACTIVATE that way leaves the room running for nobody.
-      </p>`;
+      </p>${describeExperience(room.roomId)}`;
     for (const btn of el.querySelectorAll('[data-ev]')) {
       btn.onclick = () => send({ type: 'sendRoomEvent', roomId: room.roomId, event: btn.dataset.ev });
     }
@@ -867,6 +888,18 @@ function render() {
       + `${missing.join(', ')}<br><span style="opacity:.75">Guests will get a blank screen or silence where these are cued.</span>`
     : '';
   $('assetWarning').style.display = missing.length ? 'block' : 'none';
+
+  // A room's wall is on another machine, so its absence has no symptom in here
+  // unless it is said out loud. Silent is exactly how it would be found on the
+  // night, by a guest standing in front of nothing.
+  const links = snap?.experiences ?? [];
+  const down = links.filter((l) => l.state !== 'ready');
+  $('expInfo').style.display = links.length ? 'inline-block' : 'none';
+  $('expInfo').textContent = links.length
+    ? (down.length ? `⚠ ${down.length}/${links.length} room server${links.length > 1 ? 's' : ''} down` : `${links.length} room server${links.length > 1 ? 's' : ''} ok`)
+    : '';
+  $('expInfo').style.background = down.length ? '#5c1f1f' : '';
+  $('expInfo').style.color = down.length ? '#ffd9d9' : '';
 
   $('showInfo').textContent = showMeta?.loaded
     ? `${showMeta.name} · ${showMeta.running ? 'running' : 'stopped'} · ${showMeta.roomCount} rooms`

@@ -1,0 +1,42 @@
+<!doctype html><meta charset="utf-8"><title>Reference Experience — wall</title>
+<style>
+  html,body{margin:0;height:100%;background:#08080c;color:#e7e9ee;
+    font:14px/1.5 ui-monospace,Menlo,monospace;overflow:hidden}
+  #state{position:fixed;top:24px;left:24px;font-size:13px;opacity:.6;letter-spacing:.08em}
+  #drivers{position:fixed;bottom:24px;left:24px;display:flex;gap:10px}
+  .chip{padding:4px 10px;border-radius:99px;font-size:12px}
+  #stage{position:absolute;inset:0;display:grid;place-items:center}
+  #dot{width:120px;height:120px;border-radius:50%;background:#2a2a38;transition:background .3s}
+</style>
+<div id="stage"><div id="dot"></div></div>
+<div id="state">attract</div>
+<div id="drivers"></div>
+<script>
+// The display client. It owns everything about how this looks and moves; the
+// show only ever tells it who is driving and what the room is doing.
+const $ = (id) => document.getElementById(id);
+let y = 0, vy = 0, lifecycle = 'attract';
+
+const ws = new WebSocket(`ws://${location.host}`);
+ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', role: 'wall' }));
+ws.onmessage = (e) => {
+  const m = JSON.parse(e.data);
+  if (m.t === 'lifecycle') { lifecycle = m.state; $('state').textContent = m.state; }
+  if (m.t === 'drivers') $('drivers').innerHTML = m.drivers.map((d) =>
+    `<span class="chip" style="background:hsl(${d.hue} 60% 30%)">${d.driverId}</span>`).join('');
+  // Intent in, physics here. Network jitter must never stutter the motion, so
+  // nothing below reads a clock off the wire.
+  if (m.t === 'drag') vy -= m.dy * 900;
+  if (m.t === 'release') vy -= m.vy * 300;
+  if (m.t === 'tap') $('dot').style.background = `hsl(${Math.random() * 360} 70% 55%)`;
+};
+
+(function frame() {
+  requestAnimationFrame(frame);
+  // Attract is commanded, not inferred from having no sockets. A guest can be
+  // standing in this room without driving; only the show knows that.
+  if (lifecycle === 'attract') vy += Math.sin(Date.now() / 900) * 0.6;
+  y += vy; vy *= 0.94;
+  $('dot').style.transform = `translateY(${(y % 400) - 200}px) scale(${lifecycle === 'live' ? 1.2 : 0.8})`;
+})();
+</script>

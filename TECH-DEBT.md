@@ -5,7 +5,7 @@ when an item is resolved rather than deleting the row silently — knowing a thi
 was considered and settled is worth as much as the answer.
 
 Status: Phase A complete (A1–A6, A8, plus shared rooms), plus the thin audio
-layer, screens, phone input, and screen sequences. 238 tests.
+layer, screens, phone input, screen sequences, and room experiences. 249 tests.
 
 ---
 
@@ -39,7 +39,7 @@ JSON currently cannot keep.
 | `rooms.*.audio.timing` (`masterTimeline` \| `perGuest`) | Phase B. The thin layer behaves as `perGuest`-with-seek, which is `masterTimeline`'s join behaviour minus the timeline — indistinguishable until projection must stay aligned to it |
 | `rooms.*.audio.joinPolicy` (`inProgress` \| `waitForNext` \| `restart`) | Phase B. Always `inProgress` today |
 | `rooms.*.audio.minRemainingMs` | Phase B — read nowhere at all. A one-shot that already finished is dropped rather than replayed, but there is no late-arrival variant to route to |
-| `rooms.*.outputs.cues` | Phase D (TouchDesigner / DMX) |
+| `rooms.*.outputs.cues` | Phase D — lighting and DMX. Room *experiences* (docs/ROOM-EXPERIENCE.md) are live and take a different route: a broker link to a piece running its own server, not an output intent |
 | `guest.audioLayers` | Phase B. Three fixed audio slots (`room`, `guidance`, `adherence`) plus `screen` stand in; no ducking, crossfade, or priority |
 | `inputBindings` | **Live for phone gestures** (`tap`, `swipe`, `shake` → guest-machine events). In-room device inputs are still Phase D |
 | `ineligible.policy`: `ambientOnly`, `lockedMessage`, `tease` | Still selected and reported without choosing a response — but `audience: "ineligible"` now exists, so a show can author the audio by hand. Wiring the policy to pick it is the remaining step |
@@ -73,6 +73,8 @@ having derived standing in the first place.
 | **`server/index.js` has no tests** | The WS command surface, session handling, and phone push are verified by hand against a live server. Two bugs have now hidden there (the relay rename, the unsent `state` message) and both needed a real socket to surface. A harness that boots the server on an ephemeral port and drives it over `ws` would have caught both. |
 | **The server is http only** | Which costs more than it looks. `navigator.wakeLock`, and every other API gated on a secure context, is simply undefined on the `http://192.168.x.x` a phone uses on venue wifi — so the screen-sleep fix falls back to a muted looping video. Self-signed https means trusting a profile on every handset; a real cert means a domain resolving on a network with no internet. Worth deciding before load-in rather than at it. |
 | **Phone-reported zones beyond the picker** | The handset's room picker (CONTRACT.md §8.1) covers browser test mode, which is Phase B's exit criterion. It is a `<select>` in the debug status bar, not a guest-facing surface, and it trusts whatever the phone says. Fine for rehearsal, wrong for a show. |
+| **Experience input is untested on a handset** | The phone's `stream` mode — continuous drag, release velocity, the second socket — is verified against a fake room server and by hand. `public/client.js` still has no headless test, so this is the third capability landing there unproven by machine. |
+| **The room experience protocol has one implementation** | `docs/experience-template` conforms and 02_influence does not yet. Anything the contract got wrong will surface on the second piece, not the first. |
 | **Zone drawing** | 23 spaces of hand-authored polygons, all currently invented. `floorplan.image` exists so zones can be traced over a real plan; the tool does not. Has a deadline attached to it that the other items do not — venue access. |
 | **Scripted walkthrough replay** | Spec §5.4. Record the `setVirtualPosition` stream, replay against a `ManualClock`. Both the clock and the event log were built for it. This is the regression story for the behavioural matrix. |
 | **Lock-specific disconnect grace** | Spec §11 wants a lock held briefly when a holder's socket drops. `contactLossMs` covers the coordinator's side; the lock has no separate window. |

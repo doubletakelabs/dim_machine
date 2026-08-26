@@ -188,7 +188,10 @@ export const ELIGIBILITY_STRATEGIES = [
  * slots is not a mixer — `guest.audioLayers` is still Phase B — but it is enough
  * that guidance can speak over an ambient room without either cutting the other.
  */
-export const CUE_SLOTS = ['room', 'guidance', 'adherence', 'screen'];
+export const CUE_SLOTS = ['room', 'guidance', 'adherence', 'screen', 'experience'];
+
+/** Slots that carry something other than sound. */
+const NON_AUDIO_SLOTS = ['screen', 'experience'];
 
 /**
  * Slots that carry sound. `screen` is the exception — it holds an image, and the
@@ -198,8 +201,62 @@ export const CUE_SLOTS = ['room', 'guidance', 'adherence', 'screen'];
  * Which source gets it is a precedence decision (runtime.desiredCues), not a
  * mixing one.
  */
-export const AUDIO_CUE_SLOTS = CUE_SLOTS.filter((slot) => slot !== 'screen');
+export const AUDIO_CUE_SLOTS = CUE_SLOTS.filter((slot) => !NON_AUDIO_SLOTS.includes(slot));
 export const SCREEN_CUE_SLOT = 'screen';
+
+/**
+ * The slot that hands a phone to a room's experience: where to connect, as whom,
+ * and with what secret. A slot rather than a one-off message because being
+ * connected is a *state* — so a phone that reconnects mid-room is handed back to
+ * the experience by the same reconcile that restores its audio, with no special
+ * case anywhere.
+ */
+export const EXPERIENCE_CUE_SLOT = 'experience';
+
+/**
+ * What the phone does with a finger, and where the result goes.
+ *
+ * `gestures` is the default and the whole show outside a few rooms: discrete,
+ * recognised on the handset, routed through `inputBindings` into the guest
+ * statechart. A swipe advances a screen.
+ *
+ * `stream` hands the surface to a room's experience. Movement is reported
+ * continuously — around 60Hz — straight to that room's own server, and the
+ * statechart hears none of it. It must not: a drag feeding a statechart would
+ * transition it sixty times a second.
+ *
+ * One mode at a time, declared by the room. Otherwise a 200px flick is both a
+ * `drag` stream and a terminal `swipe left`, and something fires twice.
+ */
+export const INPUT_MODES = ['gestures', 'stream'];
+
+/**
+ * Intents a phone can send an experience. Recognition stays on the handset in
+ * every case — it knows the true timing of the finger, where a room server sees
+ * only a network-jittered copy of it.
+ *
+ * Two-dimensional even where a piece only reads one axis, so that a second
+ * experience wanting horizontal movement does not arrive with its own dialect.
+ * Deltas are fractions of the phone's own screen, so device size drops out.
+ */
+export const EXPERIENCE_INTENTS = ['drag', 'release', 'tap', 'hold', 'swipe'];
+
+/**
+ * What the show tells a room's experience about its own life.
+ *
+ * `attract` is the important one. Left to itself a piece infers "nobody is here"
+ * from having no sockets connected, and that is wrong in a show: a guest can be
+ * standing in the room as a spectator, or before the room has activated, or on
+ * somebody else's path. The show knows which, and the socket count does not.
+ */
+export const EXPERIENCE_LIFECYCLE = ['attract', 'live', 'settling', 'reset'];
+
+/**
+ * Colours handed to drivers, in order. An experience uses them to tint whatever
+ * a driver owns; the show assigns them so that two people never share one, and
+ * so a piece never has to invent identity for itself.
+ */
+export const DRIVER_HUES = [190, 28, 320, 95, 265, 55];
 
 /**
  * What a guest is.
