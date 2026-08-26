@@ -607,6 +607,8 @@ export class SpatialRuntime {
       roomCount: this.rooms.size,
       guestCount: this.guests.size,
       pathIds: Object.keys(this.def?.paths ?? {}),
+      // For the panel's Send to picker.
+      rooms: this.roomChoices(),
       // Full definitions, not just ids: the panel needs the ordered route to
       // show where a guest is being led and how far along they are.
       paths: this.def?.paths ?? {},
@@ -712,6 +714,38 @@ export class SpatialRuntime {
    * @param {string} input — one of INPUT_KINDS
    * @returns {boolean} whether the input was bound to anything
    */
+  /**
+   * Put a guest in a room, or nowhere.
+   *
+   * Placement, not travel — one deliberate act with no timer behind it. This is
+   * how a guest carrying a phone moves while there are no BLE zones to move
+   * them: an operator sends them, or the handset reports its own room. Either
+   * way somebody decided, which is the whole difference from the walkthrough
+   * driver.
+   *
+   * It goes through the same virtual-position channel a dragged dot uses, so
+   * entry and exit still confirm on their normal holds and the show cannot tell
+   * this apart from someone walking in.
+   *
+   * @param {string} guestId
+   * @param {string|null} roomId — null to put them outside
+   * @returns {boolean} whether the move was made
+   */
+  sendGuestToRoom(guestId, roomId) {
+    if (!this.guests.has(guestId)) return false;
+    if (roomId == null) return this.setVirtualOccupancy(guestId, null, 'outside');
+    const spot = this.standingSpot(roomId, guestId);
+    if (!spot) return false;
+    return this.setVirtualPosition(guestId, spot[0], spot[1]);
+  }
+
+  /** Room ids and names, for a picker. */
+  roomChoices() {
+    return Object.entries(this.def?.rooms ?? {}).map(([roomId, room]) => ({
+      roomId, name: room.name ?? roomId, kind: room.kind ?? 'destination',
+    }));
+  }
+
   /**
    * Inputs the guest's machine would act on right now.
    *

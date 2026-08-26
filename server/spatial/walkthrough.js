@@ -58,20 +58,18 @@ export class WalkthroughDriver {
   /**
    * @param {string[]} [guestIds] — defaults to every *simulated* guest
    *
-   * The filter applies only to the default. Sweeping up everyone in the show
-   * would take a person carrying a phone along with it, and a timer moving them
-   * overrules the room they are actually standing in — they are the location
-   * source, not a dot.
+   * Never a guest carrying a phone, named or not. This driver's whole job is
+   * unattended movement on a timer, and there is no version of that a person
+   * should be subject to: they are the location source, and anything moving
+   * them from here overrules the room they are actually standing in.
    *
-   * Naming a guest is different in kind: an operator who selects a handset and
-   * clicks Walk has decided to drive it, usually to get themselves across the
-   * building without walking it. That is a decision somebody made, so it is
-   * honoured. What still never happens is the driver answering their screens
-   * for them — see `answerOrWait`.
+   * Moving a handset is `runtime.sendGuestToRoom` — placement, one deliberate
+   * act, no timer behind it. That is the operator's Send to control and the
+   * phone's own room picker, and it is what this used to be asked to do.
    */
   start(guestIds) {
-    const ids = guestIds
-      ?? [...this.runtime.guests.keys()].filter((id) => this.runtime.guests.get(id)?.kind !== 'phone');
+    const ids = (guestIds ?? [...this.runtime.guests.keys()])
+      .filter((id) => this.runtime.guests.get(id)?.kind !== 'phone');
     for (const guestId of ids) {
       if (!this.walkers.has(guestId)) {
         this.walkers.set(guestId, {
@@ -135,7 +133,7 @@ export class WalkthroughDriver {
     // leaving.
     const pending = this.runtime.pendingInputs(guest.guestId);
     if (pending.length) return this.answerOrWait(walker, guest, pending, now);
-    if (walker.phase === 'answering' || walker.phase === 'held') walker.phase = 'idle';
+    if (walker.phase === 'answering') walker.phase = 'idle';
 
     if (!walker.target) {
       const target = this.chooseTarget(guest);
@@ -177,26 +175,14 @@ export class WalkthroughDriver {
   /**
    * Sit still while the show waits on this guest.
    *
-   * A guest carrying a phone is left alone even when an operator asked for them
-   * to be walked. Driving somebody across the building is a reasonable thing to
-   * ask for; answering the question their screen is putting to them is not, and
-   * they will not be moved out of the room while it stands.
-   *
-   * Keyed on what the guest *is* rather than on whether their socket is up this
-   * second — a backgrounded handset is still in somebody's hand.
-   *
-   * A simulated guest has nobody to tap for them, so the driver taps. That is
+   * Only simulated guests reach this, since no other kind is ever adopted, and
+   * a simulated guest has nobody to tap for them. So the driver taps. That is
    * the honest simulation, and it keeps the rest of the show reachable in a load
    * test rather than stranding every dot on the first screen.
    */
   answerOrWait(walker, guest, pending, now) {
     walker.target = null;
 
-    if (guest.kind === 'phone') {
-      walker.phase = 'held';
-      walker.waitUntil = now + this.config.pauseMs;
-      return;
-    }
     if (walker.phase !== 'answering') {
       walker.phase = 'answering';
       walker.pendingInput = pending[0];

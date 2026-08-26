@@ -5,7 +5,7 @@ when an item is resolved rather than deleting the row silently — knowing a thi
 was considered and settled is worth as much as the answer.
 
 Status: Phase A complete (A1–A6, A8, plus shared rooms), plus the thin audio
-layer, screens, phone input, and screen sequences. 237 tests.
+layer, screens, phone input, and screen sequences. 238 tests.
 
 ---
 
@@ -71,6 +71,7 @@ having derived standing in the first place.
 | **Phone experience beyond audio and screens** | Audio, full-screen images and touch input are live (CONTRACT.md §8.1), and the status line tracks room + standing. Pages, video, haptics and `setVar` are still v0.2 surfaces nothing drives. |
 | **The phone client has no tests** | `public/client.js` is a plain browser script with no way to load it headless, so gesture recognition, cue execution and asset loading are verified by hand on a handset. Two faults have hidden here. Making the recogniser importable (or adding a headless browser) is the cheapest first step. |
 | **`server/index.js` has no tests** | The WS command surface, session handling, and phone push are verified by hand against a live server. Two bugs have now hidden there (the relay rename, the unsent `state` message) and both needed a real socket to surface. A harness that boots the server on an ephemeral port and drives it over `ws` would have caught both. |
+| **Phone-reported zones beyond the picker** | The handset's room picker (CONTRACT.md §8.1) covers browser test mode, which is Phase B's exit criterion. It is a `<select>` in the debug status bar, not a guest-facing surface, and it trusts whatever the phone says. Fine for rehearsal, wrong for a show. |
 | **Zone drawing** | 23 spaces of hand-authored polygons, all currently invented. `floorplan.image` exists so zones can be traced over a real plan; the tool does not. Has a deadline attached to it that the other items do not — venue access. |
 | **Scripted walkthrough replay** | Spec §5.4. Record the `setVirtualPosition` stream, replay against a `ManualClock`. Both the clock and the event log were built for it. This is the regression story for the behavioural matrix. |
 | **Lock-specific disconnect grace** | Spec §11 wants a lock held briefly when a holder's socket drops. `contactLossMs` covers the coordinator's side; the lock has no separate window. |
@@ -140,11 +141,17 @@ pressed a button" into one rule. They are not the same act. The default sweep
 skips phone guests; naming one is honoured; and the driver still never answers
 their screens, whoever asked for them to be walked.
 
-Three lessons: **a tool for standing in for people, pointed at a person**; when a
+Settled on the fourth pass, by building the missing thing rather than tuning the
+rule again. The reason a phone guest kept getting walked is that Walk was the
+only way to move one, and it is the wrong instrument: it starts a process where
+what was wanted was an act. `sendGuestToRoom` is that act — the operator's Send
+to control and the handset's own room picker — and with it in place the driver
+can go back to never touching a person at all.
+
+The lessons: **a tool for standing in for people, pointed at a person**; when a
 check keeps needing exceptions, the question is probably about identity rather
-than state; and **automatic and requested are different acts even when they call
-the same function** — a rule that cannot tell them apart will be wrong in one
-direction or the other.
+than state; and **when a rule keeps needing to be relaxed, the missing thing is
+usually a tool, not a looser rule.**
 
 **Reconciliation is only as good as its picture of the other end.** A phone that
 slept came back to silence: the AudioContext was suspended and every buffer

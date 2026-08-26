@@ -388,34 +388,48 @@ describe('walking a guest the show is waiting on', () => {
     assert.equal(guidance(), 'prologue.calibration.step1');
   });
 
-  it('walks a phone guest an operator named — that is a decision, not a timer', () => {
-    const { rt, g } = atAScreen({ kind: 'phone' });
+  it('will not walk a phone guest even when one is named outright', () => {
+    const { rt, g, roomId, guidance } = atAScreen({ kind: 'phone' });
     rt.walkthrough.start([g.guestId]);
-    assert.equal(rt.walkthrough.walkers.has(g.guestId), true);
-  });
-
-  it('but still will not answer their screens for them', () => {
-    const { rt, g, guidance, roomId } = atAScreen({ kind: 'phone' });
-    rt.walkthrough.start([g.guestId]);
+    assert.equal(rt.walkthrough.walkers.has(g.guestId), false);
     rt.testAdvanceTime(60_000);
-    assert.equal(guidance(), 'prologue.calibration.step1', 'nobody tapped for them');
-    assert.equal(roomId(), 'calibration', 'and they are not walked out of the question');
-    assert.equal(rt.walkthrough.intent(g.guestId).phase, 'held');
+    assert.equal(roomId(), 'calibration', 'a person is never moved by a timer');
+    assert.equal(guidance(), 'prologue.calibration.step1');
   });
 
-  it('walks a named phone guest on once the person has answered', () => {
-    const { rt, g, guidance, roomId } = atAScreen({ kind: 'phone' });
-    rt.walkthrough.start([g.guestId]);
-    rt.testAdvanceTime(5000);
-    assert.equal(roomId(), 'calibration');
+  it('moves a phone guest by placement instead, with no timer behind it', () => {
+    const { rt, g, roomId, guidance } = atAScreen({ kind: 'phone' });
 
-    for (let i = 0; i < 5; i++) rt.guestInput(g.guestId, 'tap');
-    rt.guestInput(g.guestId, 'swipe');
-    rt.testAdvanceTime(6000);            // the last screen's own delay
-    assert.equal(guidance(), 'prologue.done');
+    assert.equal(rt.sendGuestToRoom(g.guestId, 'entranceHallway'), true);
+    rt.testAdvanceTime(2600);
+    assert.equal(roomId(), 'entranceHallway');
 
-    rt.testAdvanceTime(40_000);
-    assert.notEqual(roomId(), 'calibration', 'now there is nothing holding them');
+    // And then they stay there. This is the whole difference from Walk: one
+    // deliberate act, not the start of a process.
+    rt.testAdvanceTime(120_000);
+    assert.equal(roomId(), 'entranceHallway');
+    assert.equal(guidance(), 'prologue.calibration.step1', 'their screen is untouched');
+  });
+
+  it('places a guest outside, and refuses a room that does not exist', () => {
+    const { rt, g, roomId } = atAScreen({ kind: 'phone' });
+    assert.equal(rt.sendGuestToRoom(g.guestId, 'nowhere'), false);
+    assert.equal(roomId(), 'calibration', 'and leaves them where they were');
+
+    assert.equal(rt.sendGuestToRoom(g.guestId, null), true);
+    rt.testAdvanceTime(2600);
+    assert.equal(roomId(), null);
+  });
+
+  it('goes through the same holds a dragged dot does', () => {
+    const { rt, g, roomId } = atAScreen({ kind: 'phone' });
+    rt.sendGuestToRoom(g.guestId, 'entranceHallway');
+    // Entry confirms on its normal hold; a test that skipped it would not be
+    // testing the show.
+    rt.testAdvanceTime(900);
+    assert.notEqual(roomId(), 'entranceHallway', 'not there yet');
+    rt.testAdvanceTime(1800);
+    assert.equal(roomId(), 'entranceHallway');
   });
 
   it('answers for a guest with no phone, so the rest of the show stays reachable', () => {

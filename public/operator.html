@@ -614,7 +614,6 @@ function describeIntent(guest) {
   // The show is holding for a gesture. Without this the guest simply stops,
   // which reads as the driver having got stuck.
   if (intent.phase === 'answering') return `answering ${intent.pendingInput ?? ''} in ${secs}`;
-  if (intent.phase === 'held') return 'held — waiting on the person';
   return 'idle';
 }
 
@@ -800,7 +799,7 @@ function renderInspector() {
       <dt>Walking</dt><dd>${guest.walking
         ? describeIntent(guest)
         : guest.kind === 'phone'
-          ? '<span class="muted">no — carried by a person (Walk to drive them)</span>'
+          ? '<span class="muted">no — carried by a person; use Send to</span>'
           : 'no'}</dd>
       <dt>Hearing</dt><dd>${describeCues(guest.cues)}</dd>
       <dt>Waiting on</dt><dd>${guest.pendingInputs?.length
@@ -825,14 +824,31 @@ function renderInspector() {
         <td>${v.seen ? '✓' : ''}</td><td>${v.activatedByMe ? '✓' : ''}</td>
       </tr>`).join('')}
     </tbody></table>` : '<p class="muted">No rooms entered yet.</p>'}
+    <h2 style="margin-top:12px">Send to</h2>
+    <div class="row">
+      <select data-sendroom style="flex:1">
+        <option value="">outside</option>
+        ${(showMeta?.rooms ?? []).map((r) => `
+          <option value="${r.roomId}"${r.roomId === guest.roomId ? ' selected' : ''}>${r.name}</option>`).join('')}
+      </select>
+    </div>
+    <p class="muted" style="margin:6px 0 0">
+      ${guest.kind === 'phone'
+        ? 'Placement, not travel — they stay put until sent again. Walking is for simulated guests only.'
+        : 'One-shot placement. Walk drives them room to room on a timer.'}
+    </p>
+    ${guest.kind === 'phone' ? '' : `
     <div class="row" style="margin-top:10px">
       <button class="tiny" data-walk="1">Walk</button>
       <button class="tiny" data-nowalk="1">Stop</button>
-    </div>`;
-  el.querySelector('[data-walk]').onclick =
-    () => send({ type: 'startWalkthrough', guestIds: [guest.guestId] });
-  el.querySelector('[data-nowalk]').onclick =
-    () => send({ type: 'stopWalkthrough', guestIds: [guest.guestId] });
+    </div>`}`;
+
+  el.querySelector('[data-sendroom]').onchange = (e) =>
+    send({ type: 'sendGuestToRoom', guestId: guest.guestId, roomId: e.target.value || null });
+  el.querySelector('[data-walk]')?.addEventListener('click',
+    () => send({ type: 'startWalkthrough', guestIds: [guest.guestId] }));
+  el.querySelector('[data-nowalk]')?.addEventListener('click',
+    () => send({ type: 'stopWalkthrough', guestIds: [guest.guestId] }));
 }
 
 function renderOutputs() {

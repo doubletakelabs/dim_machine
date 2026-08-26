@@ -485,6 +485,8 @@ wss.on('connection', (ws) => {
           label: label(token),
           serverTime: Date.now(),
           assets: currentAssets(),
+          // For the handset's own room picker; see `setRoom`.
+          rooms: runtime.roomChoices(),
           snapshot: phoneSnapshot(token),
         });
         sendRelaySync(token);
@@ -497,6 +499,25 @@ wss.on('connection', (ws) => {
         // whatever it should already be hearing.
         const guest = runtime.getGuestByToken(token);
         if (guest) runtime.resyncCues(guest.guestId);
+        return;
+      }
+
+      case 'sendGuestToRoom': {
+        if (!isOperator) return;
+        if (runtime.sendGuestToRoom(msg.guestId, msg.roomId ?? null)) {
+          opLog(`sent ${runtime.guests.get(msg.guestId)?.label ?? msg.guestId} to ${msg.roomId ?? 'outside'}`);
+          sendRoster();
+        }
+        return;
+      }
+
+      case 'setRoom': {
+        // The handset reporting where it is. Stands in for BLE until there are
+        // beacons — one person can then walk the real building with the real
+        // phone and the show follows them, with nobody at the panel.
+        const guest = runtime.getGuestByToken(token);
+        if (!guest) return;
+        if (runtime.sendGuestToRoom(guest.guestId, msg.roomId ?? null)) sendRoster();
         return;
       }
 

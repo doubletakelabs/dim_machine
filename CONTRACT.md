@@ -662,6 +662,27 @@ the file. Nothing in the current shows uses this — the calibration clips are
 discrete files — but a long take that has not been cut up is a normal thing to
 be handed.
 
+#### Moving a guest without beacons
+
+Until BLE zones exist, a guest carrying a phone is placed rather than tracked.
+Two routes, both landing on `runtime.sendGuestToRoom` and both going through the
+virtual-position channel a dragged dot uses — entry and exit confirm on their
+normal holds, so the show cannot tell any of them apart:
+
+| | |
+|---|---|
+| Operator | **Send to** in the guest inspector — a room picker, applied on change |
+| Handset | the room picker in the phone's status bar (`{ "type": "setRoom", "roomId": … }`) |
+
+The second is browser test mode: one person walks the real building with the real
+phone, says which room they just entered, and the show responds as it will when a
+beacon is saying the same thing. No operator needed.
+
+Both are **placement, not travel** — one deliberate act, with no timer behind it.
+The walkthrough driver is the opposite of this and never touches a guest whose
+`kind` is `phone`, named or not: its entire job is unattended movement on a
+timer, and there is no version of that a person should be subject to.
+
 #### Input: a gesture becomes an event
 
 A phone reports what the finger did — `tap`, `swipe`, `shake` — and nothing about

@@ -479,6 +479,30 @@ function enableShake() {
 }
 
 // ---------------------------------------------------------------------------
+// Self-reported room — browser test mode
+//
+// There are no beacons yet, so the handset says where it is. That makes a real
+// walkthrough possible with one person and no operator: carry the phone through
+// the building, tell it which room you just entered, and the show responds as it
+// will when BLE is telling it the same thing.
+//
+// Deliberately the same path a dragged dot takes, entry and exit holds included
+// — a test that skipped the confirmation would not be testing the show.
+// ---------------------------------------------------------------------------
+function fillRoomPicker(rooms) {
+  const select = $('roomPick');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = '<option value="">outside</option>'
+    + rooms.map((r) => `<option value="${r.roomId}">${r.name}</option>`).join('');
+  select.value = current;
+}
+
+$('roomPick')?.addEventListener('change', (e) => {
+  sendMsg({ type: 'setRoom', roomId: e.target.value || null });
+});
+
+// ---------------------------------------------------------------------------
 // Waking up
 //
 // A phone that slept lost two things at once, and either alone is silence.
@@ -557,6 +581,7 @@ function connect() {
           token: msg.token,
         };
         $('label').textContent = msg.label;
+        fillRoomPicker(msg.rooms ?? []);
         assetList = msg.assets ?? [];
         applySnapshot(msg.snapshot);
         break;
@@ -570,10 +595,16 @@ function connect() {
         $('rtt').textContent = `${clock.rtt.toFixed(0)}ms`;
         sendMsg({ type: 'telemetry', offset: Math.round(clock.offset * 10) / 10, rtt: Math.round(clock.rtt), jitter: Math.round(clock.jitter * 10) / 10 });
         break;
-      case 'state':
+      case 'state': {
         lastState = msg.state;
         $('stateName').textContent = msg.state ?? '';
+        // Reflect where the show thinks we are, so the picker cannot drift from
+        // the truth after a reconnect or an operator moving us.
+        const select = $('roomPick');
+        const roomId = msg.state === 'outside' ? '' : String(msg.state).split(' ')[0];
+        if (select && document.activeElement !== select) select.value = roomId;
         break;
+      }
       case 'cue':
         if (joined) runCue(msg.cue);
         break;
