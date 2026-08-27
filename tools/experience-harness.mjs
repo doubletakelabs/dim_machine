@@ -181,9 +181,13 @@ const $=(i)=>document.getElementById(i);
 const SWIPE_MIN=60, SWIPE_MAX_MS=900, TAP_MAX_PX=20, HOLD_MS=400;
 let exp=null, me=null;
 
-fetch('/claim').then(r=>r.json()).then((c)=>{
+// Remember which driver this device is, so a refresh comes back as itself
+// rather than as whoever is next in line.
+const remembered=(()=>{try{return localStorage.getItem('driverId')||'';}catch{return '';}})();
+fetch('/claim'+(remembered?'?have='+encodeURIComponent(remembered):'')).then(r=>r.json()).then((c)=>{
   if(!c.driverId){ $('id').textContent='no free driver slot — add one in the harness'; return; }
   me=c;
+  try{localStorage.setItem('driverId',c.driverId);}catch{}
   document.body.style.background='hsl('+c.hue+' 45% 12%)';
   $('id').textContent=c.driverId;
   let opened=false;
@@ -255,6 +259,25 @@ for(const ev of ['touchmove','gesturestart','contextmenu','dblclick'])
  * phone. Whatever host it used to reach the harness is by definition reachable
  * from where it is standing, so borrow that and keep the experience's port.
  */
+/**
+ * Which driver this device gets.
+ *
+ * The one it already had, if that driver still exists — a refresh is not a new
+ * person. Otherwise the first nobody has taken, so a second phone becomes a
+ * second driver rather than fighting the first for one. Only when every slot is
+ * spoken for does it double up, which is a deliberate way to test contention.
+ */
+function claimFor(asked) {
+  if (!state.drivers.length) return null;
+  const held = state.drivers.find((d) => d.driverId === asked);
+  if (held) return held;
+  const free = state.drivers.find((d) => !claims.has(d.driverId));
+  if (free) return free;
+  return [...state.drivers].sort(
+    (a, b) => (claims.get(a.driverId) ?? 0) - (claims.get(b.driverId) ?? 0),
+  )[0];
+}
+
 function reachableFrom(req) {
   const url = new URL(endpoint);
   if (!/^(localhost|127\.|0\.0\.0\.0|\[?::1)/.test(url.hostname)) return endpoint;
@@ -264,7 +287,15 @@ function reachableFrom(req) {
   return url.toString().replace(/\/$/, '');
 }
 
-let claimIndex = 0;
+/**
+ * driverId → when a device last claimed it.
+ *
+ * A phone that refreshes must come back as itself. The show behaves this way —
+ * a handset stores its token and gets the same guest back — and a harness that
+ * shuffled identities on reload would make multi-phone testing meaningless:
+ * you could never say "phone A is driver 1" and have it stay true.
+ */
+const claims = new Map();
 const http = createServer((req, res) => {
   const url = req.url.split('?')[0];
   if (url === '/drive') {
@@ -272,9 +303,9 @@ const http = createServer((req, res) => {
     return res.end(DRIVER);
   }
   if (url === '/claim') {
-    // Hand out slots round-robin so a second phone gets a second driver rather
-    // than fighting the first for one.
-    const driver = state.drivers[claimIndex++ % Math.max(1, state.drivers.length)];
+    const asked = new URL(req.url, 'http://x').searchParams.get('have');
+    const driver = claimFor(asked);
+    if (driver) claims.set(driver.driverId, Date.now());
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     return res.end(JSON.stringify(driver ? { ...driver, endpoint: reachableFrom(req) } : {}));
   }
@@ -291,7 +322,7 @@ new WebSocketServer({ server: http }).on('connection', (ws) => {
     // Fired once, never reconciled — exactly as the show sends it.
     if (m.t === 'reset') { return broker?.readyState === 1 && broker.send(JSON.stringify({ t: 'reset' })); }
     if (m.t === 'addDriver') return addDriver();
-    if (m.t === 'clearDrivers') { state.drivers = []; push(); return announce(); }
+    if (m.t === 'clearDrivers') { state.drivers = []; claims.clear(); push(); return announce(); }
   });
   ws.on('close', () => panels.delete(ws));
 });

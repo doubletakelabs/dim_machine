@@ -295,6 +295,13 @@ Open the driver page on your phone, on several phones, or in several browser
 tabs. Each becomes a driver with its own id, hue, and secret, exactly as the
 show would issue them.
 
+A device keeps its driver across a refresh — it remembers which one it is, the
+same way a guest's handset keeps its identity — so "phone A is driver 1" stays
+true for a session. New devices take the next free slot; once every slot is
+spoken for they double up, which is a deliberate way to see what your piece does
+when two people share a driver. Clearing the drivers in the panel releases them
+all.
+
 > **The point: there is no dev mode.** Your server does not know whether the
 > broker is the harness or the show — same socket, same messages. The path you
 > exercise on every refresh is the one that ships.
@@ -307,7 +314,8 @@ show would issue them.
 |---|---|
 | Driver page says **"could not reach the experience"** | The address is not reachable *from the phone*. `localhost` on a phone is the phone. The harness rewrites this for you; if you hardcoded an endpoint anywhere, that is why. |
 | Driver page says **"denied: unknown driver"** | The `driverId`/`secret` did not match your current set. Check you replaced the set on the last `drivers` message rather than merging it. |
-| Driver page says **"no free driver slot"** | Nobody has pressed *add driver* in the harness, or you are at your own `maxDrivers`. |
+| Driver page says **"no free driver slot"** | Nobody has pressed *add driver* in the harness. |
+| A phone becomes a different driver on refresh | Fixed — a device now remembers its driver. If it still happens, its storage is blocked (private browsing). |
 | Harness says **"not connected"** | Your server is not running, or not on the endpoint the harness was given. |
 | Harness says **"no `ready` yet"** | You accepted the broker socket but never answered its `hello`. |
 | Wall does nothing while a phone drags | Check the intent is in your manifest `inputs` — anything undeclared is dropped on purpose, at both ends. |
