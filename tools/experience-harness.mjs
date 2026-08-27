@@ -186,10 +186,19 @@ fetch('/claim').then(r=>r.json()).then((c)=>{
   me=c;
   document.body.style.background='hsl('+c.hue+' 45% 12%)';
   $('id').textContent=c.driverId;
+  let opened=false;
+  $('log').textContent='connecting to '+c.endpoint;
   exp=new WebSocket(c.endpoint);
-  exp.onopen=()=>exp.send(JSON.stringify({t:'hello',role:'driver',driverId:c.driverId,secret:c.secret}));
+  exp.onopen=()=>{opened=true;$('log').textContent='';
+    exp.send(JSON.stringify({t:'hello',role:'driver',driverId:c.driverId,secret:c.secret}));};
   exp.onmessage=(e)=>{const m=JSON.parse(e.data); if(m.t==='denied') $('id').textContent='denied: '+m.reason;};
-  exp.onclose=()=>{$('id').textContent='disconnected';};
+  // "Never opened" and "opened then dropped" are different faults and used to
+  // read the same. The first is almost always an address this phone cannot
+  // reach; the second is the experience closing the socket.
+  exp.onclose=()=>{
+    $('id').textContent = opened ? 'disconnected' : 'could not reach the experience';
+    $('log').textContent = opened ? '' : c.endpoint+' — is that address reachable from this phone?';
+  };
 });
 const send=(o)=>{ if(exp&&exp.readyState===1){exp.send(JSON.stringify(o)); $('log').textContent=JSON.stringify(o);} };
 
@@ -238,6 +247,23 @@ for(const ev of ['touchmove','gesturestart','contextmenu','dblclick'])
 
 // --------------------------------------------------------------- serving
 
+/**
+ * The experience endpoint, as an address the *requester* can actually reach.
+ *
+ * The endpoint on the command line is written from this machine's point of
+ * view, and `ws://localhost:8080` means the phone itself once the page is on a
+ * phone. Whatever host it used to reach the harness is by definition reachable
+ * from where it is standing, so borrow that and keep the experience's port.
+ */
+function reachableFrom(req) {
+  const url = new URL(endpoint);
+  if (!/^(localhost|127\.|0\.0\.0\.0|\[?::1)/.test(url.hostname)) return endpoint;
+  const host = (req.headers.host ?? '').split(':')[0];
+  if (!host || /^(localhost|127\.)/.test(host)) return endpoint;
+  url.hostname = host;
+  return url.toString().replace(/\/$/, '');
+}
+
 let claimIndex = 0;
 const http = createServer((req, res) => {
   const url = req.url.split('?')[0];
@@ -250,7 +276,7 @@ const http = createServer((req, res) => {
     // than fighting the first for one.
     const driver = state.drivers[claimIndex++ % Math.max(1, state.drivers.length)];
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-    return res.end(JSON.stringify(driver ? { ...driver, endpoint } : {}));
+    return res.end(JSON.stringify(driver ? { ...driver, endpoint: reachableFrom(req) } : {}));
   }
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
   res.end(PANEL(lanIP()));

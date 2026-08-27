@@ -301,6 +301,21 @@ show would issue them.
 
 ---
 
+## 8a. When it does not work
+
+| Symptom | Almost always |
+|---|---|
+| Driver page says **"could not reach the experience"** | The address is not reachable *from the phone*. `localhost` on a phone is the phone. The harness rewrites this for you; if you hardcoded an endpoint anywhere, that is why. |
+| Driver page says **"denied: unknown driver"** | The `driverId`/`secret` did not match your current set. Check you replaced the set on the last `drivers` message rather than merging it. |
+| Driver page says **"no free driver slot"** | Nobody has pressed *add driver* in the harness, or you are at your own `maxDrivers`. |
+| Harness says **"not connected"** | Your server is not running, or not on the endpoint the harness was given. |
+| Harness says **"no `ready` yet"** | You accepted the broker socket but never answered its `hello`. |
+| Wall does nothing while a phone drags | Check the intent is in your manifest `inputs` — anything undeclared is dropped on purpose, at both ends. |
+| Piece wipes itself when somebody steps out | You are treating `settling` as a reset. Hold state; wait for the `reset` event. |
+| Piece wipes itself when the network hiccups | You are treating `reset` as a lifecycle state. It is a one-shot event. |
+
+---
+
 ## 9. Before you hand it over
 
 ```

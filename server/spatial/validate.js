@@ -289,6 +289,16 @@ function checkRoomExperience(roomId, room, path, errors, warnings) {
       errors.push(`${at}.${field} must be a ws:// or wss:// URL`);
     }
   }
+  // A phone cannot reach `localhost` — on a phone, localhost is the phone. The
+  // symptom is a socket that never opens, reported as "disconnected", which
+  // reads as the room server being down rather than unreachable from there.
+  const phoneFacing = experience.phoneEndpoint ?? experience.endpoint;
+  if (typeof phoneFacing === 'string' && /^wss?:\/\/(localhost|127\.|\[?::1)/.test(phoneFacing)) {
+    warnings.push(
+      `${at}${experience.phoneEndpoint ? '.phoneEndpoint' : '.endpoint'} points at localhost, `
+      + 'which no phone can reach — set phoneEndpoint to an address on the guest network',
+    );
+  }
   checkEnum(experience.inputMode, INPUT_MODES, `${at}.inputMode`, errors);
   for (const intent of experience.inputs ?? []) {
     checkEnum(intent, EXPERIENCE_INTENTS, `${at}.inputs`, errors);
