@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DIM Machine — exhibit logic simulator</title>
+<style>
+  :root {
+    --bg: #0b0c10; --panel: #14161b; --line: #23262f;
+    --ink: #e8eaf0; --dim: #8a93a4; --faint: #5a6272;
+    --accent: #6ea8fe; --ok: #58c98a; --warn: #e0a758; --bad: #e0685f;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 13px/1.45 ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    flex: none; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  h1 { font-size: 13px; margin: 0; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+  h1 .sub { color: var(--faint); font-weight: 400; letter-spacing: .06em; }
+  .tag {
+    padding: 2px 8px; border-radius: 999px; font-size: 10px; letter-spacing: .08em;
+    text-transform: uppercase; background: #3d2a14; color: #e0a758; border: 1px solid #5c4020;
+  }
+  h2 { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); margin: 0 0 6px; font-weight: 600; }
+  button {
+    background: #1d2027; color: var(--ink); border: 1px solid var(--line);
+    border-radius: 5px; padding: 6px 10px; font: inherit; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .3; cursor: default; }
+  a { color: var(--dim); }
+  .spacer { flex: 1; }
+
+  main { flex: 1; min-height: 0; display: grid; gap: 10px; padding: 10px; grid-template-columns: 1fr 340px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  }
+  .cardBody { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+
+  #scene { flex: 1; min-height: 0; display: block; width: 100%; height: 100%; }
+  #hint { flex: none; padding: 5px 12px 8px; color: var(--faint); font-size: 11px; }
+
+  .stateBig {
+    font-size: 22px; font-weight: 700; letter-spacing: .02em;
+    padding: 2px 0 0;
+  }
+  .memLine { color: var(--dim); margin-bottom: 10px; }
+  .memLine b { color: var(--warn); font-weight: 600; }
+
+  .roomState { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px;
+    background: #262b36; color: var(--dim); }
+  .roomState.active { background: #163826; color: var(--ok); }
+
+  .stem { display: flex; gap: 8px; align-items: baseline; padding: 3px 6px; border-radius: 5px; }
+  .stem .id { color: var(--faint); font-size: 11px; min-width: 168px; font-family: ui-monospace, Menlo, monospace; }
+  .stem.lit { background: #1e2532; }
+  .stem.lit .id { color: var(--accent); }
+
+  label.toggle { display: flex; gap: 8px; align-items: center; cursor: pointer; color: var(--dim); }
+  #log {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #b6bece;
+    max-height: 200px; overflow-y: auto; border-top: 1px solid var(--line); padding: 8px 12px; flex: none;
+  }
+  #log div { padding: 1px 0; }
+  #log .stemLine { color: var(--accent); }
+  #log .lockLine { color: var(--bad); }
+
+  /* scene */
+  .hall { fill: #101216; }
+  .threshold { fill: #6ea8fe14; stroke: #6ea8fe55; stroke-dasharray: 6 5; }
+  .room { fill: #3a4150; fill-opacity: .5; stroke: #55606f; }
+  .room.active { fill: #2f8f5b; stroke: #58c98a; }
+  .zoneLabel { fill: #8a93a4; font-size: 11px; text-anchor: middle; pointer-events: none; }
+  #guest { cursor: grab; }
+  #guest:active { cursor: grabbing; }
+  .watchRing { fill: none; stroke: var(--warn); stroke-width: 2; stroke-dasharray: 4 4; opacity: 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Exhibit Logic <span class="sub">simulator</span></h1>
+  <span class="tag">experimental — for team discussion</span>
+  <span class="spacer"></span>
+  <a href="/operator.html">operator ↗</a>
+</header>
+
+<main>
+  <div class="card">
+    <svg id="scene" viewBox="0 0 640 520" preserveAspectRatio="xMidYMid meet">
+      <rect class="hall" x="0" y="0" width="640" height="520"/>
+      <rect id="thresholdRect" class="threshold" x="180" y="110" width="280" height="260" rx="10"/>
+      <rect id="roomRect" class="room" x="240" y="160" width="160" height="160" rx="6"/>
+      <text class="zoneLabel" x="320" y="150">threshold</text>
+      <text class="zoneLabel" x="320" y="244">EXHIBIT</text>
+      <text id="roomStateLabel" class="zoneLabel" x="320" y="262">idle</text>
+      <text class="zoneLabel" x="320" y="480">hallway — drag the guest</text>
+      <circle id="watchRing" class="watchRing" r="16"/>
+      <g id="guest">
+        <circle r="10" fill="#58c98a" stroke="#0d0f13" stroke-width="2"/>
+        <text y="-16" text-anchor="middle" fill="#dfe4ee" font-size="10">guest</text>
+      </g>
+    </svg>
+    <div id="hint">
+      Drag into the dashed ring to approach · into the room to enter · walk away and
+      wait 3s for the rejection watch · <b id="watchNote" style="color:var(--warn)"></b>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardBody">
+      <h2>Guest ↔ exhibit</h2>
+      <div class="stateBig" id="phase">away</div>
+      <div class="memLine">memory: <b id="memory">fresh</b></div>
+      <div style="margin-bottom:12px">room: <span class="roomState" id="roomState">idle</span></div>
+
+      <div class="row" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px">
+        <button id="advanceBtn" disabled>Advance → Interaction</button>
+        <button id="completeBtn" disabled>Complete</button>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px">
+        <label class="toggle"><input type="checkbox" id="allowed" checked /> room allowed for this guest</label>
+        <span class="spacer"></span>
+        <button id="resetBtn">Reset guest</button>
+      </div>
+
+      <h2>Stems</h2>
+      <div id="stems"></div>
+    </div>
+    <div id="log"></div>
+  </div>
+</main>
+
+<script type="module">
+import { initialState, transition, STEMS } from './exhibit-machine.js';
+
+const $ = (id) => document.getElementById(id);
+
+// ------------------------------------------------------------------ machine
+
+let state = initialState({ allowed: true });
+let roomActive = false;
+
+const STEM_LABELS = {
+  [STEMS.approach]: 'Exhibit Approach',
+  [STEMS.entrance]: 'Entrance',
+  [STEMS.instruction]: 'Instruction',
+  [STEMS.interaction]: 'Interaction',
+  [STEMS.complete]: 'Complete',
+  [STEMS.approachNoState]: 'Exhibit Approach, No State',
+  [STEMS.returnNoState]: 'Return, No State',
+  [STEMS.rejection]: 'Rejection',
+  [STEMS.returnLater]: 'Return Later',
+  [STEMS.returnAfterCompletion]: 'Return after Completion',
+};
+
+function send(event) {
+  const before = state;
+  const result = transition(state, event);
+  state = result.state;
+  if (result.roomActive != null) roomActive = result.roomActive;
+  if (state.phase !== before.phase || state.memory !== before.memory || result.play) {
+    log(`${event} → ${state.phase} · ${state.memory}`
+      + (result.play ? `  ▶ ${STEM_LABELS[result.play]}` : ''),
+      result.play ? 'stemLine' : (state.memory === 'lockedOut' && before.memory !== 'lockedOut' ? 'lockLine' : ''));
+  }
+  if (state.memory === 'lockedOut' && before.memory !== 'lockedOut') {
+    log('   guest is locked out of this exhibit', 'lockLine');
+  }
+  if (result.play) play(result.play);
+  render();
+}
+
+// -------------------------------------------------------------------- audio
+
+let audio = null;
+let fadeTimer = null;
+
+function play(stem) {
+  // One voice at a time: a new stem cuts the old with a short fade, per the
+  // agreed interruption rule.
+  if (audio) {
+    const old = audio;
+    clearInterval(fadeTimer);
+    fadeTimer = setInterval(() => {
+      old.volume = Math.max(0, old.volume - 0.2);
+      if (old.volume <= 0) { old.pause(); clearInterval(fadeTimer); }
+    }, 30);
+  }
+  audio = new Audio(`stems/${stem}.wav`);
+  audio.play().catch(() => log('   (tap anywhere once to unlock audio)', ''));
+  litStem = stem;
+  if (stem === STEMS.entrance) {
+    // Instruction follows Entrance with no other trigger than the audio ending.
+    audio.addEventListener('ended', () => send('entranceEnded'));
+  }
+  renderStems();
+}
+
+// -------------------------------------------------------------- scene state
+
+const guest = { x: 320, y: 470 };
+let zone = 'away';           // away | threshold | room
+let watch = null;            // { at, x, y } — the walk-away watch
+const CLEAR_MS = 3000;
+const AWAY_PX = 24;
+
+function zoneAt(x, y) {
+  const r = rect('roomRect');
+  const t = rect('thresholdRect');
+  if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return 'room';
+  if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) return 'threshold';
+  return 'away';
+}
+
+function rect(id) {
+  const el = $(id);
+  return {
+    x: +el.getAttribute('x'), y: +el.getAttribute('y'),
+    w: +el.getAttribute('width'), h: +el.getAttribute('height'),
+  };
+}
+
+const roomCentre = () => {
+  const r = rect('roomRect');
+  return [r.x + r.w / 2, r.y + r.h / 2];
+};
+const distToRoom = (x, y) => {
+  const [cx, cy] = roomCentre();
+  return Math.hypot(x - cx, y - cy);
+};
+
+/**
+ * Geometry → machine events. Only an away→threshold crossing is an approach:
+ * stepping out of the room INTO the ring is just leaving the room, not a
+ * fresh arrival — otherwise a completed guest would be greeted again by the
+ * doorway on their way out.
+ */
+function moveTo(x, y) {
+  guest.x = x; guest.y = y;
+  const next = zoneAt(x, y);
+  if (next !== zone) {
+    if (zone === 'away' && next === 'threshold') send('enterThreshold');
+    else if (zone === 'threshold' && next === 'away') { armWatchMaybe(); send('exitThreshold'); }
+    else if (next === 'room') send('enterRoom');
+    else if (zone === 'room') send('exitRoom');
+    zone = next;
+  }
+  renderGuest();
+}
+
+/** The rejection watch: 3s clear of the threshold AND moving away. */
+function armWatchMaybe() {
+  if (state.phase === 'court') watch = { at: Date.now(), x: guest.x, y: guest.y };
+}
+
+setInterval(() => {
+  if (!watch) return;
+  if (state.phase !== 'leaving') { watch = null; renderWatch(); return; }
+  const clearFor = Date.now() - watch.at;
+  const movingAway = distToRoom(guest.x, guest.y) > distToRoom(watch.x, watch.y) + AWAY_PX;
+  $('watchNote').textContent = clearFor < CLEAR_MS
+    ? `watch: ${((CLEAR_MS - clearFor) / 1000).toFixed(1)}s`
+    : (movingAway ? '' : 'watch: waiting for them to move away');
+  renderWatch(true);
+  if (clearFor >= CLEAR_MS && movingAway) {
+    watch = null;
+    $('watchNote').textContent = '';
+    renderWatch();
+    send('walkedAway');
+  }
+}, 100);
+
+// ----------------------------------------------------------------- dragging
+
+let dragging = false;
+const svg = $('scene');
+const toScene = (evt) => {
+  const pt = svg.createSVGPoint();
+  pt.x = evt.clientX; pt.y = evt.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  return [Math.max(10, Math.min(630, p.x)), Math.max(10, Math.min(510, p.y))];
+};
+$('guest').addEventListener('pointerdown', (e) => {
+  dragging = true;
+  svg.setPointerCapture(e.pointerId);
+});
+svg.addEventListener('pointermove', (e) => { if (dragging) moveTo(...toScene(e)); });
+svg.addEventListener('pointerup', () => { dragging = false; });
+// A click places the guest — handy on a projector, no dragging required.
+svg.addEventListener('click', (e) => { if (e.target.id !== 'guest') moveTo(...toScene(e)); });
+
+// ----------------------------------------------------------------- controls
+
+$('advanceBtn').onclick = () => send('advance');
+$('completeBtn').onclick = () => send('complete');
+$('allowed').onchange = (e) => {
+  state = { ...state, allowed: e.target.checked };
+  log(`room is now ${state.allowed ? 'allowed' : 'NOT allowed'} for this guest`);
+  render();
+};
+$('resetBtn').onclick = () => {
+  state = initialState({ allowed: $('allowed').checked });
+  roomActive = false;
+  watch = null;
+  zone = zoneAt(guest.x, guest.y);
+  // Reset assumes the guest is standing outside; if not, the next crossing
+  // re-derives everything, which is the point of it being a machine.
+  log('— guest memory reset —');
+  render();
+};
+
+// ------------------------------------------------------------------- render
+
+let litStem = null;
+
+function log(line, cls = '') {
+  const el = document.createElement('div');
+  el.textContent = line;
+  if (cls) el.className = cls;
+  $('log').appendChild(el);
+  while ($('log').childElementCount > 80) $('log').removeChild($('log').firstChild);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+function renderGuest() {
+  $('guest').setAttribute('transform', `translate(${guest.x} ${guest.y})`);
+}
+
+function renderWatch(show) {
+  const ring = $('watchRing');
+  ring.setAttribute('cx', guest.x);
+  ring.setAttribute('cy', guest.y);
+  ring.style.opacity = show && watch ? '0.9' : '0';
+}
+
+function renderStems() {
+  $('stems').innerHTML = Object.entries(STEM_LABELS).map(([id, label]) => `
+    <div class="stem ${litStem === id ? 'lit' : ''}">
+      <span class="id">${id}</span><span>${label}</span>
+    </div>`).join('');
+}
+
+function render() {
+  $('phase').textContent = state.phase;
+  $('memory').textContent = state.memory;
+  $('memory').style.color = state.memory === 'lockedOut' ? 'var(--bad)'
+    : state.memory === 'completed' ? 'var(--ok)' : '';
+  $('roomState').textContent = roomActive ? 'active' : 'idle';
+  $('roomState').className = `roomState${roomActive ? ' active' : ''}`;
+  $('roomStateLabel').textContent = roomActive ? 'active' : 'idle';
+  $('roomRect').setAttribute('class', `room${roomActive ? ' active' : ''}`);
+  $('advanceBtn').disabled = state.phase !== 'instruction';
+  $('completeBtn').disabled = state.phase !== 'interaction';
+  renderStems();
+}
+
+// Exposed so a demo (or a driving script) can place the guest without a mouse.
+window.sim = {
+  place: moveTo,
+  send,
+  get state() { return { ...state, zone, roomActive }; },
+};
+
+renderGuest();
+render();
+log('drag the guest, or click anywhere to place them');
+</script>
+</body>
+</html>

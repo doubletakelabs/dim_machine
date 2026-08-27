@@ -40,8 +40,8 @@ JSON currently cannot keep.
 |---|---|
 | Cue `offset`/`duration` | Live, but nothing uses it — the calibration clips are discrete files now. Kept because a long uncut take is a normal thing to be handed |
 | `rooms.*.audio.timing` (`masterTimeline` \| `perGuest`) | Phase B. The thin layer behaves as `perGuest`-with-seek, which is `masterTimeline`'s join behaviour minus the timeline — indistinguishable until projection must stay aligned to it |
-| `rooms.*.audio.joinPolicy` (`inProgress` \| `waitForNext` \| `restart`) | Phase B. Always `inProgress` today |
-| `rooms.*.audio.minRemainingMs` | Phase B — read nowhere at all. A one-shot that already finished is dropped rather than replayed, but there is no late-arrival variant to route to |
+| ~~`rooms.*.audio.joinPolicy`~~ | **Dropped** (team meeting 2026-08-27): every guest either gets individualized audio or joins a synchronized room — `inProgress` is the only join there is. Remove the field from the contract when the exhibit-machine experiment settles the room shape |
+| ~~`rooms.*.audio.minRemainingMs`~~ | **Dropped** with `joinPolicy`, same meeting — no late-arrival variant is wanted |
 | `rooms.*.outputs.cues` | Phase D — lighting and DMX. Room *experiences* (docs/ROOM-EXPERIENCE.md) are live and take a different route: a broker link to a piece running its own server, not an output intent |
 | `guest.audioLayers` | Phase B. Three fixed audio slots (`room`, `guidance`, `adherence`) plus `screen` stand in; no ducking, crossfade, or priority |
 | `server/relay.js` | Live and correct, with no consumer. Its only one was the custom-pages framework, now removed; a room experience talks to its own server directly. Kept because phone-to-phone within a room is plausible for a future room, and the rate limiting and room scoping are the parts that would have to be got right again. Delete it if nothing wants it by the time Phase B closes |
@@ -63,6 +63,30 @@ consequence. Cue audiences now make them audible, which is the whole point of
 having derived standing in the first place.
 
 ---
+
+## 2.5 Experiment in flight — the exhibit machine
+
+The team meeting of 2026-08-27 reshaped the guest↔room relationship for the
+museum rooms, and the new shape is deliberately **not** in the runtime yet:
+
+- **The exhibit machine** — a per-guest, per-room audio journey (Approach →
+  Entrance → Instruction → Interaction → Complete, with two chances per room,
+  rejection, lockout, and return variants). Lives as a pure module in
+  `public/sim/exhibit-machine.js`, with the team's edge cases encoded verbatim
+  in `public/__tests__/exhibit-machine.test.js` and a demo simulator at
+  `/sim/` (draggable guest, spoken stems, live state). It ports into the
+  runtime only if it survives team review and BLE contact — the rejection
+  trigger (3s clear of the threshold and moving away) sits exactly where RSSI
+  is mushiest.
+- **Threshold zones** — per-room trigger surfaces just outside each DIM room.
+  Not rooms: no state, no occupancy, allowed to overlap hallways and each
+  other. Not yet in the contract; they arrive with the exhibit machine.
+- **Settling is decided out** — rooms will go idle ↔ active, instantly, both
+  ways. Not yet executed in the runtime: the exhibit machine reshapes the same
+  rooms, so both changes land together rather than churning the machines
+  twice.
+- Instruction → Interaction → Complete advance **manually** in the simulator;
+  what advances them for real is an open team question.
 
 ## 3. Not built
 
