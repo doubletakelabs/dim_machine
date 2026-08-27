@@ -5,7 +5,8 @@ when an item is resolved rather than deleting the row silently — knowing a thi
 was considered and settled is worth as much as the answer.
 
 Status: Phase A complete (A1–A6, A8, plus shared rooms), plus the thin audio
-layer, screens, phone input, screen sequences, and room experiences. 252 tests.
+layer, screens, phone input, screen sequences, room experiences, and installations.
+265 tests.
 
 ---
 
@@ -73,7 +74,7 @@ having derived standing in the first place.
 | **`server/index.js` has no tests** | The WS command surface, session handling, and phone push are verified by hand against a live server. Two bugs have now hidden there (the relay rename, the unsent `state` message) and both needed a real socket to surface. A harness that boots the server on an ephemeral port and drives it over `ws` would have caught both. |
 | **The server is http only** | Which costs more than it looks. `navigator.wakeLock`, and every other API gated on a secure context, is simply undefined on the `http://192.168.x.x` a phone uses on venue wifi — so the screen-sleep fix falls back to a muted looping video. Self-signed https means trusting a profile on every handset; a real cert means a domain resolving on a network with no internet. Worth deciding before load-in rather than at it. |
 | **Phone-reported zones beyond the picker** | The handset's room picker (CONTRACT.md §8.1) covers browser test mode, which is Phase B's exit criterion. It is a `<select>` in the debug status bar, not a guest-facing surface, and it trusts whatever the phone says. Fine for rehearsal, wrong for a show. |
-| **Experience input is untested on a handset** | The phone's `stream` mode — continuous drag, release velocity, the second socket — is verified against a fake room server and by hand. `public/client.js` still has no headless test, so this is the third capability landing there unproven by machine. |
+| **Experience input is untested on a handset** | The phone's `stream` mode — continuous drag, release velocity, hold, the second socket — is verified against a fake room server and by hand. `hold` shipped missing entirely and no test could have caught it, because nothing tests what the recogniser emits. `public/client.js` still has no headless test, so this is the third capability landing there unproven by machine. |
 | **The room experience protocol has one implementation** | `docs/experience-template` conforms and 02_influence does not yet. Anything the contract got wrong will surface on the second piece, not the first. |
 | **Zone drawing** | 23 spaces of hand-authored polygons, all currently invented. `floorplan.image` exists so zones can be traced over a real plan; the tool does not. Has a deadline attached to it that the other items do not — venue access. |
 | **Scripted walkthrough replay** | Spec §5.4. Record the `setVirtualPosition` stream, replay against a `ManualClock`. Both the clock and the event log were built for it. This is the regression story for the behavioural matrix. |
@@ -172,6 +173,14 @@ commit message and not built. Missing assets are now listed at load and held on
 the operator panel rather than scrolling past in the log. The open question is
 whether a sequence should read its deck from the folder instead of listing it,
 which would remove the second place entirely (§1.9).
+
+**Two clients, one identity, no tiebreak.** A guest's token lives in the phone's
+storage, so a second tab on the same handset is a second socket claiming the same
+person. The server closed the older one — correctly — and said nothing, so that
+client reconnected, displaced the newer one in turn, and the two flapped against
+each other for as long as both pages were open. Deciding a winner is not enough
+when the loser has a reconnect loop: it has to be *told*. The general shape:
+**any rule that evicts a client needs the client to know it was evicted.**
 
 **A listener attached below the thing it needs to hear.** Touch handlers sat on
 `#stage`; a screen cue covers the viewport with a fixed overlay that is the

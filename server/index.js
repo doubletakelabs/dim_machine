@@ -511,7 +511,14 @@ wss.on('connection', (ws) => {
             users.set(token, u);
           }
           if (u.ws && u.ws !== ws) {
-            try { u.ws.close(); } catch {}
+            // One guest, one handset — the newest connection wins. But it has to
+            // be told *why*, or it simply reconnects, displaces this one in turn,
+            // and the two flap against each other for as long as both pages are
+            // open. A second tab on the same phone is enough to start it.
+            try {
+              send(u.ws, { type: 'displaced' });
+              u.ws.close(4001, 'displaced');
+            } catch { /* already gone */ }
           }
           u.ws = ws;
           u.disconnectedAt = null;

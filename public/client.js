@@ -395,6 +395,7 @@ function runCue(cue, opts = {}) {
 let inputMode = 'gestures';
 let experience = null;   // { ws, endpoint, driverId, hue, accepts }
 
+const HOLD_MS = 400;          // a finger that stays put this long is holding, not tapping
 const SWIPE_MIN_PX = 60;      // shorter than this is a slip, not a swipe
 const SWIPE_MAX_MS = 900;     // slower than this is a drag
 /**
@@ -427,19 +428,46 @@ function emitGesture(type, payload) {
 function enableGestures() {
   let start = null;
   let lastTouchAt = 0;
+  // A press that stays put is a hold. Only ever streamed: a hold is a state a
+  // finger is in rather than something that happened, which is why it is not an
+  // input the statechart can bind — see INPUT_KINDS.
+  let holding = false;
+  let holdTimer = null;
+  const cancelHold = () => {
+    clearTimeout(holdTimer);
+    holdTimer = null;
+    if (!holding) return;
+    holding = false;
+    sendToExperience({ t: 'hold', on: false });
+  };
+
   const begin = (x, y) => {
     // iOS will refuse to resume an AudioContext outside a user gesture, so every
     // touch is an opportunity worth taking whether or not it becomes a gesture.
     resumeAudio();
     start = { x, y, at: Date.now() };
-    if (inputMode === 'stream') streamBegin(x, y);
+    if (inputMode !== 'stream') return;
+    streamBegin(x, y);
+    holdTimer = setTimeout(() => {
+      holding = true;
+      sendToExperience({ t: 'hold', on: true });
+    }, HOLD_MS);
   };
-  const move = (x, y) => { if (inputMode === 'stream') streamMove(x, y); };
+  const move = (x, y) => {
+    if (inputMode !== 'stream') return;
+    // Moved far enough to be a drag, so it was never a hold.
+    if (start && Math.hypot(x - start.x, y - start.y) > TAP_MAX_PX) cancelHold();
+    streamMove(x, y);
+  };
   const end = (x, y) => {
+    const wasHolding = holding;
+    cancelHold();
     if (inputMode === 'stream') streamEnd();
     if (!start) return;
     const { x: x0, y: y0, at } = start;
     start = null;
+    // A hold that ended is not also a tap, however still the finger was.
+    if (wasHolding) return;
     const dx = x - x0;
     const dy = y - y0;
     const dist = Math.hypot(dx, dy);
@@ -741,6 +769,8 @@ let ws = null;
 let reconnectDelay = 500;
 let pingTimer = null;
 let pendingSnapshot = null;
+/** Set when this guest was picked up on another page; stops the reconnect war. */
+let displaced = false;
 let lastState = null;
 
 function sendMsg(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
@@ -808,12 +838,22 @@ function connect() {
       case 'relaySync':
         if (joined) applyRelaySync(msg.channels);
         break;
+      case 'displaced':
+        // This guest was picked up somewhere else — another tab, another
+        // handset. Stand down rather than reconnecting into a fight neither
+        // side can win.
+        displaced = true;
+        break;
     }
   };
 
   ws.onclose = () => {
     setConn(false);
     clearInterval(pingTimer);
+    if (displaced) {
+      $('connText').textContent = 'opened elsewhere';
+      return;
+    }
     setTimeout(connect, reconnectDelay + Math.random() * 300);
     reconnectDelay = Math.min(reconnectDelay * 2, 5000);
   };

@@ -2,6 +2,6 @@
   "installation": "This laptop",
   "note": "Copy to installations/local.json (git-ignored) and set your own LAN IP. Loaded automatically when no --installation is given. Use the LAN address, not 127.0.0.1 — a phone cannot reach loopback.",
   "experiences": {
-    "influence": "ws://192.168.1.50:8081"
+    "influence": "ws://192.168.12.128:8081"
   }
 }
