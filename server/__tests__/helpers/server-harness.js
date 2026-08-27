@@ -230,7 +230,7 @@ export async function openPhone(server, token) {
 }
 
 /** Load a show and start it, the way the panel's two buttons do. */
-export async function runShow(op, file = 'spatial-demo.json') {
+export async function runShow(op, file = 'MAD-DIM.json') {
   let since = op.mark();
   op.send({ type: 'loadShow', file });
   await op.waitFor((m) => m.type === 'roster' && m.show?.file === file, {

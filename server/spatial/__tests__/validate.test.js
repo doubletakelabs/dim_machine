@@ -7,7 +7,7 @@ import { validateShowDefinition } from '../validate.js';
 import { CONTRACT_VERSION } from '../contract.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
-const load = (f) => JSON.parse(readFileSync(join(root, 'shows', f), 'utf8'));
+const load = (f) => JSON.parse(readFileSync(join(root, f), 'utf8'));
 
 const minimal = () => ({
   contractVersion: CONTRACT_VERSION,
@@ -62,7 +62,10 @@ const warningsFor = (mutate) => {
 
 describe('validateShowDefinition', () => {
   it('accepts the shipped shows', () => {
-    for (const file of ['spatial-demo.json', 'the-museum.json']) {
+    // The real show and the fixture every other test file is written against.
+    // A fixture that stops validating is a suite full of tests passing against
+    // a show the server would refuse to load.
+    for (const file of ['shows/MAD-DIM.json', 'fixtures/small-show.json']) {
       const { errors, warnings } = validateShowDefinition(load(file));
       assert.deepEqual(errors, [], file);
       assert.deepEqual(warnings, [], file);

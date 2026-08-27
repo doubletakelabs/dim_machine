@@ -17,7 +17,7 @@ import { ManualClock } from '../clock.js';
 import { applyInstallation } from '../installation.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
-const museum = JSON.parse(readFileSync(join(root, 'shows/the-museum.json'), 'utf8'));
+const museum = JSON.parse(readFileSync(join(root, 'shows/MAD-DIM.json'), 'utf8'));
 
 /** A room server that never was. Records what the show said to it. */
 function fakeRoomServer() {

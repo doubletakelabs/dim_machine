@@ -1,7 +1,7 @@
 {
   "contractVersion": 3,
-  "showId": "spatial-demo",
-  "name": "Spatial Demo (Phase A)",
+  "showId": "small-show",
+  "name": "Small show — test fixture",
   "floorplan": {
     "width": 640,
     "height": 420

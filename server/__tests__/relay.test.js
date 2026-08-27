@@ -8,7 +8,7 @@ import { SpatialRuntime } from '../spatial/runtime.js';
 import { ManualClock } from '../spatial/clock.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
-const demo = JSON.parse(readFileSync(join(root, 'shows/spatial-demo.json'), 'utf8'));
+const demo = JSON.parse(readFileSync(join(root, 'fixtures/small-show.json'), 'utf8'));
 
 /**
  * The relay is a v0.2 surface talking to a v0.3 runtime, so it is exactly where

@@ -194,8 +194,8 @@ describe('telling a phone where it is', () => {
 
     // The room picker stands in for BLE: one person can walk the real building
     // with the real phone and the show follows, with nobody at the panel.
-    phone.send({ type: 'setRoom', roomId: 'greenhouse' });
-    await stateBecomes(phone, /^greenhouse · /);
+    phone.send({ type: 'setRoom', roomId: 'cyclorama' });
+    await stateBecomes(phone, /^cyclorama · /);
 
     phone.close();
     op.close();
@@ -222,7 +222,11 @@ describe('who is allowed to drive the show', () => {
 
     for (const msg of [
       { type: 'stopShow' },
-      { type: 'loadShow', file: 'the-museum.json' },
+      // The show already loaded, deliberately. `runtime.load` stops the show
+      // and clears every guest, so if the guard ever went, this one line would
+      // wipe the roster mid-performance — which makes it a better probe than a
+      // filename the server would have refused anyway.
+      { type: 'loadShow', file: 'MAD-DIM.json' },
       { type: 'spawnGuest', count: 20 },
       { type: 'removeGuest', guestId: phone.welcome.guestId },
       { type: 'setTimeScale', rate: 10 },
@@ -235,7 +239,7 @@ describe('who is allowed to drive the show', () => {
     const after = await op.waitFor('roster', { since: op.mark() });
 
     assert.equal(after.show.running, true, 'the show is still running');
-    assert.equal(after.show.file, 'spatial-demo.json', 'and is still the show that was loaded');
+    assert.equal(after.show.file, 'MAD-DIM.json', 'and is still the show that was loaded');
     assert.equal(after.show.guestCount, guestCountBefore, 'and nobody was conjured or removed');
     assert.equal(after.timeScale ?? after.spatial?.timeScale, 1, 'and time still runs at 1x');
 
@@ -366,7 +370,7 @@ describe('the HTTP surface', () => {
     const res = await fetch(`${server.url}/api/shows`);
     assert.equal(res.status, 200);
     const shows = await res.json();
-    assert.ok(shows.includes('spatial-demo.json'));
+    assert.ok(shows.includes('MAD-DIM.json'));
     assert.ok(shows.every((f) => f.endsWith('.json')));
   });
 

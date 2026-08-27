@@ -16,7 +16,7 @@ import { ManualClock } from '../clock.js';
 import { advanceFromFilename, advanceForStep, expandSequences } from '../sequence.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
-const museum = JSON.parse(readFileSync(join(root, 'shows/the-museum.json'), 'utf8'));
+const museum = JSON.parse(readFileSync(join(root, 'shows/MAD-DIM.json'), 'utf8'));
 
 function makeRuntime(mutate) {
   const show = structuredClone(museum);

@@ -8,7 +8,7 @@ import { ManualClock, ScaledClock } from '../clock.js';
 import { polygonCentroid, roomCentroid, roomStandingSpot, slotForGuest, floorPlanExtent } from '../zone-math.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
-const spatialDemo = JSON.parse(readFileSync(join(root, 'shows/spatial-demo.json'), 'utf8'));
+const spatialDemo = JSON.parse(readFileSync(join(root, 'fixtures/small-show.json'), 'utf8'));
 
 function makeRuntime() {
   const rt = new SpatialRuntime({ enableTick: false, clock: new ManualClock() });
@@ -354,7 +354,7 @@ describe('operator overrides', () => {
 });
 
 describe('walking a guest the show is waiting on', () => {
-  const museum = JSON.parse(readFileSync(join(root, 'shows/the-museum.json'), 'utf8'));
+  const museum = JSON.parse(readFileSync(join(root, 'shows/MAD-DIM.json'), 'utf8'));
 
   /** Stand a fresh guest on the first calibration screen, mid-question. */
   function atAScreen({ kind }) {

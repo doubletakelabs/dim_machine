@@ -8,7 +8,7 @@ import { ManualClock } from '../clock.js';
 import { buildGuestMachine } from '../guest-machine.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
-const museum = JSON.parse(readFileSync(join(root, 'shows/the-museum.json'), 'utf8'));
+const museum = JSON.parse(readFileSync(join(root, 'shows/MAD-DIM.json'), 'utf8'));
 
 const PROLOGUE = ['frontDesk', 'calibration', 'entranceHallway', 'maskRoom', 'hallOfHeroes', 'cyclorama'];
 /** Exit and entry both have to confirm for a room-to-room move. */

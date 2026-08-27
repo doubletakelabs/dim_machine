@@ -7,8 +7,8 @@
  * cannot drift — but that also means nothing in the show JSON states it plainly.
  * This prints it.
  *
- *   node tools/audition.mjs the-museum                # every sequence
- *   node tools/audition.mjs the-museum calibration    # play one, in order
+ *   node tools/audition.mjs MAD-DIM                # every sequence
+ *   node tools/audition.mjs MAD-DIM calibration    # play one, in order
  *
  * Playing needs ffplay (brew install ffmpeg).
  */

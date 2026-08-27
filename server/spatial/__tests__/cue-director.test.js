@@ -7,7 +7,7 @@ import { SpatialRuntime } from '../runtime.js';
 import { ManualClock } from '../clock.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
-const demo = JSON.parse(readFileSync(join(root, 'shows/spatial-demo.json'), 'utf8'));
+const demo = JSON.parse(readFileSync(join(root, 'fixtures/small-show.json'), 'utf8'));
 
 const AT = { hallway: [320, 235], library: [200, 140], greenhouse: [440, 140], cellar: [300, 340], out: [10, 10] };
 

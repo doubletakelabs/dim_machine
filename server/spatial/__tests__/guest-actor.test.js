@@ -10,7 +10,7 @@ import { Guest } from '../guest.js';
 import { eligibilityStrategy, IMPLEMENTED_ELIGIBILITY_STRATEGIES } from '../eligibility.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
-const spatialDemo = JSON.parse(readFileSync(join(root, 'shows/spatial-demo.json'), 'utf8'));
+const spatialDemo = JSON.parse(readFileSync(join(root, 'fixtures/small-show.json'), 'utf8'));
 
 /** A point inside each room of the small demo. */
 const AT = {

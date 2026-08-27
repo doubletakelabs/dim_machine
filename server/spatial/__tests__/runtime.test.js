@@ -8,7 +8,7 @@ import { ManualClock } from '../clock.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const spatialDemo = JSON.parse(
-  readFileSync(join(root, 'shows/spatial-demo.json'), 'utf8'),
+  readFileSync(join(root, 'fixtures/small-show.json'), 'utf8'),
 );
 
 describe('SpatialRuntime', () => {
@@ -29,7 +29,7 @@ describe('SpatialRuntime', () => {
     throw new Error(`no guest assigned to ${pathId}`);
   }
 
-  it('loads spatial-demo, hallway included', () => {
+  it('loads the small fixture, hallway included', () => {
     const rt = makeRuntime();
     const result = rt.load(spatialDemo);
     assert.equal(result.ok, true);

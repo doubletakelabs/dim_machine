@@ -24,10 +24,10 @@ directly.
 ```sh
 npm install
 npm start          # → http://localhost:4000
-npm test           # unit tests (server/spatial)
+npm test           # everything: the spatial core, and the server over a real socket
 ```
 
-- **Test panel:** `http://localhost:4000/operator.html` → load **spatial-demo.json** → Start
+- **Test panel:** `http://localhost:4000/operator.html` → load **MAD-DIM.json** → Start
 - **Phones:** `http://localhost:4000/` — connect one and it becomes a guest. Room and
   guidance audio play through the thin audio layer (CONTRACT.md §8.1); the operator
   panel shows what each phone is hearing, per slot
@@ -93,8 +93,8 @@ automatic, so a false reading commits the physical layer with nobody in the loop
 
 To make testing feel immediate, raise the **time scale** rather than lowering the
 hold — at 5× the same confirmation lands in 300ms and everything else scales with
-it. If you do want the demo itself snappier, `location.entryConfirmMs` in
-`shows/spatial-demo.json` is the knob; keep it high for anything BLE-driven.
+it. If you do want the show itself snappier, `location.entryConfirmMs` in
+`shows/MAD-DIM.json` is the knob; keep it high for anything BLE-driven.
 - **Time scale** — run the show at 5× or 20× to watch a 20-second dwell threshold
   resolve in one, or pause it outright. **Test mode only:** leave it at 1× once
   Phase B schedules real audio against a shared clock.
@@ -164,8 +164,8 @@ not at the door. See `CONTRACT.md`.
 
 | File | Purpose |
 |---|---|
-| `shows/the-museum.json` | The real show: 23 spaces, two hallway hubs, 10 museum rooms, 4 paths |
-| `shows/spatial-demo.json` | Small fixture — three rooms and a hallway — for focused tests |
+| `shows/MAD-DIM.json` | The show: 23 spaces, two hallway hubs, 10 museum rooms, 4 paths. The only show in `shows/`, so it is the only one the panel offers |
+| `fixtures/small-show.json` | Three rooms and a hallway. Deliberately **not** in `shows/` — it is a test fixture, not a show anyone should be able to load by accident, and most of the suite is written against it because a focused assertion is unreadable against 23 rooms |
 
 Validate via `POST /api/shows/validate` or `SpatialRuntime.load()`.
 
