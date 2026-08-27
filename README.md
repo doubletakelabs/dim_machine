@@ -111,7 +111,13 @@ with a conforming reference in `docs/experience-template/`.
 ```
 node tools/experience-harness.mjs ws://localhost:8080   # develop against a fake show
 node tools/verify-experience.mjs ./the-piece            # check it before it ships
+npm run handover                                        # ./handover — the kit to send out
 ```
+
+`npm run handover` assembles the contract, the brief, both tools and the working
+reference into one self-contained folder. It is generated rather than kept, so it
+cannot drift from the thing it describes — re-run it after any change to the
+contract and send the folder.
 
 **Installations.** A show describes the work; an *installation* says which
 machines run its pieces, so rehearsing elsewhere is a different file rather than
