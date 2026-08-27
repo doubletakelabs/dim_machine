@@ -891,6 +891,29 @@ export class SpatialRuntime {
     return this.setVirtualPosition(guestId, spot[0], spot[1]);
   }
 
+  /**
+   * Put a guest on a path, or take them off one.
+   *
+   * The `manual` assignment strategy the contract has always declared, arriving
+   * by the back door: an operator naming the path rather than the show drawing
+   * it. Mostly a rehearsal tool — only one path in four routes through any given
+   * museum room, so testing a specific room otherwise means rejoining until the
+   * dice land.
+   *
+   * @param {string} guestId
+   * @param {string|null} pathId
+   * @returns {boolean} whether it took
+   */
+  setGuestPath(guestId, pathId) {
+    const guest = this.guests.get(guestId);
+    if (!guest) return false;
+    if (pathId != null && !this.def?.paths?.[pathId]) return false;
+    guest.pathId = pathId;
+    this.append({ type: 'guest.pathSet', guestId, pathId });
+    this.notifyChange();
+    return true;
+  }
+
   /** Room ids and names, for a picker. */
   roomChoices() {
     return Object.entries(this.def?.rooms ?? {}).map(([roomId, room]) => ({

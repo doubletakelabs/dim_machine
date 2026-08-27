@@ -5,7 +5,7 @@ when an item is resolved rather than deleting the row silently — knowing a thi
 was considered and settled is worth as much as the answer.
 
 Status: Phase A complete (A1–A6, A8, plus shared rooms), plus the thin audio
-layer, screens, phone input, screen sequences, and room experiences. 249 tests.
+layer, screens, phone input, screen sequences, and room experiences. 252 tests.
 
 ---
 
@@ -44,7 +44,7 @@ JSON currently cannot keep.
 | `inputBindings` | **Live for phone gestures** (`tap`, `swipe`, `shake` → guest-machine events). In-room device inputs are still Phase D |
 | `ineligible.policy`: `ambientOnly`, `lockedMessage`, `tease` | Still selected and reported without choosing a response — but `audience: "ineligible"` now exists, so a show can author the audio by hand. Wiring the policy to pick it is the remaining step |
 | `paths.*.guidance`: `guestDirectedPath`, `freeExplore` | Only `goldenPath` drives a target today |
-| `paths` assignment strategies `manual`, `balanced` | `nextPath` handles `roundRobin` and `random` only |
+| `paths` assignment strategy `balanced` | `nextPath` handles `roundRobin` and `random`. `manual` now exists as an operator action (the guest inspector's Path picker) rather than as a strategy the show can name — which is where it belongs, since it is a person overriding the show rather than the show deciding |
 | Eligibility strategies `roleBased`, `progressGated`, `inverted`, `custom` | Declared by the contract; naming one is a **load error**, so this fails loudly rather than silently |
 
 **`balanced` path assignment** is a dead end rather than pending work — worth

@@ -189,6 +189,24 @@ function loadShow(file) {
     opLog(`load failed: ${err.message}`);
     return;
   }
+  // Rehearsal override. A show names the machine a room's piece runs on, which
+  // is right for the building and wrong for a laptop — so a host given here
+  // replaces the one in the show, for every experience at once. Ports are kept
+  // unless one is given, so two pieces on different ports still work.
+  if (process.env.EXPERIENCE_HOST) {
+    const [host, port] = process.env.EXPERIENCE_HOST.split(':');
+    for (const room of Object.values(def.rooms ?? {})) {
+      for (const field of ['endpoint', 'phoneEndpoint']) {
+        if (!room.experience?.[field]) continue;
+        const url = new URL(room.experience[field]);
+        url.hostname = host;
+        if (port) url.port = port;
+        room.experience[field] = url.toString().replace(/\/$/, '');
+      }
+    }
+    opLog(`experience host overridden → ${process.env.EXPERIENCE_HOST}`);
+  }
+
   const result = runtime.load(def);
   for (const w of result.warnings ?? []) opLog(`⚠ ${w}`);
   if (!result.ok) {
@@ -502,6 +520,15 @@ wss.on('connection', (ws) => {
         // whatever it should already be hearing.
         const guest = runtime.getGuestByToken(token);
         if (guest) runtime.resyncCues(guest.guestId);
+        return;
+      }
+
+      case 'setGuestPath': {
+        if (!isOperator) return;
+        if (runtime.setGuestPath(msg.guestId, msg.pathId ?? null)) {
+          opLog(`${runtime.guests.get(msg.guestId)?.label ?? msg.guestId} → ${msg.pathId ?? 'no path'}`);
+          sendRoster();
+        }
         return;
       }
 

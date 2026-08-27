@@ -845,6 +845,19 @@ function renderInspector() {
         <td>${v.seen ? '✓' : ''}</td><td>${v.activatedByMe ? '✓' : ''}</td>
       </tr>`).join('')}
     </tbody></table>` : '<p class="muted">No rooms entered yet.</p>'}
+    <h2 style="margin-top:12px">Path</h2>
+    <div class="row">
+      <select data-setpath style="flex:1">
+        <option value="">no path</option>
+        ${Object.keys(showMeta?.paths ?? {}).map((p) => `
+          <option value="${p}"${p === guest.pathId ? ' selected' : ''}>${p} — ${(showMeta.paths[p].rooms ?? []).join(', ')}</option>`).join('')}
+      </select>
+    </div>
+    <p class="muted" style="margin:6px 0 0">
+      Rehearsal only — the show assigns these on arrival at the museum. Useful when
+      you need a specific room and do not want to rejoin until the dice land.
+    </p>
+
     <h2 style="margin-top:12px">Send to</h2>
     <div class="row">
       <select data-sendroom style="flex:1">
@@ -864,6 +877,8 @@ function renderInspector() {
       <button class="tiny" data-nowalk="1">Stop</button>
     </div>`}`;
 
+  el.querySelector('[data-setpath]').onchange = (e) =>
+    send({ type: 'setGuestPath', guestId: guest.guestId, pathId: e.target.value || null });
   el.querySelector('[data-sendroom]').onchange = (e) =>
     send({ type: 'sendGuestToRoom', guestId: guest.guestId, roomId: e.target.value || null });
   el.querySelector('[data-walk]')?.addEventListener('click',
