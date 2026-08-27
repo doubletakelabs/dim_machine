@@ -14,6 +14,7 @@ import { dirname, join } from 'node:path';
 import { SpatialRuntime } from '../runtime.js';
 import { ManualClock } from '../clock.js';
 import { advanceFromFilename, advanceForStep, expandSequences } from '../sequence.js';
+import { roomCentroid } from '../zone-math.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const museum = JSON.parse(readFileSync(join(root, 'shows/MAD-DIM.json'), 'utf8'));
@@ -32,12 +33,9 @@ function makeRuntime(mutate) {
   return { rt, cues };
 }
 
-function centreOf(room) {
-  const points = Object.values(room.zones)[0].polygon;
-  const xs = points.map((p) => p[0]);
-  const ys = points.map((p) => p[1]);
-  return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
-}
+// The point the walkthrough driver itself aims at. A bounding-box middle can
+// sit outside a traced polygon; this cannot, for any shape a room here has.
+const centreOf = (room) => roomCentroid(room);
 
 function walkTo(rt, guestId, roomId, ms = 2600) {
   const [x, y] = centreOf(museum.rooms[roomId]);

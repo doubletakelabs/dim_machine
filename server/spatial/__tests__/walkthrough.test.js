@@ -362,14 +362,10 @@ describe('walking a guest the show is waiting on', () => {
     assert.deepEqual(rt.load(museum).errors, []);
     rt.start();
     const g = rt.spawnGuest({ kind });
-    // Room centres derived from the show's own zones rather than typed in —
-    // hardcoded coordinates broke the day the zones were retraced over the
-    // real plan, and would break again the day the zone tool redraws them.
-    const centreOf = (roomId) => {
-      const poly = Object.values(museum.rooms[roomId].zones)[0].polygon;
-      const [sx, sy] = poly.reduce(([a, b], [x, y]) => [a + x, b + y], [0, 0]);
-      return [sx / poly.length, sy / poly.length];
-    };
+    // The point the walkthrough driver itself aims at. Hardcoded coordinates
+    // broke when the zones were retraced; a homemade average would break on a
+    // shape whose vertices cluster along one wall. One definition, shared.
+    const centreOf = (roomId) => roomCentroid(museum.rooms[roomId]);
     rt.setVirtualPosition(g.guestId, ...centreOf('frontDesk'));
     rt.testAdvanceTime(2600);
     rt.setVirtualPosition(g.guestId, ...centreOf('calibration'));

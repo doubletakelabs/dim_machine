@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { SpatialRuntime } from '../runtime.js';
 import { ManualClock } from '../clock.js';
 import { buildGuestMachine } from '../guest-machine.js';
+import { roomCentroid } from '../zone-math.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const museum = JSON.parse(readFileSync(join(root, 'shows/MAD-DIM.json'), 'utf8'));
@@ -22,8 +23,10 @@ function makeRuntime() {
 }
 
 function centreOf(roomId) {
-  const zone = Object.values(museum.rooms[roomId].zones)[0].polygon;
-  return [(zone[0][0] + zone[1][0]) / 2, (zone[0][1] + zone[2][1]) / 2];
+  // The point the real walkthrough driver aims at — not a midpoint formula
+  // that quietly assumed every zone is an axis-aligned rectangle with its
+  // corners in drawing order. It was, until somebody traced the real rooms.
+  return roomCentroid(museum.rooms[roomId]);
 }
 
 function walk(rt, guestId, roomId, ms = MOVE_MS) {
