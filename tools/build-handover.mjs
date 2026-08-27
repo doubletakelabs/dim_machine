@@ -28,7 +28,6 @@ const out = resolve(process.argv[2] ?? join(root, 'handover'));
 const REWRITES = [
   ['docs/experience-template', 'reference'],
   ['docs/ROOM-EXPERIENCE.md', 'ROOM-EXPERIENCE.md'],
-  ['docs/EXPERIENCE-BRIEF.md', 'BRIEF.md'],
 ];
 
 const rewrite = (text) => REWRITES.reduce((acc, [from, to]) => acc.split(from).join(to), text);
@@ -47,12 +46,11 @@ a projection, a screen, a monitor wall, whatever the room has.
 npm install          # one dependency: ws
 \`\`\`
 
-## Read in this order
+## Read
 
 | | |
 |---|---|
-| **BRIEF.md** | How to approach the work, and what almost every piece has to change. Start here. |
-| **ROOM-EXPERIENCE.md** | The contract — everything the show promises and expects. |
+| **ROOM-EXPERIENCE.md** | The contract. Everything the show promises and expects, and the only document there is. |
 | **reference/** | A working example that passes every check. ~150 lines. |
 
 ## Run the reference first
@@ -86,9 +84,9 @@ through the things that go wrong in a building rather than on a desk: a restart
 mid-show, a driver presenting a secret it was never given, a driver set that
 shrinks.
 
-It checks the **protocol**, not the **behaviour**. The end of BRIEF.md lists the
-three things that will be tested by hand, and they are the three most likely to
-be wrong.
+It checks the **protocol**, not the **behaviour** — see *What verify cannot
+check* at the end of the contract for the three things that will be tested by
+hand, and which are the three most likely to be wrong.
 
 ## The two rules underneath all of it
 
@@ -103,7 +101,6 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
 copyText('docs/ROOM-EXPERIENCE.md', 'ROOM-EXPERIENCE.md');
-copyText('docs/EXPERIENCE-BRIEF.md', 'BRIEF.md');
 copyText('tools/verify-experience.mjs', 'tools/verify-experience.mjs');
 copyText('tools/experience-harness.mjs', 'tools/experience-harness.mjs');
 for (const file of ['experience.json', 'server.js', 'display.html']) {
@@ -129,7 +126,7 @@ writeFileSync(join(out, 'README.md'), README);
 // A repo path that survived the rewrite is a command that will not work where
 // the reader is standing. Cheaper to fail here than to be found by them.
 const stale = [];
-for (const file of ['ROOM-EXPERIENCE.md', 'BRIEF.md', 'reference/server.js', 'README.md']) {
+for (const file of ['ROOM-EXPERIENCE.md', 'reference/server.js', 'README.md']) {
   const text = readFileSync(join(out, file), 'utf8');
   for (const [from] of REWRITES) if (text.includes(from)) stale.push(`${file} mentions ${from}`);
 }

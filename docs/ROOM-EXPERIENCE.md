@@ -224,7 +224,23 @@ Network jitter must never stutter your motion.
 
 ---
 
-## 5. Failure, from your side
+## 5. Your display
+
+Projection, screen, monitor, LED panel — whatever the room has. It connects to
+*your* server as `role: "display"` and you tell it whatever it needs. That link
+is yours; the show has no opinion about it.
+
+Two things worth designing for:
+
+- **It must come up unattended.** Boot, fullscreen, no keypress. Somebody will
+  power-cycle that machine at 6pm and nobody will have a keyboard.
+- **It may connect late, or reconnect.** Tell it everything on connect, for the
+  same reason the show tells you everything: arriving in the middle must not be
+  a special case.
+
+---
+
+## 6. Failure, from your side
 
 **DIM may not be there.** Serve your display, run attract, wait. Do not block, do
 not crash, do not exit.
@@ -244,7 +260,7 @@ not need to handle this; just do not make it worse by holding a lock somewhere.
 
 ---
 
-## 6. What the phone shows
+## 7. What the phone shows
 
 **Assume the phone shows nothing of yours.** In `stream` mode the handset is a
 blind surface — the guest looks at your display, not down. If it showed a feed,
@@ -255,7 +271,7 @@ cue on our side, not served by you. Ask, do not build it.
 
 ---
 
-## 7. Calibration goes in a file
+## 8. Calibration goes in a file
 
 Projection mapping, warp corners, grid size, tuning — anything an installer sets
 once and must not lose.
@@ -276,7 +292,7 @@ says the mapping looks off.
 
 ---
 
-## 8. Developing and testing without DIM
+## 9. Developing and testing without DIM
 
 Run the harness from the DIM Machine repo:
 
@@ -308,7 +324,7 @@ all.
 
 ---
 
-## 8a. When it does not work
+## 10. When it does not work
 
 | Symptom | Almost always |
 |---|---|
@@ -324,7 +340,7 @@ all.
 
 ---
 
-## 9. Before you hand it over
+## 11. Before you hand it over
 
 ```
 node tools/verify-experience.mjs ./your-folder
@@ -348,9 +364,24 @@ must pass:
 - [ ] no hardcoded IP addresses or ports — port from `PORT`, default in manifest
 - [ ] media referenced from `media.dir`, not committed
 
+### What verify cannot check
+
+It checks the **protocol**. It cannot check **behaviour**, because it does not
+know what "state" means inside your piece. These three are tested by hand in the
+harness, and they are the three most likely to be wrong:
+
+1. Drive the piece somewhere distinctive → `settling` → `live`. It must be
+   exactly where it was left.
+2. `settling` → `reset` → `attract`. It must be back to its starting state.
+3. Two drivers driving, then remove one in the harness panel. That driver's
+   influence must stop, and the other must be unaffected.
+
+A green verify run means it will connect and speak correctly. It does not mean
+the piece behaves.
+
 ---
 
-## 10. Quick reference
+## 12. Quick reference
 
 ```
 BROKER LINK                            DRIVER LINK
@@ -373,3 +404,9 @@ Two rules underneath all of it:
    are the whole truth every time, so arriving late or restarting is never a
    special case. `reset` is the one thing that genuinely *happened*.
 2. **The show owns who and when. You own what it looks and feels like.**
+
+---
+
+If you are ever unsure whether something belongs to you or to the show, the test
+is: **does it change when the show changes, or when the room changes?**
+Show-shaped things are ours. Room-shaped things are yours.
