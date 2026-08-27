@@ -139,7 +139,10 @@ export class SpatialRuntime {
     this._drivers.clear();
     this._roomStateWas.clear();
     for (const [roomId, room] of Object.entries(this.def.rooms ?? {})) {
-      if (!room.experience) continue;
+      // Declared but not installed here: a rehearsal laptop runs one or two
+      // pieces and the rest of the building is ordinary rooms. Nothing to reach,
+      // so nothing to reach for.
+      if (!room.experience?.endpoint) continue;
       this.experiences.set(roomId, new ExperienceLink({
         roomId,
         config: room.experience,
@@ -772,7 +775,7 @@ export class SpatialRuntime {
    */
   experienceDrivers(roomId) {
     const def = this.def?.rooms?.[roomId]?.experience;
-    if (!def) return [];
+    if (!def?.endpoint) return [];
     let assigned = this._drivers.get(roomId);
     if (!assigned) {
       assigned = new Map();
@@ -966,7 +969,7 @@ export class SpatialRuntime {
   experienceCueFor(guestId, here) {
     if (!here) return null;
     const config = this.def?.rooms?.[here.roomId]?.experience;
-    if (!config) return null;
+    if (!config?.endpoint) return null;
     const driver = this.experienceDrivers(here.roomId).find((d) => d.guestId === guestId);
     if (!driver) return null;
     return {

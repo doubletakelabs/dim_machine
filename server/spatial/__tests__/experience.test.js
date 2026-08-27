@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { SpatialRuntime } from '../runtime.js';
 import { ManualClock } from '../clock.js';
+import { applyInstallation } from '../installation.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const museum = JSON.parse(readFileSync(join(root, 'shows/the-museum.json'), 'utf8'));
@@ -43,7 +44,14 @@ function fakeRoomServer() {
   return { open, sockets, latest: () => sockets[sockets.length - 1] };
 }
 
-function makeRuntime({ connect = true } = {}) {
+/**
+ * The show no longer carries machine addresses — those come from an installation
+ * (installation.js). These tests supply one, which is also what makes the
+ * "declared but not installed" case below testable at all.
+ */
+const INSTALLATION = { installation: 'test', experiences: { influence: 'ws://room.test:8080' } };
+
+function makeRuntime({ connect = true, installation = INSTALLATION, mutate } = {}) {
   const server = fakeRoomServer();
   const cues = [];
   const rt = new SpatialRuntime({
@@ -52,7 +60,9 @@ function makeRuntime({ connect = true } = {}) {
     openExperienceSocket: server.open,
     onCue: (guestId, cue) => cues.push({ guestId, ...cue }),
   });
-  assert.deepEqual(rt.load(structuredClone(museum)).errors, []);
+  const show = applyInstallation(structuredClone(museum), installation).def;
+  mutate?.(show);
+  assert.deepEqual(rt.load(show).errors, []);
   rt.start();
   if (connect) server.latest()?.accept();
   return { rt, server, cues, link: rt.experiences.get('influence') };
@@ -226,6 +236,16 @@ describe('the link to a room experience', () => {
     }
   });
 
+  it('is simply absent when the room is not installed here', () => {
+    // A rehearsal laptop runs one or two pieces; the rest of the building is
+    // ordinary rooms. Nothing to reach, so nothing reaches for it.
+    const { rt, cues } = makeRuntime({ installation: { installation: 'laptop', experiences: {} } });
+    assert.equal(rt.experiences.size, 0);
+    const g = driverIn(rt);
+    assert.equal(rt.guests.get(g.guestId).roomId, 'influence', 'the room still admits them');
+    assert.deepEqual(cues.filter((c) => c.kind === 'experience'), [], 'and cues nobody to drive');
+  });
+
   it('respects a cap the experience itself declares', () => {
     const { rt, server } = makeRuntime();
     server.latest().reply({ t: 'ready', experienceId: 'influence-clickfarm', version: '1.0.0', maxDrivers: 1 });
@@ -243,7 +263,7 @@ describe('handing a phone to an experience', () => {
     const g = driverIn(rt);
     const cue = experienceCues(cues).find((c) => c.guestId === g.guestId);
 
-    assert.equal(cue.endpoint, 'ws://10.0.0.5:8080');
+    assert.equal(cue.endpoint, 'ws://room.test:8080');
     assert.equal(cue.inputMode, 'stream');
     assert.deepEqual(cue.inputs, ['drag', 'release', 'tap', 'hold']);
     assert.ok(cue.driverId && cue.secret);

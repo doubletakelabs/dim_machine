@@ -88,6 +88,7 @@
   <span class="pill" id="clockInfo" style="font-family:ui-monospace,Menlo,monospace">—</span>
   <span class="pill" id="showInfo">no show</span>
   <span class="pill" id="expInfo" style="display:none"></span>
+  <span class="pill" id="instInfo" style="display:none"></span>
   <span class="pill" id="connInfo">connecting…</span>
 </header>
 
@@ -623,7 +624,14 @@ const shortId = (id) => String(id ?? '').replace(/^u-/, '').slice(0, 6);
 /** A room whose interaction lives on another machine, and whether it answered. */
 function describeExperience(roomId) {
   const link = (snap?.experiences ?? []).find((l) => l.roomId === roomId);
-  if (!link) return '';
+  if (!link) {
+    // Declared by the show, given no address here. Distinct from broken, and
+    // worth saying: otherwise the room looks like it never had a piece.
+    return (showMeta?.notInstalled ?? []).includes(roomId)
+      ? '<h2 style="margin-top:12px">Experience</h2><p class="muted">Declared by the show, but no address in '
+        + `<b>${showMeta.installation}</b>. It runs as an ordinary room here.</p>`
+      : '';
+  }
   const ok = link.state === 'ready';
   return `
     <h2 style="margin-top:12px">Experience</h2>
@@ -925,6 +933,17 @@ function render() {
     : '';
   $('expInfo').style.background = down.length ? '#5c1f1f' : '';
   $('expInfo').style.color = down.length ? '#ffd9d9' : '';
+
+  // Which building the show thinks it is in. Silent otherwise, and the first
+  // thing worth checking when a room's piece is not where it should be.
+  const notInstalled = showMeta?.notInstalled ?? [];
+  $('instInfo').style.display = showMeta?.installation ? 'inline-block' : 'none';
+  $('instInfo').textContent = showMeta?.installation
+    ? showMeta.installation + (notInstalled.length ? ` · ${notInstalled.length} not installed` : '')
+    : '';
+  $('instInfo').title = notInstalled.length
+    ? `No address in this installation: ${notInstalled.join(', ')} — they run as ordinary rooms.`
+    : '';
 
   $('showInfo').textContent = showMeta?.loaded
     ? `${showMeta.name} · ${showMeta.running ? 'running' : 'stopped'} · ${showMeta.roomCount} rooms`

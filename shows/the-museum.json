@@ -803,8 +803,6 @@
       },
       "experience": {
         "experienceId": "influence-clickfarm",
-        "endpoint": "ws://10.0.0.5:8080",
-        "phoneEndpoint": "ws://10.0.0.5:8080",
         "inputMode": "stream",
         "inputs": [
           "drag",

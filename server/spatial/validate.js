@@ -281,10 +281,11 @@ function checkRoomExperience(roomId, room, path, errors, warnings) {
     return;
   }
   requireString(experience, 'experienceId', at, errors);
-  if (typeof experience.endpoint !== 'string' || !/^wss?:\/\//.test(experience.endpoint)) {
-    errors.push(`${at}.endpoint must be a ws:// or wss:// URL`);
-  }
-  for (const field of ['phoneEndpoint']) {
+  // The address is an install fact and belongs in an installation file, not
+  // here — see installation.js. A show may still carry one for the simple case
+  // of running without an installation at all, so it is optional rather than
+  // forbidden; an installation that was given wins over it either way.
+  for (const field of ['endpoint', 'phoneEndpoint']) {
     if (experience[field] != null && !/^wss?:\/\//.test(experience[field])) {
       errors.push(`${at}.${field} must be a ws:// or wss:// URL`);
     }

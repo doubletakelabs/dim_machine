@@ -8,6 +8,7 @@ import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, basename } from 'node:path';
 import { SpatialRuntime, validateShowDefinition, ScaledClock } from './spatial/index.js';
+import { applyInstallation, overrideHost } from './spatial/installation.js';
 import * as relay from './relay.js';
 
 const PORT = process.env.PORT || 4000;
@@ -15,6 +16,27 @@ const BASE_ASSETS = ['click.wav', 'ambient.wav', 'whisper.wav', 'chime.wav'];
 const OFFLINE_HIDE_MS = 60_000;
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * Where this show's rooms physically are. A show describes the work; an
+ * installation says which machines run its pieces — so rehearsing on a laptop
+ * is a different file rather than an edit to the artistic document.
+ */
+const argv = process.argv.slice(2);
+const installationPath = argv[argv.indexOf('--installation') + 1] !== argv[0]
+  && argv.includes('--installation')
+  ? argv[argv.indexOf('--installation') + 1]
+  : process.env.INSTALLATION ?? null;
+
+let installation = null;
+if (installationPath) {
+  try {
+    installation = JSON.parse(readFileSync(join(root, installationPath), 'utf8'));
+  } catch (err) {
+    console.error(`installation ${installationPath}: ${err.message}`);
+    process.exit(1);
+  }
+}
 const showsDir = join(root, 'shows');
 const assetsDir = join(root, 'public', 'assets');
 const customPagesDir = join(root, 'public', 'custom-pages');
@@ -179,6 +201,7 @@ function missingAssets() {
   return currentAssets().filter((asset) => !existsSync(join(assetsDir, asset)));
 }
 let assetProblems = [];
+let notInstalled = [];
 
 function loadShow(file) {
   const path = showPath(file);
@@ -189,23 +212,13 @@ function loadShow(file) {
     opLog(`load failed: ${err.message}`);
     return;
   }
-  // Rehearsal override. A show names the machine a room's piece runs on, which
-  // is right for the building and wrong for a laptop — so a host given here
-  // replaces the one in the show, for every experience at once. Ports are kept
-  // unless one is given, so two pieces on different ports still work.
-  if (process.env.EXPERIENCE_HOST) {
-    const [host, port] = process.env.EXPERIENCE_HOST.split(':');
-    for (const room of Object.values(def.rooms ?? {})) {
-      for (const field of ['endpoint', 'phoneEndpoint']) {
-        if (!room.experience?.[field]) continue;
-        const url = new URL(room.experience[field]);
-        url.hostname = host;
-        if (port) url.port = port;
-        room.experience[field] = url.toString().replace(/\/$/, '');
-      }
-    }
-    opLog(`experience host overridden → ${process.env.EXPERIENCE_HOST}`);
-  }
+  const placed = applyInstallation(def, installation);
+  def = overrideHost(placed.def, process.env.EXPERIENCE_HOST);
+  if (process.env.EXPERIENCE_HOST) opLog(`experience host overridden → ${process.env.EXPERIENCE_HOST}`);
+  for (const e of placed.errors) opLog(`✗ ${e}`);
+  for (const w of placed.warnings) opLog(`⚠ ${w}`);
+  if (placed.errors.length) return;
+  notInstalled = placed.notInstalled;
 
   const result = runtime.load(def);
   for (const w of result.warnings ?? []) opLog(`⚠ ${w}`);
@@ -292,7 +305,13 @@ function sendRoster() {
     type: 'roster',
     users: rosterUsers,
     spatial: runtime.getOperatorSnapshot(),
-    show: { ...runtime.rosterInfo(), file: loadedShowFile, missingAssets: assetProblems },
+    show: {
+      ...runtime.rosterInfo(),
+      file: loadedShowFile,
+      missingAssets: assetProblems,
+      installation: installation?.installation ?? (installationPath ? basename(installationPath) : null),
+      notInstalled,
+    },
     shows: listShows(),
   }, 'operators');
 }
@@ -749,4 +768,5 @@ httpServer.listen(PORT, () => {
   console.log(`  phone client:   http://localhost:${PORT}/`);
   console.log(`  operator panel: http://localhost:${PORT}/operator.html`);
   console.log(`  shows dir:      ${showsDir} (${listShows().join(', ') || 'empty'})`);
+  console.log(`  installation:   ${installation?.installation ?? (installationPath || 'none — the show carries its own addresses')}`);
 });

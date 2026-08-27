@@ -113,6 +113,21 @@ node tools/experience-harness.mjs ws://localhost:8080   # develop against a fake
 node tools/verify-experience.mjs ./the-piece            # check it before it ships
 ```
 
+**Installations.** A show describes the work; an *installation* says which
+machines run its pieces, so rehearsing elsewhere is a different file rather than
+an edit to the show. `installations/` holds them.
+
+```
+node server/index.js --installation installations/venue.json
+node server/index.js --installation installations/rehearsal.json
+EXPERIENCE_HOST=192.168.1.50 node server/index.js --installation installations/rehearsal.json
+```
+
+A rehearsal installation is expected to be partial — a room with no address runs
+as an ordinary room. A venue file sets `"requireAll": true`, which turns a
+forgotten room into a load error rather than a guest standing in front of
+nothing.
+
 ## Show definitions
 
 Contract **v3 only** (`contractVersion: 3`) — see `CONTRACT.md`. v1/v2 workshop
