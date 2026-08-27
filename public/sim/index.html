@@ -75,8 +75,10 @@
   /* scene */
   .hall { fill: #101216; }
   .threshold { fill: #6ea8fe14; stroke: #6ea8fe55; stroke-dasharray: 6 5; }
-  .room { fill: #3a4150; fill-opacity: .5; stroke: #55606f; }
-  .room.active { fill: #2f8f5b; stroke: #58c98a; }
+  .room { fill: #3a4150; fill-opacity: .5; stroke: none; }
+  .room.active { fill: #2f8f5b; }
+  .walls { fill: none; stroke: #99a3b5; stroke-width: 3.5; stroke-linecap: round; }
+  .doorLabel { fill: #6ea8fe; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; text-anchor: middle; pointer-events: none; }
   .zoneLabel { fill: #8a93a4; font-size: 11px; text-anchor: middle; pointer-events: none; }
   #guest { cursor: grab; }
   #guest:active { cursor: grabbing; }
@@ -96,11 +98,18 @@
   <div class="card">
     <svg id="scene" viewBox="0 0 640 520" preserveAspectRatio="xMidYMid meet">
       <rect class="hall" x="0" y="0" width="640" height="520"/>
-      <rect id="thresholdRect" class="threshold" x="180" y="110" width="280" height="260" rx="10"/>
-      <rect id="roomRect" class="room" x="240" y="160" width="160" height="160" rx="6"/>
-      <text class="zoneLabel" x="320" y="150">threshold</text>
-      <text class="zoneLabel" x="320" y="244">EXHIBIT</text>
-      <text id="roomStateLabel" class="zoneLabel" x="320" y="262">idle</text>
+      <!-- The threshold sits in front of the door, not around the room:
+           every room has exactly one way in, and "near the room" means
+           near the way in. It tucks under the room edge so there is no
+           sliver of hallway between them for a drag to sample. -->
+      <rect id="thresholdRect" class="threshold" x="240" y="310" width="160" height="100" rx="8"/>
+      <rect id="roomRect" class="room" x="240" y="160" width="160" height="160" rx="0"/>
+      <!-- Walls: solid on three sides, open only at the door. -->
+      <path class="walls" d="M 350 320 L 400 320 L 400 160 L 240 160 L 240 320 L 290 320"/>
+      <text class="zoneLabel" x="320" y="240">EXHIBIT</text>
+      <text id="roomStateLabel" class="zoneLabel" x="320" y="258">idle</text>
+      <text class="doorLabel" x="320" y="316">door</text>
+      <text class="zoneLabel" x="320" y="398">threshold</text>
       <text class="zoneLabel" x="320" y="480">hallway — drag the guest</text>
       <circle id="watchRing" class="watchRing" r="16"/>
       <g id="guest">
@@ -109,8 +118,9 @@
       </g>
     </svg>
     <div id="hint">
-      Drag into the dashed ring to approach · into the room to enter · walk away and
-      wait 3s for the rejection watch · <b id="watchNote" style="color:var(--warn)"></b>
+      One way in — the door. Drag into the dashed threshold to approach, through the
+      door to enter; the walls do not give. Walk away and wait 3s for the rejection
+      watch · <b id="watchNote" style="color:var(--warn)"></b>
     </div>
   </div>
 
@@ -212,12 +222,48 @@ let watch = null;            // { at, x, y } — the walk-away watch
 const CLEAR_MS = 3000;
 const AWAY_PX = 24;
 
+const ROOM = { x0: 240, y0: 160, x1: 400, y1: 320 };
+const DOOR = { x0: 290, x1: 350 };   // the gap in the south wall
+
 function zoneAt(x, y) {
-  const r = rect('roomRect');
   const t = rect('thresholdRect');
-  if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return 'room';
+  if (x >= ROOM.x0 && x <= ROOM.x1 && y >= ROOM.y0 && y <= ROOM.y1) return 'room';
   if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) return 'threshold';
   return 'away';
+}
+
+const inRoom = (x, y) => x >= ROOM.x0 && x <= ROOM.x1 && y >= ROOM.y0 && y <= ROOM.y1;
+
+/**
+ * Every room has exactly one way in. A move that would cross the room
+ * boundary is legal only where the boundary is the door — the dot sticks at
+ * a wall the way a person does. Without this, dragging through a wall would
+ * demo a spatial situation the building cannot produce, and the machine
+ * would be argued against evidence it will never see.
+ */
+function legalMove(px, py, x, y) {
+  if (inRoom(px, py) === inRoom(x, y)) return true;
+  const dx = x - px;
+  const dy = y - py;
+  let first = null; // earliest boundary crossing along the segment
+  const consider = (t, edge, cx) => {
+    if (t >= 0 && t <= 1 && (!first || t < first.t)) first = { t, edge, cx };
+  };
+  if (dy) {
+    for (const [ey, edge] of [[ROOM.y0, 'top'], [ROOM.y1, 'south']]) {
+      const t = (ey - py) / dy;
+      const cx = px + t * dx;
+      if (cx >= ROOM.x0 - 0.01 && cx <= ROOM.x1 + 0.01) consider(t, edge, cx);
+    }
+  }
+  if (dx) {
+    for (const [ex, edge] of [[ROOM.x0, 'left'], [ROOM.x1, 'right']]) {
+      const t = (ex - px) / dx;
+      const cy = py + t * dy;
+      if (cy >= ROOM.y0 - 0.01 && cy <= ROOM.y1 + 0.01) consider(t, edge, ex);
+    }
+  }
+  return first?.edge === 'south' && first.cx >= DOOR.x0 && first.cx <= DOOR.x1;
 }
 
 function rect(id) {
@@ -244,6 +290,7 @@ const distToRoom = (x, y) => {
  * doorway on their way out.
  */
 function moveTo(x, y) {
+  if (!legalMove(guest.x, guest.y, x, y)) return; // that is a wall
   guest.x = x; guest.y = y;
   const next = zoneAt(x, y);
   if (next !== zone) {
