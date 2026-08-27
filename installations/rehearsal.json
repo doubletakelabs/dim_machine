@@ -1,7 +1,0 @@
-{
-  "installation": "Laptop rehearsal",
-  "note": "Only the rooms actually running on this machine. Everything else runs as an ordinary room.",
-  "experiences": {
-    "influence": "ws://127.0.0.1:8081"
-  }
-}

@@ -1,3 +1,4 @@
 node_modules/
 .DS_Store
 docs/experience-template/calibration.json
+installations/local.json

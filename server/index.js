@@ -8,7 +8,7 @@ import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, basename } from 'node:path';
 import { SpatialRuntime, validateShowDefinition, ScaledClock } from './spatial/index.js';
-import { applyInstallation, overrideHost } from './spatial/installation.js';
+import { applyInstallation } from './spatial/installation.js';
 import * as relay from './relay.js';
 
 const PORT = process.env.PORT || 4000;
@@ -23,10 +23,22 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
  * is a different file rather than an edit to the artistic document.
  */
 const argv = process.argv.slice(2);
-const installationPath = argv[argv.indexOf('--installation') + 1] !== argv[0]
-  && argv.includes('--installation')
-  ? argv[argv.indexOf('--installation') + 1]
-  : process.env.INSTALLATION ?? null;
+const flagIndex = argv.indexOf('--installation');
+const LOCAL_INSTALLATION = 'installations/local.json';
+
+/**
+ * Named on the command line, or in INSTALLATION, or — failing both — this
+ * machine's own `installations/local.json` if it has one.
+ *
+ * That last is the answer to an address that belongs to one laptop and changes:
+ * it is git-ignored, so a LAN IP never lands in a file everybody shares. Which
+ * installation was used is printed at boot and shown in the panel, so the
+ * convenience is never a silent difference between rehearsal and the night.
+ */
+const installationPath = flagIndex >= 0 && argv[flagIndex + 1]
+  ? argv[flagIndex + 1]
+  : process.env.INSTALLATION
+    ?? (existsSync(join(root, LOCAL_INSTALLATION)) ? LOCAL_INSTALLATION : null);
 
 let installation = null;
 if (installationPath) {
@@ -213,8 +225,7 @@ function loadShow(file) {
     return;
   }
   const placed = applyInstallation(def, installation);
-  def = overrideHost(placed.def, process.env.EXPERIENCE_HOST);
-  if (process.env.EXPERIENCE_HOST) opLog(`experience host overridden → ${process.env.EXPERIENCE_HOST}`);
+  def = placed.def;
   for (const e of placed.errors) opLog(`✗ ${e}`);
   for (const w of placed.warnings) opLog(`⚠ ${w}`);
   if (placed.errors.length) return;

@@ -7,7 +7,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyInstallation, overrideHost } from '../installation.js';
+import { applyInstallation } from '../installation.js';
 
 const show = () => ({
   rooms: {
@@ -121,31 +121,5 @@ describe('placing a show in an installation', () => {
     const original = show();
     applyInstallation(original, { installation: 'v', experiences: { influence: 'ws://10.0.0.11:8080' } });
     assert.equal(endpointOf(original, 'influence'), null);
-  });
-});
-
-describe('the laptop host override', () => {
-  it('points everything at one machine, keeping each port', () => {
-    const { def } = applyInstallation(show(), {
-      installation: 'venue',
-      experiences: { influence: 'ws://10.0.0.11:8080', kin: 'ws://10.0.0.12:9000' },
-    });
-    const local = overrideHost(def, '192.168.1.50');
-    assert.equal(endpointOf(local, 'influence'), 'ws://192.168.1.50:8080');
-    assert.equal(endpointOf(local, 'kin'), 'ws://192.168.1.50:9000', 'two pieces, two ports, one laptop');
-  });
-
-  it('takes a port when one is given', () => {
-    const { def } = applyInstallation(show(), {
-      installation: 'v', experiences: { influence: 'ws://10.0.0.11:8080' },
-    });
-    assert.equal(endpointOf(overrideHost(def, '127.0.0.1:8081'), 'influence'), 'ws://127.0.0.1:8081');
-  });
-
-  it('is a no-op when unset', () => {
-    const { def } = applyInstallation(show(), {
-      installation: 'v', experiences: { influence: 'ws://10.0.0.11:8080' },
-    });
-    assert.equal(endpointOf(overrideHost(def, undefined), 'influence'), 'ws://10.0.0.11:8080');
   });
 });

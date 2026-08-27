@@ -118,13 +118,17 @@ machines run its pieces, so rehearsing elsewhere is a different file rather than
 an edit to the show. `installations/` holds them.
 
 ```
-node server/index.js --installation installations/venue.json
-node server/index.js --installation installations/rehearsal.json
-EXPERIENCE_HOST=192.168.1.50 node server/index.js --installation installations/rehearsal.json
+cp installations/local.example.json installations/local.json   # once, set your LAN IP
+node server/index.js                                           # picks local.json up
+node server/index.js --installation installations/venue.json   # the real building
 ```
 
-A rehearsal installation is expected to be partial — a room with no address runs
-as an ordinary room. A venue file sets `"requireAll": true`, which turns a
+`installations/local.json` is git-ignored and loaded when nothing else is named,
+so a LAN address that belongs to one laptop never lands in a file everybody
+shares. Whichever was used is printed at boot and shown in the panel.
+
+A rehearsal installation is expected to be **partial** — a room with no address
+runs as an ordinary room. A venue file sets `"requireAll": true`, which turns a
 forgotten room into a load error rather than a guest standing in front of
 nothing.
 

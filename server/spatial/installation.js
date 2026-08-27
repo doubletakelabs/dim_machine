@@ -104,23 +104,3 @@ function normalise(value) {
 }
 
 const isObject = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
-
-/**
- * Rewrite every address to one host. The laptop shortcut, kept separate from
- * installations because it means something different: not "this is where the
- * rooms are" but "ignore where the rooms are, everything is here".
- */
-export function overrideHost(def, hostPort) {
-  if (!hostPort) return def;
-  const [host, port] = String(hostPort).split(':');
-  for (const room of Object.values(def.rooms ?? {})) {
-    for (const field of ['endpoint', 'phoneEndpoint']) {
-      if (!room.experience?.[field]) continue;
-      const url = new URL(room.experience[field]);
-      url.hostname = host;
-      if (port) url.port = port;
-      room.experience[field] = url.toString().replace(/\/$/, '');
-    }
-  }
-  return def;
-}
