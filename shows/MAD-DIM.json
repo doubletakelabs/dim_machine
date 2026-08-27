@@ -48,8 +48,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -127,8 +126,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -244,8 +242,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -343,8 +340,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -434,8 +430,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -628,8 +623,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {},
@@ -725,8 +719,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -818,8 +811,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -927,8 +919,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {},
@@ -1021,8 +1012,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -1114,8 +1104,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -1203,8 +1192,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -1297,8 +1285,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {},
@@ -1391,8 +1378,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -1488,8 +1474,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -1645,8 +1630,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -1740,8 +1724,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -1833,8 +1816,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -1927,8 +1909,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}
@@ -2044,8 +2025,7 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling",
-              "DONE": "settling"
+              "RELEASE": "settling"
             },
             "states": {
               "main": {}

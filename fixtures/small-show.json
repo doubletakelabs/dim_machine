@@ -1,7 +1,7 @@
 {
   "contractVersion": 3,
   "showId": "small-show",
-  "name": "Small show — test fixture",
+  "name": "Small show \u2014 test fixture",
   "floorplan": {
     "width": 640,
     "height": 420
@@ -135,19 +135,13 @@
             },
             "states": {
               "main": {
-                "on": {
-                  "DONE": "#library.settling"
-                }
+                "on": {}
               },
               "together": {
-                "on": {
-                  "DONE": "#library.settling"
-                }
+                "on": {}
               },
               "abbreviated": {
-                "on": {
-                  "DONE": "#library.settling"
-                }
+                "on": {}
               }
             }
           },
@@ -266,14 +260,10 @@
             },
             "states": {
               "main": {
-                "on": {
-                  "DONE": "#greenhouse.settling"
-                }
+                "on": {}
               },
               "offPath": {
-                "on": {
-                  "DONE": "#greenhouse.settling"
-                }
+                "on": {}
               }
             }
           },
@@ -366,9 +356,7 @@
             },
             "states": {
               "main": {
-                "on": {
-                  "DONE": "#cellar.settling"
-                }
+                "on": {}
               }
             }
           },

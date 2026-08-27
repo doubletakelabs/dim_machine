@@ -335,7 +335,7 @@ describe('RoomActor', () => {
     assert.equal(coordinator.getLock('library').guestId, 'u1');
   });
 
-  it('an authored DONE into settling also runs the grace timer', () => {
+  it('any authored transition into settling also runs the grace timer', () => {
     const { room, coordinator, clock } = make({
       ...timedRoomDef,
       exit: { policy: 'resetAfter', graceMs: 3000 },
