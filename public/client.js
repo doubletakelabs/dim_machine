@@ -3,6 +3,8 @@
 // input promotion, snapshot resume.
 'use strict';
 
+import { createGestureRecogniser, createRepeatGuard } from './gestures.js';
+
 const $ = (id) => document.getElementById(id);
 
 // Shared surface for anything running on the phone: input emission + peer relay.
@@ -373,21 +375,8 @@ function runCue(cue, opts = {}) {
 let inputMode = 'gestures';
 let experience = null;   // { ws, endpoint, driverId, hue, accepts }
 
-const HOLD_MS = 400;          // a finger that stays put this long is holding, not tapping
-const SWIPE_MIN_PX = 60;      // shorter than this is a slip, not a swipe
-const SWIPE_MAX_MS = 900;     // slower than this is a drag
-/**
- * A finger that stayed put is a tap, however long it rested there.
- *
- * There was a 400ms ceiling on this and it was wrong: told to TAP THE SCREEN,
- * people press deliberately, and a firm press is easily half a second. A guest
- * whose tap is rejected for being *too committed* has no way to know that, and
- * the only feedback available is a screen that refuses to move.
- */
-const TAP_MAX_PX = 20;        // a fingertip wobbles; this is not a mouse
-const GESTURE_MIN_GAP_MS = 400; // a nervous double-tap is one answer, not two
+const repeatGuard = createRepeatGuard();
 
-let lastGesture = 0;
 function emitGesture(type, payload) {
   if (!joined) return;
   // Shown on the phone itself. A gesture that never left the handset and one
@@ -396,72 +385,31 @@ function emitGesture(type, payload) {
   if (el) el.textContent = type;
 
   if (inputMode === 'stream') return sendToExperience({ t: type, ...payload });
-  // The gap guard is for the statechart only: a nervous double-tap is one
-  // answer to a screen. An experience wants every tap it is given.
-  if (Date.now() - lastGesture < GESTURE_MIN_GAP_MS) return;
-  lastGesture = Date.now();
+  // The guard is for the statechart only: a nervous double-tap is one answer to
+  // a screen. An experience wants every tap it is given.
+  if (!repeatGuard.allow()) return;
   window.DIM.emit(type, payload);
 }
 
+/**
+ * The recogniser lives in gestures.js and knows nothing about this file. What
+ * is wired in here is only the outside world it needs: the clock, the current
+ * input mode, and where each recognised thing goes.
+ */
 function enableGestures() {
-  let start = null;
   let lastTouchAt = 0;
-  // A press that stays put is a hold. Only ever streamed: a hold is a state a
-  // finger is in rather than something that happened, which is why it is not an
-  // input the statechart can bind — see INPUT_KINDS.
-  let holding = false;
-  let holdTimer = null;
-  const cancelHold = () => {
-    clearTimeout(holdTimer);
-    holdTimer = null;
-    if (!holding) return;
-    holding = false;
-    sendToExperience({ t: 'hold', on: false });
-  };
-
-  const begin = (x, y) => {
-    // iOS will refuse to resume an AudioContext outside a user gesture, so every
-    // touch is an opportunity worth taking whether or not it becomes a gesture.
-    resumeAudio();
-    start = { x, y, at: Date.now() };
-    if (inputMode !== 'stream') return;
-    streamBegin(x, y);
-    holdTimer = setTimeout(() => {
-      holding = true;
-      sendToExperience({ t: 'hold', on: true });
-    }, HOLD_MS);
-  };
-  const move = (x, y) => {
-    if (inputMode !== 'stream') return;
-    // Moved far enough to be a drag, so it was never a hold.
-    if (start && Math.hypot(x - start.x, y - start.y) > TAP_MAX_PX) cancelHold();
-    streamMove(x, y);
-  };
-  const end = (x, y) => {
-    const wasHolding = holding;
-    cancelHold();
-    if (inputMode === 'stream') streamEnd();
-    if (!start) return;
-    const { x: x0, y: y0, at } = start;
-    start = null;
-    // A hold that ended is not also a tap, however still the finger was.
-    if (wasHolding) return;
-    const dx = x - x0;
-    const dy = y - y0;
-    const dist = Math.hypot(dx, dy);
-    const ms = Date.now() - at;
-    if (dist >= SWIPE_MIN_PX && ms <= SWIPE_MAX_MS) {
-      const horizontal = Math.abs(dx) >= Math.abs(dy);
-      emitGesture('swipe', {
-        direction: horizontal ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'),
-        dx: Math.round(dx),
-        dy: Math.round(dy),
-      });
-    } else if (dist <= TAP_MAX_PX) {
-      emitGesture('tap', { x: Math.round(x), y: Math.round(y) });
-    }
-    // Anything else — a slow short drag — is a finger changing its mind.
-  };
+  // Kept whole, then the methods pulled off it. `touching` is a getter, and a
+  // rest-spread would have copied its value once and read false forever after.
+  const touch = createGestureRecogniser({
+    mode: () => inputMode,
+    onTouch: resumeAudio,
+    onGesture: emitGesture,
+    onHold: (on) => sendToExperience({ t: 'hold', on }),
+    onStreamBegin: streamBegin,
+    onStreamMove: streamMove,
+    onStreamEnd: streamEnd,
+  });
+  const { begin, move, end, abort } = touch;
 
   // On `document`, not on the stage. A screen cue covers the viewport with a
   // fixed overlay that is the stage's *sibling*, so a tap on it never bubbles
@@ -485,6 +433,12 @@ function enableGestures() {
     const t = e.changedTouches[0];
     end(t.clientX, t.clientY);
   }, { passive: true });
+  // The OS taking the touch away — an incoming call, a notification pulled down
+  // — never fires `touchend`. Without this the room holds a hold forever.
+  document.addEventListener('touchcancel', () => {
+    lastTouchAt = Date.now();
+    abort();
+  }, { passive: true });
 
   // Mouse as well, so the browser client stays a usable rehearsal tool. A touch
   // on iOS also fires a synthetic mouse pair a beat later; ignore those rather
@@ -495,7 +449,7 @@ function enableGestures() {
     begin(e.clientX, e.clientY);
   });
   document.addEventListener('mousemove', (e) => {
-    if (afterTouch() || !start) return;
+    if (afterTouch() || !touch.touching) return;
     move(e.clientX, e.clientY);
   });
   document.addEventListener('mouseup', (e) => {

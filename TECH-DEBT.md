@@ -6,7 +6,7 @@ was considered and settled is worth as much as the answer.
 
 Status: Phase A complete (A1–A6, A8, plus shared rooms), plus the thin audio
 layer, screens, phone input, screen sequences, room experiences, and installations.
-287 tests, now including the WebSocket and HTTP surface. The v0.2 custom-pages
+313 tests, now including the WebSocket and HTTP surface and the gesture recogniser. The v0.2 custom-pages
 framework has been removed.
 
 ---
@@ -72,11 +72,11 @@ having derived standing in the first place.
 | Item | Notes |
 |---|---|
 | **Phone experience beyond audio and screens** | Audio, full-screen images and touch input are live (CONTRACT.md §8.1), and the status line tracks room + standing. Video and haptics are still v0.2 surfaces nothing drives. The v0.2 page framework is gone — each screen is now built for itself as it is designed. |
-| **The phone client has no tests** | `public/client.js` is a plain browser script with no way to load it headless, so gesture recognition, cue execution and asset loading are verified by hand on a handset. Three faults have hidden here (`hold` missing entirely, the looping click, the listener below the overlay), and it is now the *only* untested file left in the tree. It is also where Phase B puts mixing, ducking and crossfade. Making the recogniser importable is the cheapest first step. |
+| **The phone client is partly tested** | The **gesture recogniser** is now `public/gestures.js` — a pure module with the clock and timers injected, and 26 tests. `hold` shipped missing entirely; removing it again now fails six of them. What is still untested is everything that genuinely needs a browser: cue execution, asset preloading, the AudioContext, the two sockets. `index.html` now loads `client.js` as `type="module"`, which is the one change here that has not been run on a handset. |
 | ~~**`server/index.js` has no tests**~~ | **Resolved.** `server/__tests__/server.test.js` forks the real server on an ephemeral port and drives it over `ws`: sessions, the displacement rule, phone state push, operator authority, disconnect and return, malformed input, and the HTTP routes. Each of the three faults that hid here was reintroduced and confirmed to fail a test. What it still does not cover is anything requiring a browser — see the `public/client.js` row, which is now the only untested surface left. |
 | **The server is http only** | Which costs more than it looks. `navigator.wakeLock`, and every other API gated on a secure context, is simply undefined on the `http://192.168.x.x` a phone uses on venue wifi — so the screen-sleep fix falls back to a muted looping video. Self-signed https means trusting a profile on every handset; a real cert means a domain resolving on a network with no internet. Worth deciding before load-in rather than at it. |
 | **Phone-reported zones beyond the picker** | The handset's room picker (CONTRACT.md §8.1) covers browser test mode, which is Phase B's exit criterion. It is a `<select>` in the debug status bar, not a guest-facing surface, and it trusts whatever the phone says. Fine for rehearsal, wrong for a show. |
-| **Experience input is untested on a handset** | The phone's `stream` mode — continuous drag, release velocity, hold, the second socket — is verified against a fake room server and by hand. `hold` shipped missing entirely and no test could have caught it, because nothing tests what the recogniser emits. `public/client.js` still has no headless test, so this is the third capability landing there unproven by machine. |
+| **Experience input is untested on a handset** | Partly resolved: what the recogniser *emits* — the stream events, hold begin and end, a drag cancelling a hold, a hold that must not also be a tap — is now covered. What is not is the second socket itself: reconnection, the driver secret, and release velocity are still verified against a fake room server and by hand. |
 | **The room experience protocol has one implementation** | `docs/experience-template` conforms and 02_influence does not yet. Anything the contract got wrong will surface on the second piece, not the first. |
 | **Zone drawing** | 23 spaces of hand-authored polygons, all currently invented. `floorplan.image` exists so zones can be traced over a real plan; the tool does not. Has a deadline attached to it that the other items do not — venue access. |
 | **Scripted walkthrough replay** | Spec §5.4. Record the `setVirtualPosition` stream, replay against a `ManualClock`. Both the clock and the event log were built for it. This is the regression story for the behavioural matrix. |
@@ -132,8 +132,16 @@ the argument. `server/spatial/` had 265 tests and has produced roughly one bug.
 six — the relay rename, the unsent `state`, the two-tab flap, the missing
 `hold`, the looping click, and the listener below the overlay. The pattern was
 not that the edges are harder; it is that nothing there could fail except in
-front of a person. `server/index.js` is now covered; `client.js` is not, and is
-where Phase B's audio mixing is about to be written.
+front of a person.
+
+`server/index.js` is now covered, and so is the part of the client that was
+pure logic wearing a browser's clothes — the recogniser needed a DOM only
+because it was written inside one. Pulling it into `public/gestures.js` with an
+injected clock made a four-hundred-millisecond hold testable in no time at all.
+What is left in `client.js` genuinely needs a browser, and is where Phase B's
+mixing and ducking will be written; the lesson to carry into that work is to
+write the decisions somewhere a test can reach before wiring them to an
+AudioContext, rather than after.
 
 **A simulation tool acting on a real participant.** The walkthrough driver was
 built when every guest was a dot on a floor plan, and `start()` with no arguments

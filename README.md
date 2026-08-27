@@ -24,7 +24,7 @@ directly.
 ```sh
 npm install
 npm start          # → http://localhost:4000
-npm test           # everything: the spatial core, and the server over a real socket
+npm test           # the spatial core, the server over a real socket, the recogniser
 ```
 
 - **Test panel:** `http://localhost:4000/operator.html` → load **MAD-DIM.json** → Start
