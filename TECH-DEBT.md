@@ -48,13 +48,9 @@ JSON currently cannot keep.
 | `inputBindings` | **Live for phone gestures** (`tap`, `swipe`, `shake` → guest-machine events). In-room device inputs are still Phase D |
 | `ineligible.policy`: `ambientOnly`, `lockedMessage`, `tease` | Still selected and reported without choosing a response — but `audience: "ineligible"` now exists, so a show can author the audio by hand. Wiring the policy to pick it is the remaining step |
 | `paths.*.guidance`: `guestDirectedPath`, `freeExplore` | Only `goldenPath` drives a target today |
-| `paths` assignment strategy `balanced` | `nextPath` handles `roundRobin` and `random`. `manual` now exists as an operator action (the guest inspector's Path picker) rather than as a strategy the show can name — which is where it belongs, since it is a person overriding the show rather than the show deciding |
+| ~~`paths` assignment strategy `balanced`~~ | **Resolved by removal.** `balanced` was for spreading occupancy at the door, and assignment moved to museum arrival; `manual` correctly lives as an operator action (the inspector's Path picker), a person overriding the show. Naming either in a show is now a load error rather than a promise the show cannot keep |
 | Eligibility strategies `roleBased`, `progressGated`, `inverted`, `custom` | Declared by the contract; naming one is a **load error**, so this fails loudly rather than silently |
-
-**`balanced` path assignment** is a dead end rather than pending work — worth
-deciding whether to remove it. It was for spreading occupancy, and assignment now
-happens on reaching the museum rather than at the door, which was most of its
-purpose.
+| `cueReport` (phone → server) | The phone reports each scheduled cue's actual-vs-target time; the server ignores the message. Powers the handset's own drift readout today, and is the raw feed a cross-phone latency monitor would want. Wire it up or drop the send when that monitor is designed |
 
 *Resolved by screens and input:* `inputBindings` was a declared block nothing
 read. A gesture now becomes a show event through it, which is what let the
@@ -93,6 +89,7 @@ having derived standing in the first place.
 | **Raw operator `ACTIVATE` leaves a room running for nobody.** It bypasses `requestActivation`, so the room goes `active` with no lock and refuses every guest until `RELEASE` or `RESET`. | Deliberate: seeing a state without staging guests is worth having. Now visually separated and labelled, and joined by *Activate for occupant*, which goes through the arrival path. |
 | **The authored guest chart does not show the recovery transitions.** The runtime adds a transition for every room at the region root so the machine always matches the coordinator. | Chosen so the drawn chart shows *intent*. It is one uniform rule, documented in spec §4.1, rather than per-room surprises. |
 | **Every state change reconciles every guest's audio.** Cheap now (a few map lookups per guest, and it sends nothing when nothing differs) and correct by construction, but it is O(guests) on every tick of every room. | If it ever bites, the fix is to reconcile only guests whose room or regions moved — not to go back to firing events. |
+| **The integration suite can flake under machine load.** Twice, one run has reported a single failure that three immediate reruns could not reproduce — both times while other processes were competing for the machine. The server tests fork real processes and wait on real sockets, so a busy box can push a boot past its timeout. | Tolerated, recorded here so a lone red run gets a rerun before it gets an investigation. If it ever reproduces on a quiet machine, chase it. |
 | **`pauseWhenEmpty` was removed rather than implemented.** XState cannot pause a delayed transition. | The honest alternative is a room-authoring pattern: a room whose content must hold for an absent guest drives its beats from runtime events rather than `after`. Recorded in spec §3.5. |
 
 ---
@@ -122,27 +119,37 @@ answer as derived `standing`, applied to sound.
 renamed the runtime and every caller inside `server/spatial/`, and missed
 `relay.js` — a carried v0.2 module reached only when a phone connects, which no
 test did. It crashed on the first real handset. The test glob compounded it by
-covering `server/spatial/__tests__` alone, so the carried modules had no tests
-that could have failed. Both are fixed; the lesson is that the v0.2 surfaces
-still in the tree (`relay.js`, `client.js`) are the least-tested
-code here and the most likely to hold a stale assumption.
+covering `server/spatial/__tests__` alone.
 
-Worth recording how that lesson was eventually acted on, because the ratio is
-the argument. `server/spatial/` had 265 tests and has produced roughly one bug.
+Worth recording how the lesson was acted on, because the ratio is the argument.
+`server/spatial/` had 265 tests and has produced roughly one bug.
 `server/index.js` and `public/client.js` had none between them and produced
 six — the relay rename, the unsent `state`, the two-tab flap, the missing
 `hold`, the looping click, and the listener below the overlay. The pattern was
 not that the edges are harder; it is that nothing there could fail except in
 front of a person.
 
-`server/index.js` is now covered, and so is the part of the client that was
-pure logic wearing a browser's clothes — the recogniser needed a DOM only
-because it was written inside one. Pulling it into `public/gestures.js` with an
-injected clock made a four-hundred-millisecond hold testable in no time at all.
-What is left in `client.js` genuinely needs a browser, and is where Phase B's
-mixing and ducking will be written; the lesson to carry into that work is to
-write the decisions somewhere a test can reach before wiring them to an
-AudioContext, rather than after.
+The claim this note used to end on — that the v0.2 surfaces are the least-
+tested code and the most likely to hold a stale assumption — has been worked
+off, and it was right to the last. `relay.js` runs against a real runtime in
+its own tests; `server/index.js` is driven over a real socket; the test glob
+covers all three trees. The client's pure decisions were pulled out where tests
+reach them: the gesture recogniser (`gestures.js`), the clock estimator every
+cue's timing rests on (`clock-sync.js`), and the play/seek/skip choice
+(`cue-plan.js`). And the final audit of what remained found three more stale
+assumptions exactly where predicted, none of which any rehearsal had surfaced:
+the relay cache keyed peers by `from.userId` — a field the server stopped
+sending at the rename, so every peer collapsed onto one `undefined` key;
+`welcome` was read for `msg.userId` and fell back to a token fragment; and the
+snapshot-restore path replayed `snap.cues`, a field the server has never sent —
+dead code impersonating a second restoration path beside the real one (`ready`
+→ resync). The server was also still sending `displayVars` to phones that
+stopped reading it when the page framework was removed.
+
+What is left in `client.js` genuinely needs a browser: the WebAudio and DOM
+wiring the tested decisions are carried out with. The lesson to carry into
+Phase B stands — write the decisions somewhere a test can reach *before*
+wiring them to an AudioContext. The seams now exist to write them into.
 
 **A simulation tool acting on a real participant.** The walkthrough driver was
 built when every guest was a dot on a floor plan, and `start()` with no arguments

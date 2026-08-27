@@ -4,20 +4,24 @@
 'use strict';
 
 import { createGestureRecogniser, createRepeatGuard } from './gestures.js';
+import { createClock } from './clock-sync.js';
+import { planAudio } from './cue-plan.js';
 
 const $ = (id) => document.getElementById(id);
 
 // Shared surface for anything running on the phone: input emission + peer relay.
 const relayHandlers = new Map(); // channel → Set<fn>
-/** channel → userId → last relay msg */
+/** channel → guestId → last relay msg */
 const relayCache = new Map();
 
 function rememberRelay(msg) {
   if (!msg.channel || !msg.from) return;
   if (!relayCache.has(msg.channel)) relayCache.set(msg.channel, new Map());
   const peers = relayCache.get(msg.channel);
-  if (msg.payload == null) peers.delete(msg.from.userId);
-  else peers.set(msg.from.userId, msg);
+  // Keyed by guestId — the participant→guest rename reached here late, and
+  // while it read `from.userId` every peer collapsed onto one undefined key.
+  if (msg.payload == null) peers.delete(msg.from.guestId);
+  else peers.set(msg.from.guestId, msg);
 }
 
 function dispatchRelay(msg) {
@@ -53,7 +57,7 @@ function applyRelaySync(channels) {
 }
 
 window.DIM = {
-  self: { userId: null, label: null, token: null },
+  self: { guestId: null, label: null, token: null },
   /** Promote an interaction to the show state machine (canonical input events). */
   emit(type, payload) {
     sendMsg({ type: 'input', event: { type, payload: payload ?? {} } });
@@ -101,27 +105,9 @@ function storeToken(t) {
 }
 
 // ---------------------------------------------------------------------------
-// Clock sync (NTP-style, lowest-RTT median, smoothed)
+// Clock sync — the estimator lives in clock-sync.js, where it has tests.
 // ---------------------------------------------------------------------------
-const clock = {
-  samples: [], offset: 0, rtt: 0, jitter: 0, synced: false,
-  addSample(t0, server, t3) {
-    const rtt = t3 - t0;
-    this.samples.push({ offset: server + rtt / 2 - t3, rtt });
-    if (this.samples.length > 40) this.samples.shift();
-    const best = [...this.samples].sort((a, b) => a.rtt - b.rtt)
-      .slice(0, Math.max(3, Math.floor(this.samples.length / 2)));
-    const offsets = best.map((s) => s.offset).sort((a, b) => a - b);
-    const median = offsets[Math.floor(offsets.length / 2)];
-    this.offset = this.synced ? this.offset + 0.3 * (median - this.offset) : median;
-    this.rtt = Math.min(...best.map((s) => s.rtt));
-    const mean = offsets.reduce((a, b) => a + b, 0) / offsets.length;
-    this.jitter = Math.sqrt(offsets.reduce((a, o) => a + (o - mean) ** 2, 0) / offsets.length);
-    this.synced = true;
-  },
-  serverNow() { return Date.now() + this.offset; },
-  toLocal(serverTs) { return serverTs - this.offset; },
-};
+const clock = createClock();
 
 // ---------------------------------------------------------------------------
 // Assets: audio decoded to buffers, video fetched to blob URLs
@@ -176,49 +162,33 @@ function ctxTimeFor(serverTs) {
 function playAudio(cue, { seekIntoLoop = false } = {}) {
   const buffer = audioBuffers.get(cue.assetId);
   if (!buffer || !ctx) return;
+  // The decision lives in cue-plan.js, where it has tests. This function only
+  // owns the WebAudio wiring the decision is carried out with.
+  const plan = planAudio(cue, buffer.duration, clock.serverNow(), { seekIntoLoop });
+  if (plan.action === 'skip') return;
+
   stopAudio(cue.assetId, 0);
   const source = ctx.createBufferSource();
   source.buffer = buffer;
   source.loop = !!cue.loop;
+  if (plan.loopStart != null) {
+    source.loopStart = plan.loopStart;
+    source.loopEnd = plan.loopEnd;
+  }
   const gainNode = ctx.createGain();
   gainNode.gain.value = cue.gain ?? 1;
   source.connect(gainNode).connect(ctx.destination);
 
-  // A cue may name a slice of a longer file rather than the whole of it, so one
-  // recording can carry a sequence the guest paces themselves through. Every
-  // position below is relative to `base`, and `span` is the wall it stops at.
-  const base = cue.offset ?? 0;
-  const span = cue.duration != null
-    ? Math.min(cue.duration, Math.max(0, buffer.duration - base))
-    : Math.max(0, buffer.duration - base);
-  if (span <= 0) return;
-  if (source.loop) {
-    // `duration` on start() would end the source rather than wrap it, so a
-    // looping segment has to be bounded by the loop points instead.
-    source.loopStart = base;
-    source.loopEnd = base + span;
-  }
-  const play = (when, into = 0) => {
-    if (source.loop) return source.start(when, base + into);
-    if (cue.duration != null || base > 0) return source.start(when, base + into, span - into);
-    return source.start(when, into);
-  };
+  const start = (when) => (plan.startDuration != null
+    ? source.start(when, plan.startOffset, plan.startDuration)
+    : source.start(when, plan.startOffset));
 
-  const nowServer = clock.serverNow();
-  if (cue.startAt > nowServer) {
-    const when = ctxTimeFor(cue.startAt);
-    play(Math.max(when, ctx.currentTime));
+  if (plan.action === 'schedule') {
+    const when = ctxTimeFor(plan.at);
+    start(Math.max(when, ctx.currentTime));
     reportCueAt(cue, when);
-  } else if (cue.seek || (cue.loop && seekIntoLoop)) {
-    // Walked in halfway through: join the content where it actually is rather
-    // than starting it over. A one-shot that already finished is simply missed.
-    const elapsed = (nowServer - cue.startAt) / 1000;
-    if (!cue.loop && elapsed >= span) return;
-    play(ctx.currentTime, cue.loop ? elapsed % span : Math.max(0, elapsed));
-  } else if (nowServer - cue.startAt < 500) {
-    play(ctx.currentTime);
   } else {
-    return; // stale one-shot: skip
+    start(ctx.currentTime);
   }
   playing.set(cue.assetId, { source, gainNode });
 }
@@ -732,7 +702,7 @@ function connect() {
       case 'welcome':
         storeToken(msg.token);
         window.DIM.self = {
-          userId: msg.userId ?? msg.token?.slice(0, 8),
+          guestId: msg.guestId,
           label: msg.label,
           token: msg.token,
         };
@@ -801,7 +771,9 @@ async function applySnapshot(snap) {
 }
 
 function restoreFromSnapshot(snap) {
-  for (const cue of snap.cues ?? []) runCue(cue, { seekIntoLoop: true });
+  // Audio deliberately not restored from here: the snapshot has never carried
+  // cues. Joining sends `ready`, and the director re-sends everything the
+  // phone should be hearing — one restoration path, not two disagreeing ones.
   applyRelaySync(snap.relay);
 }
 

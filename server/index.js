@@ -420,9 +420,6 @@ function phoneSnapshot(token) {
         }
       : null,
     relay: relay.syncForRoom(relay.audienceKey(runtime, token)),
-    displayVars: Object.fromEntries(
-      Object.entries(runtime.globals).map(([k, v]) => [`global.${k}`, v]),
-    ),
   };
 }
 

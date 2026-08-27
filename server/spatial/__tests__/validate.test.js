@@ -113,6 +113,20 @@ describe('validateShowDefinition', () => {
     assert.deepEqual(warnings.filter((w) => /overlaps/.test(w)), []);
   });
 
+  it('refuses a path strategy the runtime does not implement', () => {
+    // `balanced` died when assignment moved to museum arrival; `manual` is an
+    // operator's act, not a show's strategy. A name that validates and then
+    // does nothing is a promise the show cannot keep — refuse it loudly.
+    for (const strategy of ['balanced', 'manual']) {
+      const errors = errorsFor((def) => {
+        def.guest.machine.guidance.states.roaming.entry = [
+          { type: 'assignPath', from: ['pathA'], strategy },
+        ];
+      });
+      assert.match(errors.join('\n'), /assignPath\.strategy/, strategy);
+    }
+  });
+
   it('accepts a minimal definition', () => {
     assert.deepEqual(validateShowDefinition(minimal()).errors, []);
   });

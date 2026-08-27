@@ -162,11 +162,17 @@ export const EXIT_POLICIES = ['resetAfter', 'finish', 'hold', 'resetImmediate'];
  */
 export const WHEN_AVAILABLE_POLICIES = ['wait', 'activate'];
 
+/**
+ * Only the strategies the runtime implements. `balanced` was declared for
+ * spreading occupancy at the door and died when assignment moved to arrival at
+ * the museum; `manual` is an operator overriding the show (the inspector's
+ * Path picker), which is an act a person performs, not a strategy a show can
+ * name. Naming either is now a load error rather than a promise the show
+ * cannot keep.
+ */
 export const PATH_ASSIGNMENT_STRATEGIES = [
   'roundRobin',
   'random',
-  'manual',
-  'balanced',
 ];
 
 export const ELIGIBILITY_STRATEGIES = [
