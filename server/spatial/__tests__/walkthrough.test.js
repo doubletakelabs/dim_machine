@@ -362,9 +362,17 @@ describe('walking a guest the show is waiting on', () => {
     assert.deepEqual(rt.load(museum).errors, []);
     rt.start();
     const g = rt.spawnGuest({ kind });
-    rt.setVirtualPosition(g.guestId, 120, 95);
+    // Room centres derived from the show's own zones rather than typed in —
+    // hardcoded coordinates broke the day the zones were retraced over the
+    // real plan, and would break again the day the zone tool redraws them.
+    const centreOf = (roomId) => {
+      const poly = Object.values(museum.rooms[roomId].zones)[0].polygon;
+      const [sx, sy] = poly.reduce(([a, b], [x, y]) => [a + x, b + y], [0, 0]);
+      return [sx / poly.length, sy / poly.length];
+    };
+    rt.setVirtualPosition(g.guestId, ...centreOf('frontDesk'));
     rt.testAdvanceTime(2600);
-    rt.setVirtualPosition(g.guestId, 260, 95);
+    rt.setVirtualPosition(g.guestId, ...centreOf('calibration'));
     rt.testAdvanceTime(2600);
     const guidance = () => rt.guestActors.get(g.guestId).regions().guidance;
     assert.equal(guidance(), 'prologue.calibration.step1');
