@@ -98,6 +98,8 @@
     fill: #b9c2d2; font-size: 10px; pointer-events: none;
     paint-order: stroke; stroke: #0b0c10; stroke-width: 2.5px; stroke-linejoin: round;
   }
+  #plan { cursor: grab; }
+  #plan.panning { cursor: grabbing; }
   .guest { cursor: grab; }
   .guest:active { cursor: grabbing; }
   .guestLabel {
@@ -121,6 +123,7 @@
     font-size: 10px; letter-spacing: 0;
   }
   .badge.hot { background: #5c2320; color: #ffd9d9; }
+  #simToggle.on { border-color: var(--accent); color: var(--ink); background: #1e2532; }
   .tabPanel { flex: 1; min-height: 0; display: none; flex-direction: column; }
   .tabPanel.on { display: flex; }
 
@@ -195,9 +198,10 @@
       <button class="tiny" data-rate="5">5×</button>
       <button class="tiny" data-rate="20">20×</button>
       <span class="pill" id="rateInfo">1×</span>
+      <button class="tiny" id="fitBtn" title="Show the whole plan (or double-click it)">⤢ Fit</button>
     </div>
     <div id="planWrap"><svg id="plan" preserveAspectRatio="xMidYMid meet"></svg></div>
-    <div id="planHint">Drag a guest to move them · click a room or guest to inspect it</div>
+    <div id="planHint">Drag a guest to move them · scroll to zoom · drag to pan · double-click to fit</div>
   </div>
 
   <div class="card">
@@ -209,20 +213,29 @@
 
     <div class="tabPanel on" data-panel="guests">
       <div class="controls">
+        <!-- Spawning and walking are rehearsal instruments, not show controls.
+             On the night this row should hold nothing an operator can press by
+             accident with a house full of real phones. -->
         <div class="row">
-          <input id="spawnCount" type="number" value="1" min="1" max="60" style="width:56px" />
-          <button id="spawnBtn">+ Spawn</button>
-          <button id="spawnWalkBtn">+ Spawn &amp; walk</button>
-          <span class="spacer"></span>
-          <button class="tiny" id="walkAllBtn">Walk all</button>
-          <button class="tiny" id="stopWalkBtn">Stop walking</button>
+          <button class="tiny" id="simToggle">⚗ Simulate</button>
+          <span class="muted" id="simHint" style="font-size:11px">spawn &amp; walk simulated guests</span>
         </div>
-        <div class="row" style="margin-top:6px">
-          <span class="pill">walk</span>
-          <label class="muted">speed <input id="walkSpeed" type="number" min="10" max="600" step="10" style="width:60px" /></label>
-          <label class="muted">dwell pad <input id="walkDwell" type="number" min="0" max="30000" step="500" style="width:70px" />ms</label>
-          <button class="tiny" id="applyWalkBtn">Apply</button>
-          <span class="pill" title="dwell = room's seen threshold + pad">?</span>
+        <div id="simControls" style="display:none">
+          <div class="row" style="margin-top:6px">
+            <input id="spawnCount" type="number" value="1" min="1" max="60" style="width:56px" />
+            <button id="spawnBtn">+ Spawn</button>
+            <button id="spawnWalkBtn">+ Spawn &amp; walk</button>
+            <span class="spacer"></span>
+            <button class="tiny" id="walkAllBtn">Walk all</button>
+            <button class="tiny" id="stopWalkBtn">Stop walking</button>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <span class="pill">walk</span>
+            <label class="muted">speed <input id="walkSpeed" type="number" min="10" max="600" step="10" style="width:60px" /></label>
+            <label class="muted">dwell pad <input id="walkDwell" type="number" min="0" max="30000" step="500" style="width:70px" />ms</label>
+            <button class="tiny" id="applyWalkBtn">Apply</button>
+            <span class="pill" title="dwell = room's seen threshold + pad">?</span>
+          </div>
         </div>
       </div>
       <div class="scrollBody">
@@ -451,6 +464,23 @@ for (const btn of document.querySelectorAll('[data-rate]')) {
   btn.onclick = () => send({ type: 'setTimeScale', rate: +btn.dataset.rate });
 }
 
+/**
+ * Simulation instruments live behind a toggle. Spawning sixty dots is a
+ * rehearsal act; on a show night the guests are people, and the panel should
+ * not offer their controls at the same eye level as the show's. Remembered
+ * per browser, since a rehearsal laptop stays a rehearsal laptop.
+ */
+function setSimMode(on) {
+  try { localStorage.setItem('dim.simMode', on ? '1' : ''); } catch { /* private mode */ }
+  $('simToggle').classList.toggle('on', on);
+  $('simHint').textContent = on ? 'simulated guests are rehearsal instruments' : 'spawn & walk simulated guests';
+  $('simControls').style.display = on ? '' : 'none';
+}
+$('simToggle').onclick = () => setSimMode(!$('simToggle').classList.contains('on'));
+let simSaved = '';
+try { simSaved = localStorage.getItem('dim.simMode') ?? ''; } catch { /* private mode */ }
+setSimMode(!!simSaved);
+
 // --------------------------------------------------------------- floor plan
 
 /**
@@ -468,6 +498,32 @@ function sizePlanColumn() {
   document.documentElement.style.setProperty('--plan-w', `${Math.round(w) + 14}px`);
 }
 window.addEventListener('resize', sizePlanColumn);
+
+/**
+ * Where the operator has zoomed to, or null for the whole plan.
+ *
+ * Kept apart from viewBox() (the fit) so that loading a different show — a
+ * different building — resets the camera rather than aiming it at a spot that
+ * meant something on the last one.
+ */
+let view = null;
+let fitKey = '';
+let panning = null;   // { pointerId, client, box }
+let panMoved = 0;     // px travelled — separates a pan from a click on a zone
+
+function currentBox() { return view ?? viewBox(); }
+
+function checkFit() {
+  const f = viewBox();
+  const key = `${f.x},${f.y},${f.w},${f.h}`;
+  if (key !== fitKey) { fitKey = key; view = null; }
+}
+
+/** Reaim the camera without rebuilding the scene — pan and zoom touch nothing else. */
+function applyView() {
+  const vb = currentBox();
+  $('plan').setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+}
 
 /** Screen coords → floor-plan coords, so a drag lands where the pointer is. */
 function planPoint(evt) {
@@ -496,7 +552,8 @@ function roomStateClass(state) {
 
 function renderPlan() {
   const svg = $('plan');
-  const vb = viewBox();
+  checkFit();
+  const vb = currentBox();
   svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
   svg.innerHTML = '';
 
@@ -505,14 +562,14 @@ function renderPlan() {
     const img = document.createElementNS(SVG_NS, 'image');
     img.setAttribute('href', `/assets/${fp.image}`);
     img.setAttribute('x', 0); img.setAttribute('y', 0);
-    img.setAttribute('width', fp.width ?? vb.w);
-    img.setAttribute('height', fp.height ?? vb.h);
+    const fit = viewBox();
+    img.setAttribute('width', fp.width ?? fit.w);
+    img.setAttribute('height', fp.height ?? fit.h);
     // Fill the declared box exactly. The zones are traced in that box, so a
     // letterboxed underlay (the default for an image whose own aspect differs
     // by even 1%) would shift the whole building relative to every polygon.
     // The stretch this permits is invisible; the offset it prevents is not.
     img.setAttribute('preserveAspectRatio', 'none');
-    img.setAttribute('opacity', '0.35');
     svg.appendChild(img);
   }
 
@@ -528,7 +585,11 @@ function renderPlan() {
     poly.setAttribute('class', `zone ${room?.kind === 'hallway' ? 'hallway'
       : (room?.kind === 'shared' ? 'shared ' : '') + roomStateClass(room?.state)}`
       + (selection?.kind === 'room' && selection.id === zone.roomId ? ' selected' : ''));
-    poly.onclick = () => { selection = { kind: 'room', id: zone.roomId }; render(); };
+    poly.onclick = () => {
+      if (panMoved > 4) return; // that was a pan ending here, not a choice
+      selection = { kind: 'room', id: zone.roomId };
+      render();
+    };
     poly.appendChild(title(`${zone.roomId} · zone ${zoneId}`));
     svg.appendChild(poly);
   }
@@ -695,17 +756,90 @@ function pendingProgress(dot) {
 
 requestAnimationFrame(stepDots);
 
-$('plan').addEventListener('pointermove', (evt) => {
-  if (!dragging || evt.pointerId !== dragging.pointerId) return;
-  const pt = planPoint(evt);
-  send({ type: 'setVirtualPosition', guestId: dragging.guestId, x: pt.x, y: pt.y });
+// A press on a guest grabs the guest (its own handler runs first and sets
+// `dragging`); a press anywhere else grabs the building.
+$('plan').addEventListener('pointerdown', (evt) => {
+  if (dragging) return;
+  // No capture yet: capturing here would retarget the eventual `click` to the
+  // svg and silently break choosing a room by clicking its zone. Capture
+  // starts once the pointer has moved far enough to be unmistakably a pan —
+  // by which point nobody wanted that click.
+  panning = {
+    pointerId: evt.pointerId,
+    client: { x: evt.clientX, y: evt.clientY },
+    box: currentBox(),
+    captured: false,
+  };
+  panMoved = 0;
 });
-$('plan').addEventListener('pointerup', (evt) => {
+
+$('plan').addEventListener('pointermove', (evt) => {
+  if (dragging && evt.pointerId === dragging.pointerId) {
+    const pt = planPoint(evt);
+    send({ type: 'setVirtualPosition', guestId: dragging.guestId, x: pt.x, y: pt.y });
+    return;
+  }
+  if (panning && evt.pointerId === panning.pointerId) {
+    const r = $('plan').getBoundingClientRect();
+    // Plan units per screen pixel under `meet`: the axis that binds decides.
+    const upp = Math.max(panning.box.w / r.width, panning.box.h / r.height);
+    const dx = evt.clientX - panning.client.x;
+    const dy = evt.clientY - panning.client.y;
+    panMoved = Math.max(panMoved, Math.hypot(dx, dy));
+    if (!panning.captured && panMoved > 4) {
+      panning.captured = true;
+      $('plan').setPointerCapture(evt.pointerId);
+      $('plan').classList.add('panning');
+    }
+    view = {
+      x: panning.box.x - dx * upp,
+      y: panning.box.y - dy * upp,
+      w: panning.box.w,
+      h: panning.box.h,
+    };
+    applyView();
+  }
+});
+
+const endPlanGesture = (evt) => {
   if (dragging?.pointerId === evt.pointerId) {
     $('plan').releasePointerCapture(evt.pointerId);
     dragging = null;
   }
-});
+  if (panning?.pointerId === evt.pointerId) {
+    if (panning.captured) $('plan').releasePointerCapture(evt.pointerId);
+    panning = null;
+    $('plan').classList.remove('panning');
+  }
+};
+$('plan').addEventListener('pointerup', endPlanGesture);
+$('plan').addEventListener('pointercancel', endPlanGesture);
+
+/**
+ * Zoom about the cursor: the point under the pointer stays under the pointer,
+ * which is what makes zooming feel like leaning in rather than teleporting.
+ * Zooming all the way back out snaps to the fit rather than hovering near it.
+ */
+$('plan').addEventListener('wheel', (evt) => {
+  evt.preventDefault();
+  const fit = viewBox();
+  const vb = currentBox();
+  const pt = planPoint(evt);
+  const factor = Math.exp(evt.deltaY * 0.0015);
+  const w = Math.max(fit.w / 25, vb.w * factor);
+  if (w >= fit.w) { view = null; applyView(); return; }
+  const scale = w / vb.w;
+  view = {
+    x: pt.x - (pt.x - vb.x) * scale,
+    y: pt.y - (pt.y - vb.y) * scale,
+    w,
+    h: vb.h * scale,
+  };
+  applyView();
+}, { passive: false });
+
+$('plan').addEventListener('dblclick', () => { view = null; applyView(); });
+$('fitBtn').onclick = () => { view = null; applyView(); };
 
 function text(x, y, content, cls, anchor = 'middle') {
   const el = document.createElementNS(SVG_NS, 'text');
