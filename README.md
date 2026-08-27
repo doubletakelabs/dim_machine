@@ -223,7 +223,7 @@ server/
     virtual-location.js   Floor-plan → desired occupancy
     zone-math.js          Point-in-polygon, centroids, floor-plan extent
     __tests__/          Unit tests
-public/                 Phone client and operator panel
+public/                 Phone client, operator panel, zone tracer (zones.html)
 ```
 
 ## Phase A exit criteria

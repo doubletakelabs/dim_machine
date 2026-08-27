@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DIM Machine — zone tracer</title>
+<style>
+  :root {
+    --bg: #0b0c10; --panel: #14161b; --line: #23262f;
+    --ink: #e8eaf0; --dim: #8a93a4; --faint: #5a6272;
+    --accent: #6ea8fe; --ok: #58c98a; --warn: #e0a758; --bad: #e0685f;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 13px/1.45 ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .mono { font-family: ui-monospace, Menlo, monospace; }
+  header {
+    flex: none; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  h1 { font-size: 13px; margin: 0 10px 0 0; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+  h1 .sub { color: var(--faint); font-weight: 400; letter-spacing: .06em; }
+  h2 { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); margin: 0; font-weight: 600; }
+  button, select {
+    background: #1d2027; color: var(--ink); border: 1px solid var(--line);
+    border-radius: 5px; padding: 5px 9px; font: inherit; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .35; cursor: default; }
+  button.go { background: #163826; border-color: #2f8f5b; }
+  button.tiny { padding: 2px 7px; font-size: 11px; }
+  .pill { padding: 3px 8px; border-radius: 999px; background: #1d2027; color: var(--dim); font-size: 11px; white-space: nowrap; }
+  .spacer { flex: 1; }
+  a { color: var(--dim); }
+
+  main { flex: 1; min-height: 0; display: grid; gap: 10px; padding: 10px; grid-template-columns: 1fr 300px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  }
+  .cardHead { flex: none; display: flex; gap: 6px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .cardBody { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; }
+
+  #planWrap { flex: 1; min-height: 0; padding: 6px; }
+  #plan { width: 100%; height: 100%; display: block; cursor: grab; }
+  #plan.panning { cursor: grabbing; }
+  #hint { flex: none; padding: 4px 10px 7px; color: var(--faint); font-size: 11px; }
+
+  .zone { stroke: #55606f; stroke-width: 1.2; fill: #3a4150; fill-opacity: .3; cursor: pointer; }
+  .zone.sel { stroke: var(--accent); stroke-width: 2; fill: #6ea8fe; fill-opacity: .18; }
+  .zone.clash { stroke: var(--bad); stroke-width: 2; fill: #e0685f; fill-opacity: .25; }
+  .roomLabel {
+    fill: #eef1f7; font-weight: 600; pointer-events: none;
+    paint-order: stroke; stroke: #0b0c10; stroke-linejoin: round;
+  }
+  .edgeHit { stroke: transparent; fill: none; cursor: copy; }
+  .vertex { fill: #e8eaf0; stroke: var(--accent); cursor: move; }
+  .vertex.sel { fill: var(--accent); }
+
+  .roomRow { display: flex; gap: 6px; align-items: center; padding: 3px 4px; border-radius: 5px; cursor: pointer; }
+  .roomRow:hover { background: #191d25; }
+  .roomRow.sel { background: #1e2532; }
+  .roomRow .zid { color: var(--faint); font-size: 11px; }
+  .clashText { color: var(--bad); }
+  .muted { color: var(--dim); }
+  #status { min-height: 18px; }
+  kbd {
+    background: #1d2027; border: 1px solid var(--line); border-radius: 4px;
+    padding: 0 4px; font: 11px ui-monospace, Menlo, monospace; color: var(--dim);
+  }
+  #help p { margin: 4px 0; color: var(--dim); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>DIM Machine <span class="sub">zone tracer</span></h1>
+  <select id="showFile"></select>
+  <button id="loadBtn">Load</button>
+  <span class="spacer"></span>
+  <span class="pill mono" id="cursorPos">—</span>
+  <span class="pill" id="dirtyPill" style="display:none">unsaved edits</span>
+  <button class="tiny" id="fitBtn">⤢ Fit</button>
+  <button class="go" id="saveBtn">Save</button>
+  <button id="saveReloadBtn" title="Saves, then reloads the show on the server — which stops it and clears every guest.">Save + reload show</button>
+  <a href="/operator.html" style="margin-left:6px">operator ↗</a>
+</header>
+
+<main>
+  <div class="card">
+    <div class="cardHead">
+      <h2>Plan</h2>
+      <span class="spacer"></span>
+      <span class="muted" id="status"></span>
+    </div>
+    <div id="planWrap"><svg id="plan" preserveAspectRatio="xMidYMid meet"></svg></div>
+    <div id="hint">
+      drag vertex to move · double-click edge to add a point · right-click or <kbd>⌫</kbd> removes it ·
+      arrows nudge (<kbd>⇧</kbd> ×5) · <kbd>⌘Z</kbd> undo · scroll zooms · drag empty plan pans
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="cardHead"><h2>Rooms</h2></div>
+    <div class="cardBody">
+      <div id="roomList"></div>
+      <div id="zoneActions" style="margin-top:10px; display:none">
+        <button class="tiny" id="addZoneBtn">+ zone to this room</button>
+        <button class="tiny" id="delZoneBtn">delete zone</button>
+      </div>
+      <h2 style="margin-top:14px">Overlaps</h2>
+      <div id="clashes" class="muted">—</div>
+      <div id="help">
+        <h2 style="margin-top:14px">Notes</h2>
+        <p>Edits land in the show file on Save — a running show keeps its loaded
+           copy until it is reloaded.</p>
+        <p>Coordinates are floorplan pixels, saved as integers. A polygon keeps
+           at least three points. Rooms may share a wall; they may not share
+           ground — overlaps turn red and are listed here, and the same check
+           runs again on the server at save and at load.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+import { polygonsOverlap, polygonCentroid } from '/lib/zone-math.js';
+
+const $ = (id) => document.getElementById(id);
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+let def = null;            // the whole show, edited in place
+let file = null;
+let selection = null;      // { roomId, zoneId }
+let selVertex = null;      // index into the selected zone's polygon
+let dirty = false;
+
+// ---------------------------------------------------------------- undo
+
+/**
+ * Snapshots of every room's zones, taken before each mutation. Zones only —
+ * the tracer must not be able to lose an edit someone made to the rest of the
+ * show by round-tripping a stale copy of it.
+ */
+const undoStack = [];
+let lastUndoAt = 0;
+
+function pushUndo(coalesceMs = 0) {
+  const now = Date.now();
+  if (coalesceMs && now - lastUndoAt < coalesceMs) return; // one entry per burst of arrow taps
+  lastUndoAt = now;
+  const snap = {};
+  for (const [roomId, room] of Object.entries(def.rooms)) {
+    snap[roomId] = JSON.stringify(room.zones ?? {});
+  }
+  undoStack.push(snap);
+  if (undoStack.length > 100) undoStack.shift();
+  markDirty();
+}
+
+function undo() {
+  const snap = undoStack.pop();
+  if (!snap) return;
+  for (const [roomId, zones] of Object.entries(snap)) {
+    if (def.rooms[roomId]) def.rooms[roomId].zones = JSON.parse(zones);
+  }
+  selVertex = null;
+  render();
+  setStatus('undone');
+}
+
+function markDirty() {
+  dirty = true;
+  $('dirtyPill').style.display = 'inline-block';
+}
+
+// Leaving with unsaved zone edits should cost a confirmation, not the edits.
+window.addEventListener('beforeunload', (e) => { if (dirty) e.preventDefault(); });
+
+// ---------------------------------------------------------------- camera
+
+let view = null;
+let panning = null;
+let panMoved = 0;
+
+function fitBox() {
+  const fp = def?.floorplan;
+  if (fp?.width && fp?.height) return { x: 0, y: 0, w: fp.width, h: fp.height };
+  // No declared plan: fit the zones themselves.
+  const pts = zonesFlat().flatMap((z) => z.polygon);
+  if (!pts.length) return { x: 0, y: 0, w: 100, h: 100 };
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  const pad = 40;
+  return {
+    x: Math.min(...xs) - pad, y: Math.min(...ys) - pad,
+    w: Math.max(...xs) - Math.min(...xs) + pad * 2,
+    h: Math.max(...ys) - Math.min(...ys) + pad * 2,
+  };
+}
+
+const currentBox = () => view ?? fitBox();
+
+/** Plan units per screen pixel at the current zoom — sizes handles and strokes. */
+function unitsPerPx() {
+  const r = $('plan').getBoundingClientRect();
+  const vb = currentBox();
+  return Math.max(vb.w / r.width, vb.h / r.height);
+}
+
+function planPoint(evt) {
+  const svg = $('plan');
+  const pt = svg.createSVGPoint();
+  pt.x = evt.clientX;
+  pt.y = evt.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+// ---------------------------------------------------------------- geometry
+
+function zonesFlat() {
+  const out = [];
+  for (const [roomId, room] of Object.entries(def?.rooms ?? {})) {
+    for (const [zoneId, zone] of Object.entries(room.zones ?? {})) {
+      if (Array.isArray(zone.polygon)) out.push({ roomId, zoneId, polygon: zone.polygon });
+    }
+  }
+  return out;
+}
+
+function selectedPolygon() {
+  if (!selection) return null;
+  return def?.rooms?.[selection.roomId]?.zones?.[selection.zoneId]?.polygon ?? null;
+}
+
+/** Zone keys currently claiming ground another room also claims. */
+function clashKeys() {
+  const zones = zonesFlat();
+  const keys = new Set();
+  const pairs = [];
+  for (let i = 0; i < zones.length; i++) {
+    for (let j = i + 1; j < zones.length; j++) {
+      if (zones[i].roomId === zones[j].roomId) continue;
+      if (zones[i].polygon.length < 3 || zones[j].polygon.length < 3) continue;
+      if (polygonsOverlap(zones[i].polygon, zones[j].polygon)) {
+        keys.add(`${zones[i].roomId}/${zones[i].zoneId}`);
+        keys.add(`${zones[j].roomId}/${zones[j].zoneId}`);
+        pairs.push(`${zones[i].roomId} ↔ ${zones[j].roomId}`);
+      }
+    }
+  }
+  return { keys, pairs };
+}
+
+/** Closest point on segment ab to p — where a double-clicked edge grows its vertex. */
+function projectOntoSegment(p, a, b) {
+  const abx = b[0] - a[0];
+  const aby = b[1] - a[1];
+  const len2 = abx * abx + aby * aby || 1;
+  const t = Math.max(0, Math.min(1, ((p.x - a[0]) * abx + (p.y - a[1]) * aby) / len2));
+  return [a[0] + abx * t, a[1] + aby * t];
+}
+
+// ---------------------------------------------------------------- render
+
+function text(x, y, content, cls, size) {
+  const el = document.createElementNS(SVG_NS, 'text');
+  el.setAttribute('x', x); el.setAttribute('y', y);
+  el.setAttribute('class', cls); el.setAttribute('text-anchor', 'middle');
+  el.setAttribute('font-size', size);
+  el.textContent = content;
+  return el;
+}
+
+function render() {
+  const svg = $('plan');
+  const vb = currentBox();
+  svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  svg.innerHTML = '';
+  if (!def) return;
+
+  const upp = unitsPerPx();
+
+  const fp = def.floorplan;
+  if (fp?.image) {
+    const img = document.createElementNS(SVG_NS, 'image');
+    img.setAttribute('href', `/assets/${fp.image}`);
+    img.setAttribute('x', 0); img.setAttribute('y', 0);
+    const fit = fitBox();
+    img.setAttribute('width', fp.width ?? fit.w);
+    img.setAttribute('height', fp.height ?? fit.h);
+    // Same rule as the operator panel: the zones live in this box, so the
+    // drawing must fill it exactly — letterboxing would shift the building.
+    img.setAttribute('preserveAspectRatio', 'none');
+    svg.appendChild(img);
+  }
+
+  const { keys: clashing } = clashKeys();
+
+  for (const z of zonesFlat()) {
+    if (z.polygon.length < 3) continue;
+    const key = `${z.roomId}/${z.zoneId}`;
+    const isSel = selection && selection.roomId === z.roomId && selection.zoneId === z.zoneId;
+    const poly = document.createElementNS(SVG_NS, 'polygon');
+    poly.setAttribute('points', z.polygon.map((p) => p.join(',')).join(' '));
+    poly.setAttribute('class', `zone${isSel ? ' sel' : ''}${clashing.has(key) ? ' clash' : ''}`);
+    poly.onclick = () => {
+      if (panMoved > 4) return;
+      select(z.roomId, z.zoneId);
+    };
+    svg.appendChild(poly);
+
+    const c = polygonCentroid(z.polygon);
+    if (c) svg.appendChild(text(c[0], c[1], def.rooms[z.roomId]?.name ?? z.roomId, 'roomLabel', 11 * upp));
+  }
+
+  // The selected zone gets its editing furniture: fat invisible edge targets
+  // for inserting points, then the vertex handles on top.
+  const polygon = selectedPolygon();
+  if (polygon) {
+    polygon.forEach((a, i) => {
+      const b = polygon[(i + 1) % polygon.length];
+      const edge = document.createElementNS(SVG_NS, 'line');
+      edge.setAttribute('x1', a[0]); edge.setAttribute('y1', a[1]);
+      edge.setAttribute('x2', b[0]); edge.setAttribute('y2', b[1]);
+      edge.setAttribute('class', 'edgeHit');
+      edge.setAttribute('stroke-width', 10 * upp);
+      edge.ondblclick = (evt) => {
+        evt.stopPropagation(); // an insert is not a fit-reset
+        pushUndo();
+        polygon.splice(i + 1, 0, projectOntoSegment(planPoint(evt), a, b));
+        selVertex = i + 1;
+        render();
+      };
+      svg.appendChild(edge);
+    });
+
+    polygon.forEach((p, i) => {
+      const h = document.createElementNS(SVG_NS, 'circle');
+      h.setAttribute('cx', p[0]); h.setAttribute('cy', p[1]);
+      h.setAttribute('r', 5 * upp);
+      h.setAttribute('stroke-width', 1.5 * upp);
+      h.setAttribute('class', `vertex${selVertex === i ? ' sel' : ''}`);
+      h.addEventListener('pointerdown', (evt) => {
+        evt.stopPropagation(); // a vertex grab is not a pan
+        if (evt.button !== 0) return;
+        selVertex = i;
+        pushUndo();
+        vertexDrag = { index: i, pointerId: evt.pointerId, handle: h };
+        svg.setPointerCapture(evt.pointerId);
+        render();
+      });
+      h.addEventListener('contextmenu', (evt) => {
+        evt.preventDefault();
+        removeVertex(i);
+      });
+      svg.appendChild(h);
+    });
+  }
+
+  renderSidebar();
+}
+
+function renderSidebar() {
+  const { pairs } = clashKeys();
+  $('clashes').innerHTML = pairs.length
+    ? pairs.map((p) => `<div class="clashText">✗ ${p}</div>`).join('')
+    : '<span class="muted">none — no point belongs to two rooms</span>';
+
+  $('roomList').innerHTML = Object.entries(def?.rooms ?? {}).map(([roomId, room]) => {
+    const zones = Object.keys(room.zones ?? {});
+    return zones.length
+      ? zones.map((zoneId) => `
+        <div class="roomRow ${selection?.roomId === roomId && selection?.zoneId === zoneId ? 'sel' : ''}"
+             data-room="${roomId}" data-zone="${zoneId}">
+          <span>${room.name ?? roomId}</span>
+          ${zones.length > 1 ? `<span class="zid">${zoneId}</span>` : ''}
+          <span class="spacer"></span>
+          <span class="zid">${(room.zones[zoneId].polygon ?? []).length} pts</span>
+        </div>`).join('')
+      : `<div class="roomRow" data-room="${roomId}"><span class="muted">${room.name ?? roomId}</span>
+         <span class="spacer"></span><span class="zid">no zone</span></div>`;
+  }).join('');
+
+  for (const row of $('roomList').querySelectorAll('.roomRow')) {
+    row.onclick = () => {
+      const roomId = row.dataset.room;
+      const zoneId = row.dataset.zone ?? null;
+      if (zoneId) select(roomId, zoneId);
+      else { selection = { roomId, zoneId: null }; selVertex = null; render(); }
+    };
+  }
+  $('zoneActions').style.display = selection ? '' : 'none';
+  $('delZoneBtn').disabled = !selection?.zoneId;
+}
+
+function select(roomId, zoneId) {
+  selection = { roomId, zoneId };
+  selVertex = null;
+  render();
+}
+
+function setStatus(t) { $('status').textContent = t; }
+
+// ---------------------------------------------------------------- editing
+
+let vertexDrag = null;   // { index, pointerId, handle }
+
+function removeVertex(i) {
+  const polygon = selectedPolygon();
+  if (!polygon) return;
+  if (polygon.length <= 3) { setStatus('a polygon keeps at least 3 points'); return; }
+  pushUndo();
+  polygon.splice(i, 1);
+  selVertex = null;
+  render();
+}
+
+$('addZoneBtn').onclick = () => {
+  if (!selection) return;
+  const room = def.rooms[selection.roomId];
+  room.zones ??= {};
+  // A room's zone ids must be unique across the whole show (they name places).
+  let n = Object.keys(room.zones).length + 1;
+  let zoneId = n === 1 ? selection.roomId : `${selection.roomId}${n}`;
+  const taken = new Set(zonesFlat().map((z) => z.zoneId));
+  while (taken.has(zoneId)) zoneId = `${selection.roomId}${++n}`;
+  // A box in the middle of wherever the operator is looking, sized to be
+  // grabbable at the current zoom — then dragged into shape.
+  const vb = currentBox();
+  const cx = vb.x + vb.w / 2;
+  const cy = vb.y + vb.h / 2;
+  const r = vb.w / 8;
+  pushUndo();
+  room.zones[zoneId] = { polygon: [
+    [cx - r, cy - r], [cx + r, cy - r], [cx + r, cy + r], [cx - r, cy + r],
+  ] };
+  select(selection.roomId, zoneId);
+};
+
+$('delZoneBtn').onclick = () => {
+  if (!selection?.zoneId) return;
+  pushUndo();
+  delete def.rooms[selection.roomId].zones[selection.zoneId];
+  selection = null;
+  selVertex = null;
+  render();
+};
+
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); undo(); return; }
+  if (e.key === 'Escape') { selection = null; selVertex = null; render(); return; }
+  const polygon = selectedPolygon();
+  if (!polygon || selVertex == null) return;
+  if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); removeVertex(selVertex); return; }
+  const step = e.shiftKey ? 5 : 1;
+  const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+  const move = moves[e.key];
+  if (!move) return;
+  e.preventDefault();
+  pushUndo(800); // a burst of taps is one edit to undo, not twenty
+  polygon[selVertex] = [polygon[selVertex][0] + move[0], polygon[selVertex][1] + move[1]];
+  render();
+});
+
+// ---------------------------------------------------------------- pointers
+
+$('plan').addEventListener('pointerdown', (evt) => {
+  if (vertexDrag) return;
+  panning = { pointerId: evt.pointerId, client: { x: evt.clientX, y: evt.clientY }, box: currentBox(), captured: false };
+  panMoved = 0;
+});
+
+$('plan').addEventListener('pointermove', (evt) => {
+  $('cursorPos').textContent = (() => {
+    const pt = planPoint(evt);
+    return `${Math.round(pt.x)}, ${Math.round(pt.y)}`;
+  })();
+
+  if (vertexDrag && evt.pointerId === vertexDrag.pointerId) {
+    const polygon = selectedPolygon();
+    if (!polygon) return;
+    const pt = planPoint(evt);
+    polygon[vertexDrag.index] = [pt.x, pt.y];
+    // Move only what moved — a full render per mousemove makes dragging gluey.
+    vertexDrag.handle.setAttribute('cx', pt.x);
+    vertexDrag.handle.setAttribute('cy', pt.y);
+    const sel = $('plan').querySelector('.zone.sel');
+    if (sel) sel.setAttribute('points', polygon.map((p) => p.join(',')).join(' '));
+    return;
+  }
+  if (panning && evt.pointerId === panning.pointerId) {
+    const r = $('plan').getBoundingClientRect();
+    const upp = Math.max(panning.box.w / r.width, panning.box.h / r.height);
+    const dx = evt.clientX - panning.client.x;
+    const dy = evt.clientY - panning.client.y;
+    panMoved = Math.max(panMoved, Math.hypot(dx, dy));
+    if (!panning.captured && panMoved > 4) {
+      panning.captured = true;
+      $('plan').setPointerCapture(evt.pointerId);
+      $('plan').classList.add('panning');
+    }
+    view = { x: panning.box.x - dx * upp, y: panning.box.y - dy * upp, w: panning.box.w, h: panning.box.h };
+    $('plan').setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+  }
+});
+
+const endGesture = (evt) => {
+  if (vertexDrag?.pointerId === evt.pointerId) {
+    $('plan').releasePointerCapture(evt.pointerId);
+    vertexDrag = null;
+    render(); // the cheap in-drag updates skipped the overlap check; settle up
+  }
+  if (panning?.pointerId === evt.pointerId) {
+    if (panning.captured) $('plan').releasePointerCapture(evt.pointerId);
+    panning = null;
+    $('plan').classList.remove('panning');
+  }
+};
+$('plan').addEventListener('pointerup', endGesture);
+$('plan').addEventListener('pointercancel', endGesture);
+
+$('plan').addEventListener('wheel', (evt) => {
+  evt.preventDefault();
+  const fit = fitBox();
+  const vb = currentBox();
+  const pt = planPoint(evt);
+  const factor = Math.exp(evt.deltaY * 0.0015);
+  const w = Math.max(fit.w / 40, vb.w * factor);
+  if (w >= fit.w) view = null;
+  else {
+    const scale = w / vb.w;
+    view = { x: pt.x - (pt.x - vb.x) * scale, y: pt.y - (pt.y - vb.y) * scale, w, h: vb.h * scale };
+  }
+  render(); // handles and labels are sized in plan units; zoom resizes them
+}, { passive: false });
+
+$('plan').addEventListener('dblclick', (evt) => {
+  // Only a double-click on nothing resets — edges claim theirs via stopPropagation.
+  if (evt.target.tagName === 'polygon' || evt.target.tagName === 'circle') return;
+  view = null;
+  render();
+});
+$('fitBtn').onclick = () => { view = null; render(); };
+window.addEventListener('resize', render);
+
+// ---------------------------------------------------------------- load/save
+
+async function loadShow(f) {
+  const res = await fetch(`/api/shows/${encodeURIComponent(f)}`);
+  if (!res.ok) { setStatus(`could not load ${f}`); return; }
+  def = await res.json();
+  file = f;
+  selection = null;
+  selVertex = null;
+  view = null;
+  undoStack.length = 0;
+  dirty = false;
+  $('dirtyPill').style.display = 'none';
+  setStatus(`${Object.keys(def.rooms ?? {}).length} rooms`);
+  render();
+}
+
+async function save() {
+  if (!def || !file) return false;
+  // Fractions are drag debris — the plan is pixels, and integer polygons keep
+  // the JSON diffable by eye.
+  for (const z of zonesFlat()) {
+    z.polygon.forEach((p, i) => { z.polygon[i] = [Math.round(p[0]), Math.round(p[1])]; });
+  }
+  const res = await fetch(`/api/shows/${encodeURIComponent(file)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(def),
+  });
+  const result = await res.json();
+  if (!res.ok) {
+    setStatus(`refused: ${(result.errors ?? [result.error]).join(' · ')}`);
+    return false;
+  }
+  dirty = false;
+  $('dirtyPill').style.display = 'none';
+  const warned = (result.warnings ?? []).filter((w) => /overlap/.test(w));
+  setStatus(warned.length ? `saved, with warnings: ${warned.join(' · ')}` : 'saved');
+  render();
+  return true;
+}
+
+$('saveBtn').onclick = save;
+
+/**
+ * Save, then have the server load the file it just wrote — over the same
+ * operator socket the panel uses. Reloading stops the show and clears every
+ * guest, which is why it is a separate button and says so in its title.
+ */
+$('saveReloadBtn').onclick = async () => {
+  if (!(await save())) return;
+  const ws = new WebSocket(`ws://${location.host}`);
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: 'hello', role: 'operator' }));
+    ws.send(JSON.stringify({ type: 'loadShow', file }));
+    setStatus('saved and reloaded');
+    setTimeout(() => ws.close(), 500);
+  };
+};
+
+async function init() {
+  const shows = await (await fetch('/api/shows')).json();
+  $('showFile').innerHTML = shows.map((f) => `<option>${f}</option>`).join('');
+  const asked = new URLSearchParams(location.search).get('file');
+  const first = asked && shows.includes(asked) ? asked : shows[0];
+  if (first) {
+    $('showFile').value = first;
+    await loadShow(first);
+  }
+  $('loadBtn').onclick = () => {
+    if (dirty && !confirm('Discard unsaved zone edits?')) return;
+    loadShow($('showFile').value);
+  };
+}
+
+init();
+</script>
+</body>
+</html>

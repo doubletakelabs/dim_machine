@@ -407,11 +407,23 @@ describe('the HTTP surface', () => {
     assert.ok(!list.includes('scratch.json'), 'and nothing lands on disk');
   });
 
-  it('serves the phone client and the panel', async () => {
-    for (const path of ['/', '/operator.html', '/client.js']) {
+  it('serves the phone client, the panel, and the zone tracer', async () => {
+    for (const path of ['/', '/operator.html', '/client.js', '/zones.html']) {
       const res = await fetch(`${server.url}${path}`);
       assert.equal(res.status, 200, `${path} should be served`);
     }
+  });
+
+  it('serves the real zone geometry to the tracer, not a copy', async () => {
+    const res = await fetch(`${server.url}/lib/zone-math.js`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type'), /javascript/);
+    const src = await res.text();
+    // The functions the tool needs, from the module the show actually runs —
+    // a drifted browser copy of overlap logic would approve zones the
+    // validator then rejects.
+    assert.match(src, /export function polygonsOverlap/);
+    assert.match(src, /export function pointInPolygon/);
   });
 });
 

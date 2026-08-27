@@ -55,6 +55,14 @@ const assetsDir = join(root, 'public', 'assets');
 const app = express();
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(join(root, 'public')));
+
+// The zone tracer judges overlaps in the browser with the same functions the
+// show judges occupancy with — served from the source, so there is no browser
+// copy to drift. It is the only server module a page may import.
+app.get('/lib/zone-math.js', (_req, res) => {
+  res.type('application/javascript');
+  res.sendFile(join(root, 'server', 'spatial', 'zone-math.js'));
+});
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer });
 
