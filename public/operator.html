@@ -748,6 +748,11 @@ function renderRooms() {
 
 function renderInspector() {
   const el = $('inspector');
+  // The roster lands every couple of seconds and this pane is rebuilt wholesale,
+  // which destroys any control the operator is part-way through using — an open
+  // dropdown vanishes mid-click, and a change event fires at an element that no
+  // longer exists. Leave it alone while it holds focus; the next tick redraws it.
+  if (el.contains(document.activeElement) && document.activeElement !== document.body) return;
   if (!selection) { el.className = 'muted'; el.textContent = 'Nothing selected.'; return; }
   el.className = '';
 
@@ -854,8 +859,9 @@ function renderInspector() {
       </select>
     </div>
     <p class="muted" style="margin:6px 0 0">
-      Rehearsal only — the show assigns these on arrival at the museum. Useful when
-      you need a specific room and do not want to rejoin until the dice land.
+      ${guest.pathPinned
+        ? 'Pinned — the show will not redraw this on arrival at the museum. Choose <em>no path</em> to hand them back.'
+        : 'Rehearsal only. The show assigns a path on arrival at the museum; choosing one here pins it against that.'}
     </p>
 
     <h2 style="margin-top:12px">Send to</h2>
@@ -877,10 +883,14 @@ function renderInspector() {
       <button class="tiny" data-nowalk="1">Stop</button>
     </div>`}`;
 
+  // Blur first: the pane is frozen while a control has focus, so leaving focus
+  // on the select would keep the operator looking at a stale inspector until
+  // they happened to click elsewhere.
+  const act = (message) => { document.activeElement?.blur?.(); send(message); };
   el.querySelector('[data-setpath]').onchange = (e) =>
-    send({ type: 'setGuestPath', guestId: guest.guestId, pathId: e.target.value || null });
+    act({ type: 'setGuestPath', guestId: guest.guestId, pathId: e.target.value || null });
   el.querySelector('[data-sendroom]').onchange = (e) =>
-    send({ type: 'sendGuestToRoom', guestId: guest.guestId, roomId: e.target.value || null });
+    act({ type: 'sendGuestToRoom', guestId: guest.guestId, roomId: e.target.value || null });
   el.querySelector('[data-walk]')?.addEventListener('click',
     () => send({ type: 'startWalkthrough', guestIds: [guest.guestId] }));
   el.querySelector('[data-nowalk]')?.addEventListener('click',

@@ -909,6 +909,9 @@ export class SpatialRuntime {
     if (!guest) return false;
     if (pathId != null && !this.def?.paths?.[pathId]) return false;
     guest.pathId = pathId;
+    // Pinned, so reaching the museum does not draw over it. Clearing the path
+    // hands the guest back to the show.
+    guest.pathPinned = pathId != null;
     this.append({ type: 'guest.pathSet', guestId, pathId });
     this.notifyChange();
     return true;

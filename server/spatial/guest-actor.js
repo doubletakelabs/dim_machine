@@ -335,6 +335,10 @@ export class GuestActor {
   }
 
   applyAssignPath(params) {
+    // A path somebody chose is not the show's to redraw. Without this, an
+    // operator setting a path before the guest reaches the museum watches it
+    // silently revert as they walk through the hallway.
+    if (this.guest.pathPinned) return;
     const pathId = this.assignPath(params?.from ?? [], params?.strategy ?? 'roundRobin');
     if (!pathId) return;
     this.guest.pathId = pathId;

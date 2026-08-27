@@ -21,6 +21,14 @@ export class Guest {
     this.token = init.token;
     this.label = init.label;
     this.pathId = init.pathId;
+    /**
+     * Whether a person chose this path rather than the show drawing it.
+     *
+     * The journey assigns a path on reaching the museum, and would otherwise
+     * overwrite an operator's choice the moment the guest walked through the
+     * hallway — which looks exactly like the panel silently ignoring the click.
+     */
+    this.pathPinned = false;
     /** Mirror of the guest machine's parallel regions. */
     this.regions = { location: 'outside', guidance: null, adherence: null };
     this.adherence = /** @type {'golden' | 'drifting' | 'cursed'} */ ('golden');
@@ -112,6 +120,7 @@ export class Guest {
       occupancy: this.occupancy,
       connected: this.connected,
       kind: this.kind,
+      pathPinned: this.pathPinned,
       visitHistory: this.visitHistory,
     };
   }

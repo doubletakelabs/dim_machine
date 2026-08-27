@@ -100,6 +100,28 @@ describe('the journey', () => {
     assert.ok(museum.paths[rt.guests.get(g.guestId).pathId]);
   });
 
+  it('does not redraw a path somebody chose', () => {
+    const rt = makeRuntime();
+    const g = rt.spawnGuest();
+    assert.equal(rt.setGuestPath(g.guestId, 'pathC'), true);
+    for (const roomId of PROLOGUE) walk(rt, g.guestId, roomId);
+    walk(rt, g.guestId, 'museumHallway');
+    // Reaching the museum is what assigns a path. An operator's choice made
+    // before that must survive it, or the panel looks like it ignored the click.
+    assert.equal(rt.guests.get(g.guestId).pathId, 'pathC');
+
+    // And handing them back to the show lets it draw again.
+    rt.setGuestPath(g.guestId, null);
+    assert.equal(rt.guests.get(g.guestId).pathPinned, false);
+  });
+
+  it('refuses a path the show does not have', () => {
+    const rt = makeRuntime();
+    const g = rt.spawnGuest();
+    assert.equal(rt.setGuestPath(g.guestId, 'pathZ'), false);
+    assert.equal(rt.guests.get(g.guestId).pathId, null);
+  });
+
   it('rotates paths between guests', () => {
     const rt = makeRuntime();
     const assigned = [arriveAtMuseum(rt), arriveAtMuseum(rt)].map((g) => rt.guests.get(g.guestId).pathId);
