@@ -3,3 +3,11 @@ node_modules/
 docs/experience-template/calibration.json
 installations/local.json
 handover/
+
+# Room experience projects. They live in this tree while being worked on, and
+# they carry hundreds of megabytes of media — 02_influence alone was 705MB, and
+# a `git add -A` put it in history twice before anyone noticed. They belong in
+# their own repos; this one references them by experienceId and an installation.
+[0-9][0-9]_*/
+02_influence/
+
