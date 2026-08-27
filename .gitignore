@@ -3,6 +3,7 @@ node_modules/
 docs/experience-template/calibration.json
 installations/local.json
 handover/
+handover.zip
 
 # Room experience projects. They live in this tree while being worked on, and
 # they carry hundreds of megabytes of media — 02_influence alone was 705MB, and
