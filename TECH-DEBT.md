@@ -6,7 +6,8 @@ was considered and settled is worth as much as the answer.
 
 Status: Phase A complete (A1–A6, A8, plus shared rooms), plus the thin audio
 layer, screens, phone input, screen sequences, room experiences, and installations.
-265 tests. The v0.2 custom-pages framework has been removed.
+287 tests, now including the WebSocket and HTTP surface. The v0.2 custom-pages
+framework has been removed.
 
 ---
 
@@ -71,8 +72,8 @@ having derived standing in the first place.
 | Item | Notes |
 |---|---|
 | **Phone experience beyond audio and screens** | Audio, full-screen images and touch input are live (CONTRACT.md §8.1), and the status line tracks room + standing. Video and haptics are still v0.2 surfaces nothing drives. The v0.2 page framework is gone — each screen is now built for itself as it is designed. |
-| **The phone client has no tests** | `public/client.js` is a plain browser script with no way to load it headless, so gesture recognition, cue execution and asset loading are verified by hand on a handset. Two faults have hidden here. Making the recogniser importable (or adding a headless browser) is the cheapest first step. |
-| **`server/index.js` has no tests** | The WS command surface, session handling, and phone push are verified by hand against a live server. Two bugs have now hidden there (the relay rename, the unsent `state` message) and both needed a real socket to surface. A harness that boots the server on an ephemeral port and drives it over `ws` would have caught both. |
+| **The phone client has no tests** | `public/client.js` is a plain browser script with no way to load it headless, so gesture recognition, cue execution and asset loading are verified by hand on a handset. Three faults have hidden here (`hold` missing entirely, the looping click, the listener below the overlay), and it is now the *only* untested file left in the tree. It is also where Phase B puts mixing, ducking and crossfade. Making the recogniser importable is the cheapest first step. |
+| ~~**`server/index.js` has no tests**~~ | **Resolved.** `server/__tests__/server.test.js` forks the real server on an ephemeral port and drives it over `ws`: sessions, the displacement rule, phone state push, operator authority, disconnect and return, malformed input, and the HTTP routes. Each of the three faults that hid here was reintroduced and confirmed to fail a test. What it still does not cover is anything requiring a browser — see the `public/client.js` row, which is now the only untested surface left. |
 | **The server is http only** | Which costs more than it looks. `navigator.wakeLock`, and every other API gated on a secure context, is simply undefined on the `http://192.168.x.x` a phone uses on venue wifi — so the screen-sleep fix falls back to a muted looping video. Self-signed https means trusting a profile on every handset; a real cert means a domain resolving on a network with no internet. Worth deciding before load-in rather than at it. |
 | **Phone-reported zones beyond the picker** | The handset's room picker (CONTRACT.md §8.1) covers browser test mode, which is Phase B's exit criterion. It is a `<select>` in the debug status bar, not a guest-facing surface, and it trusts whatever the phone says. Fine for rehearsal, wrong for a show. |
 | **Experience input is untested on a handset** | The phone's `stream` mode — continuous drag, release velocity, hold, the second socket — is verified against a fake room server and by hand. `hold` shipped missing entirely and no test could have caught it, because nothing tests what the recogniser emits. `public/client.js` still has no headless test, so this is the third capability landing there unproven by machine. |
@@ -124,6 +125,15 @@ covering `server/spatial/__tests__` alone, so the carried modules had no tests
 that could have failed. Both are fixed; the lesson is that the v0.2 surfaces
 still in the tree (`relay.js`, `client.js`) are the least-tested
 code here and the most likely to hold a stale assumption.
+
+Worth recording how that lesson was eventually acted on, because the ratio is
+the argument. `server/spatial/` had 265 tests and has produced roughly one bug.
+`server/index.js` and `public/client.js` had none between them and produced
+six — the relay rename, the unsent `state`, the two-tab flap, the missing
+`hold`, the looping click, and the listener below the overlay. The pattern was
+not that the edges are harder; it is that nothing there could fail except in
+front of a person. `server/index.js` is now covered; `client.js` is not, and is
+where Phase B's audio mixing is about to be written.
 
 **A simulation tool acting on a real participant.** The walkthrough driver was
 built when every guest was a dot on a floor plan, and `start()` with no arguments

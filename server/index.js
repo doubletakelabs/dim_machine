@@ -815,9 +815,16 @@ wss.on('connection', (ws) => {
 });
 
 httpServer.listen(PORT, () => {
+  // The bound port, not the asked-for one. `PORT=0` means "any free port",
+  // which is how the test harness boots a server without fighting whatever is
+  // already on 4000 — and it also makes the banner honest in that case.
+  const port = httpServer.address().port;
   console.log('DIM Machine — spatial runtime (v0.3 Phase A)');
-  console.log(`  phone client:   http://localhost:${PORT}/`);
-  console.log(`  operator panel: http://localhost:${PORT}/operator.html`);
+  console.log(`  phone client:   http://localhost:${port}/`);
+  console.log(`  operator panel: http://localhost:${port}/operator.html`);
   console.log(`  shows dir:      ${showsDir} (${listShows().join(', ') || 'empty'})`);
   console.log(`  installation:   ${installation?.installation ?? (installationPath || 'none — the show carries its own addresses')}`);
+  // Only ever set when started with `fork()`, which nothing but the tests does.
+  // Parsing the banner would work until somebody reworded it.
+  process.send?.({ type: 'listening', port });
 });
