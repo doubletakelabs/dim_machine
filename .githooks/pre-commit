@@ -1,0 +1,34 @@
+#!/bin/sh
+#
+# Reject a staged file large enough to be a mistake.
+#
+# 02_influence — 705MB of screen recordings — went into this repo's history
+# twice, in commits that looked entirely reasonable, and nobody noticed until
+# .git was 670MB and someone asked. A .gitignore entry only helps for the
+# folders somebody thought of in advance. This catches the ones nobody did.
+#
+# Override for a file that genuinely belongs:  git commit --no-verify
+
+LIMIT_MB=10
+LIMIT=$((LIMIT_MB * 1024 * 1024))
+report=$(mktemp)
+trap 'rm -f "$report"' EXIT
+
+# -z, and reading into a file rather than a variable, because a pipe runs the
+# loop in a subshell and the paths that started this had spaces in them.
+git diff --cached --name-only -z --diff-filter=ACM | while IFS= read -r -d '' file; do
+    [ -f "$file" ] || continue
+    size=$(wc -c < "$file" | tr -d ' ')
+    if [ "$size" -gt "$LIMIT" ]; then
+        printf '  %6.1f MB  %s\n' "$(echo "$size" | awk '{print $1/1048576}')" "$file" >> "$report"
+    fi
+done
+
+if [ -s "$report" ]; then
+    printf '\nRefusing to commit files over %sMB:\n\n' "$LIMIT_MB" >&2
+    cat "$report" >&2
+    printf '\nMedia and experience projects belong in their own repos — this one\n' >&2
+    printf 'references them by experienceId and an installation address.\n\n' >&2
+    printf 'If this file really belongs here:  git commit --no-verify\n\n' >&2
+    exit 1
+fi
