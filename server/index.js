@@ -51,7 +51,6 @@ if (installationPath) {
 }
 const showsDir = join(root, 'shows');
 const assetsDir = join(root, 'public', 'assets');
-const customPagesDir = join(root, 'public', 'custom-pages');
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
@@ -71,18 +70,6 @@ function listShows() {
   }
 }
 
-function listCustomPages() {
-  try {
-    return readdirSync(customPagesDir)
-      .filter((name) => !name.startsWith('_'))
-      .filter((name) => existsSync(join(customPagesDir, name, 'page.js')))
-      .sort();
-  } catch {
-    return [];
-  }
-}
-
-app.get('/api/custom-pages', (_req, res) => res.json(listCustomPages()));
 app.get('/api/shows', (_req, res) => res.json(listShows()));
 
 app.get('/api/shows/:file', (req, res) => {

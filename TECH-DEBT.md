@@ -6,7 +6,7 @@ was considered and settled is worth as much as the answer.
 
 Status: Phase A complete (A1–A6, A8, plus shared rooms), plus the thin audio
 layer, screens, phone input, screen sequences, room experiences, and installations.
-265 tests.
+265 tests. The v0.2 custom-pages framework has been removed.
 
 ---
 
@@ -42,6 +42,7 @@ JSON currently cannot keep.
 | `rooms.*.audio.minRemainingMs` | Phase B — read nowhere at all. A one-shot that already finished is dropped rather than replayed, but there is no late-arrival variant to route to |
 | `rooms.*.outputs.cues` | Phase D — lighting and DMX. Room *experiences* (docs/ROOM-EXPERIENCE.md) are live and take a different route: a broker link to a piece running its own server, not an output intent |
 | `guest.audioLayers` | Phase B. Three fixed audio slots (`room`, `guidance`, `adherence`) plus `screen` stand in; no ducking, crossfade, or priority |
+| `server/relay.js` | Live and correct, with no consumer. Its only one was the custom-pages framework, now removed; a room experience talks to its own server directly. Kept because phone-to-phone within a room is plausible for a future room, and the rate limiting and room scoping are the parts that would have to be got right again. Delete it if nothing wants it by the time Phase B closes |
 | `inputBindings` | **Live for phone gestures** (`tap`, `swipe`, `shake` → guest-machine events). In-room device inputs are still Phase D |
 | `ineligible.policy`: `ambientOnly`, `lockedMessage`, `tease` | Still selected and reported without choosing a response — but `audience: "ineligible"` now exists, so a show can author the audio by hand. Wiring the policy to pick it is the remaining step |
 | `paths.*.guidance`: `guestDirectedPath`, `freeExplore` | Only `goldenPath` drives a target today |
@@ -69,7 +70,7 @@ having derived standing in the first place.
 
 | Item | Notes |
 |---|---|
-| **Phone experience beyond audio and screens** | Audio, full-screen images and touch input are live (CONTRACT.md §8.1), and the status line tracks room + standing. Pages, video, haptics and `setVar` are still v0.2 surfaces nothing drives. |
+| **Phone experience beyond audio and screens** | Audio, full-screen images and touch input are live (CONTRACT.md §8.1), and the status line tracks room + standing. Video and haptics are still v0.2 surfaces nothing drives. The v0.2 page framework is gone — each screen is now built for itself as it is designed. |
 | **The phone client has no tests** | `public/client.js` is a plain browser script with no way to load it headless, so gesture recognition, cue execution and asset loading are verified by hand on a handset. Two faults have hidden here. Making the recogniser importable (or adding a headless browser) is the cheapest first step. |
 | **`server/index.js` has no tests** | The WS command surface, session handling, and phone push are verified by hand against a live server. Two bugs have now hidden there (the relay rename, the unsent `state` message) and both needed a real socket to surface. A harness that boots the server on an ephemeral port and drives it over `ws` would have caught both. |
 | **The server is http only** | Which costs more than it looks. `navigator.wakeLock`, and every other API gated on a secure context, is simply undefined on the `http://192.168.x.x` a phone uses on venue wifi — so the screen-sleep fix falls back to a muted looping video. Self-signed https means trusting a profile on every handset; a real cert means a domain resolving on a network with no internet. Worth deciding before load-in rather than at it. |
@@ -121,7 +122,7 @@ renamed the runtime and every caller inside `server/spatial/`, and missed
 test did. It crashed on the first real handset. The test glob compounded it by
 covering `server/spatial/__tests__` alone, so the carried modules had no tests
 that could have failed. Both are fixed; the lesson is that the v0.2 surfaces
-still in the tree (`relay.js`, `client.js`, `pages.js`) are the least-tested
+still in the tree (`relay.js`, `client.js`) are the least-tested
 code here and the most likely to hold a stale assumption.
 
 **A simulation tool acting on a real participant.** The walkthrough driver was

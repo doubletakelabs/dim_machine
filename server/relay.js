@@ -1,4 +1,10 @@
-// Room-scoped peer relay — arbitrary channels + JSON payloads for custom pages.
+// Room-scoped peer relay — arbitrary channels + JSON payloads, phone to phone.
+//
+// Nothing uses this today. Its only consumer was the custom-pages framework,
+// which is gone; a room experience talks to its own server directly instead.
+// Kept because phone-to-phone within a room is a plausible thing for a future
+// room to want, and the rate limiting and room scoping here are the parts that
+// would have to be got right again. See TECH-DEBT §2.
 
 const CHANNEL_RE = /^[a-zA-Z][a-zA-Z0-9._:-]{0,63}$/;
 const MAX_PAYLOAD_BYTES = 8192;

@@ -1,11 +1,11 @@
 // DIM Machine — Phase 1 phone cue player.
 // Clock sync, asset preload (audio + video), scheduled cue execution,
-// interactive pages (pages.js), input promotion, snapshot resume.
+// input promotion, snapshot resume.
 'use strict';
 
 const $ = (id) => document.getElementById(id);
 
-// Shared surface for pages.js: input emission + display-variable store + peer relay.
+// Shared surface for anything running on the phone: input emission + peer relay.
 const relayHandlers = new Map(); // channel → Set<fn>
 /** channel → userId → last relay msg */
 const relayCache = new Map();
@@ -50,13 +50,7 @@ function applyRelaySync(channels) {
   }
 }
 
-const pageLoaderApis = {
-  registerPage: window.DIM?.registerPage,
-  pageAsset: window.DIM?.pageAsset,
-};
-
 window.DIM = {
-  vars: {},
   self: { userId: null, label: null, token: null },
   /** Promote an interaction to the show state machine (canonical input events). */
   emit(type, payload) {
@@ -64,7 +58,7 @@ window.DIM = {
   },
   /**
    * Peer relay — arbitrary channels + JSON payloads, room-scoped fan-out.
-   * Does not touch the state machine. See custom-pages-kit/CUSTOM-PAGES.md.
+   * Does not touch the state machine.
    */
   relay: {
     send(channel, payload, opts = {}) {
@@ -85,8 +79,6 @@ window.DIM = {
       relayHandlers.get(channel)?.delete(fn);
     },
   },
-  registerPage: pageLoaderApis.registerPage,
-  pageAsset: pageLoaderApis.pageAsset,
 };
 
 // ---------------------------------------------------------------------------
@@ -313,18 +305,6 @@ function clearImage(assetId) {
 }
 let shownImage = null;
 
-function showPage(cue) {
-  hideVideo();
-  currentPage = { page: cue.page, props: cue.props ?? {} };
-  return window.DIM_PAGES.render($('page'), currentPage.page, currentPage.props);
-}
-let currentPage = null;
-
-function setVar(key, value) {
-  window.DIM.vars[key] = value;
-  if (currentPage) return window.DIM_PAGES.render($('page'), currentPage.page, currentPage.props);
-}
-
 function haptic(pattern) {
   try { navigator.vibrate?.(pattern); } catch {}
 }
@@ -361,9 +341,7 @@ function runCue(cue, opts = {}) {
     case 'clearImage': clearImage(cue.assetId); break;
     case 'experience': openExperience(cue); break;
     case 'endExperience': closeExperience(); break;
-    case 'page': showPage(cue); break;
     case 'haptic': haptic(cue.pattern ?? [200]); break;
-    case 'setVar': setVar(cue.key, cue.value); break;
     case 'flash': scheduleFlash(cue); break;
     case 'synctest': scheduleFlash(cue); playAudio({ ...cue, kind: 'audio', assetId: 'click.wav' }); break;
   }
@@ -869,14 +847,8 @@ async function applySnapshot(snap) {
 }
 
 function restoreFromSnapshot(snap) {
-  Object.assign(window.DIM.vars, snap.displayVars ?? {});
-  const pagePromise = snap.page
-    ? showPage({ kind: 'page', ...snap.page })
-    : Promise.resolve();
-  return pagePromise.then(async () => {
-    for (const cue of snap.cues ?? []) runCue(cue, { seekIntoLoop: true });
-    applyRelaySync(snap.relay);
-  });
+  for (const cue of snap.cues ?? []) runCue(cue, { seekIntoLoop: true });
+  applyRelaySync(snap.relay);
 }
 
 function setConn(ok) {
@@ -904,7 +876,7 @@ $('join').addEventListener('click', async () => {
   // had no AudioContext to play it. Ask for a resend rather than start deaf.
   sendMsg({ type: 'ready' });
   $('joinScreen').style.display = 'none';
-  window.DIM_PAGES.render($('page'), 'waiting', { title: 'Waiting for the show…' });
+  $('page').textContent = 'Waiting for the show…';
   if (pendingSnapshot) {
     const snap = pendingSnapshot;
     pendingSnapshot = null;

@@ -208,7 +208,7 @@ can watch the window tick down.
 ```
 server/
   index.js              WebSocket + HTTP (operator, phones)
-  relay.js              Room-scoped peer relay (custom pages, Phase B+)
+  relay.js              Room-scoped peer relay (no consumer today — TECH-DEBT §2)
   spatial/
     contract.js         v3 constants + required room states/transitions
     validate.js         Show definition validator
@@ -223,8 +223,7 @@ server/
     virtual-location.js   Floor-plan → desired occupancy
     zone-math.js          Point-in-polygon, centroids, floor-plan extent
     __tests__/          Unit tests
-public/                 Phone client + custom-pages kit (Phase B+)
-custom-pages-kit/       Standalone custom page dev (unchanged)
+public/                 Phone client and operator panel
 ```
 
 ## Phase A exit criteria
@@ -236,7 +235,7 @@ on the floor plan, with no phones and no hardware. Everything except capacity
 
 ## Carried over from v0.2
 
-Clock sync, WebSocket transport, session tokens, custom-pages kit, peer relay,
+Clock sync, WebSocket transport, session tokens, peer relay,
 built-in phone pages (Phase B).
 
 ## Removed

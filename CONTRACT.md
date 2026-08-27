@@ -817,13 +817,12 @@ Unchanged from v0.2. Actions of the form
 | `playAudio` | `assetId`, `gain?` (0–1), `loop?`, `leadTimeMs?` |
 | `stopAudio` | `assetId?` (default `"*"`), `fadeMs?` |
 | `playVideo` | `assetId`, `loop?`, `leadTimeMs?` |
-| `showPage` | `page`, `props` |
 | `haptic` | `pattern` (ms array) |
-| `setVar` | `key`, `value` |
 
-Built-in pages (props interpolate display vars with `${key}`, live-updated on
-`setVar`): `waiting`, `blank`, `text`, `prompt`, `gestureSurface`,
-`audioPlayer`, `videoPlayer`. New page types are additive.
+The v0.2 page framework — `showPage`, `setVar`, display variables and a set of
+built-in page types — has been **removed**. Each screen the show needs is now
+built for itself as it is designed, rather than assembled from a generic page
+kit; §8.1's `screen` slot covers the ones that exist today.
 
 Phone audio layers (§6.2 of the spec) are **declared**: `tour`, `room`,
 `ambient`, with mixing rules at show level. Phase B.
@@ -903,7 +902,6 @@ HTTP:
 | `POST /api/spatial/position` `{ guestId\|token, x, y }` | virtual walkthrough placement |
 | `POST /api/spatial/tier` `{ guestId\|token, zoneId, tier }` | direct placement (`inside` / `outside`) |
 | `POST /api/spatial/activate` `{ guestId\|token, roomId }` | manual activation request — for testing; the show does this automatically |
-| `GET /api/custom-pages` | installed custom pages |
 
 Operator WebSocket: `loadShow`, `startShow`, `stopShow`, `spawnGuest`
 (`count`, `walk`), `removeGuest`, `setVirtualPosition`, `setVirtualOccupancy`,
@@ -931,25 +929,23 @@ can accept, which is what keeps rooms reusable across shows.
 
 ---
 
-## 12. Peer relay and custom pages — carried
+## 12. Peer relay — carried
 
-Unchanged from v0.2, and still valuable: relay channels are now naturally scoped
-to room occupancy.
+Phone-to-phone messaging, scoped to room occupancy. It does not touch the state
+machine.
 
 - Phone → server: `{ type: "relay", channel, payload, persist? }`
 - Server → phone: `{ type: "relay", channel, from: { guestId, label, token }, payload, at, self }`
 - On join: `{ type: "relaySync", channels: { [channel]: [{ from, payload, at }] } }`
 
-Client API: `DIM.relay.send(channel, payload, opts?)`, `DIM.relay.on(channel, fn)`,
-plus `DIM.registerPage`, `DIM.emit`, `DIM.vars`, `DIM.pageAsset`.
+Client API: `DIM.relay.send(channel, payload, opts?)`, `DIM.relay.on(channel, fn)`.
 
-Custom pages ship as `public/custom-pages/<pageName>/page.js` (+ optional
-`styles.css` and assets); the folder name is `showPage`'s `params.page`. Preview
-locally with `custom-pages-kit/` (`npm start` → `page-preview.html`). Authoring
-guide: `custom-pages-kit/CUSTOM-PAGES.md`.
-
-Two hardening items are folded into Phase B: an error boundary around page
-render, and a teardown hook on page swap.
+**Nothing uses this today.** Its only consumer was the custom-pages framework,
+which is gone; a room experience talks to its own server directly instead
+(§8.1). Kept because phone-to-phone within a room is a plausible thing for a
+future room to want, and the rate limiting and room scoping are the parts that
+would have to be got right again. Recorded in TECH-DEBT §2 so it is not mistaken
+for something in use.
 
 ---
 
