@@ -2178,9 +2178,8 @@
         "audio": "chime.wav"
       },
       "adherence.offPath": {
-        "audio": "click.wav",
-        "loop": true,
-        "gain": 0.2
+        "audio": "chime.wav",
+        "gain": 0.35
       }
     }
   },

@@ -131,7 +131,7 @@ describe('cue director', () => {
     enter(rt, a.guestId, AT.library);
     rt.guestActors.get(a.guestId).send({ type: 'wentOffPath' });
     rt.reconcileCues();
-    assert.equal(hearing(rt, a.guestId).adherence, 'click.wav');
+    assert.equal(hearing(rt, a.guestId).adherence, 'chime.wav');
     assert.equal(hearing(rt, a.guestId).room, 'whisper.wav', 'room slot is untouched');
   });
 

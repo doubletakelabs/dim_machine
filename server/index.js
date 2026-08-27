@@ -213,6 +213,51 @@ function missingAssets() {
   return currentAssets().filter((asset) => !existsSync(join(assetsDir, asset)));
 }
 let assetProblems = [];
+
+/**
+ * Seconds of a WAV, read straight from its header. No decoder, no dependency,
+ * and `null` for anything else — this exists for one check and does not need to
+ * understand audio.
+ */
+function wavSeconds(asset) {
+  if (!/\.wav$/i.test(asset)) return null;
+  try {
+    const head = readFileSync(join(assetsDir, asset)).subarray(0, 64);
+    if (head.toString('ascii', 0, 4) !== 'RIFF') return null;
+    const byteRate = head.readUInt32LE(28);
+    const dataSize = head.readUInt32LE(40);
+    return byteRate > 0 ? dataSize / byteRate : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A very short sound set to loop.
+ *
+ * This is not a style note. `click.wav` is a five-millisecond transient in a
+ * fifty-millisecond file, made for measuring sync skew, and a show declared it
+ * `loop: true` — which is a tick twenty times a second in a guest's ears for as
+ * long as they are off-path, which is forever. It went unnoticed until somebody
+ * wore the headphones.
+ */
+function badLoops(def) {
+  const found = [];
+  const check = (cues, where) => {
+    for (const [key, declared] of Object.entries(cues ?? {})) {
+      for (const cue of [].concat(declared)) {
+        if (!cue?.loop || !cue.audio) continue;
+        const seconds = wavSeconds(cue.audio);
+        if (seconds != null && seconds < 1) {
+          found.push(`${where}.${key} loops ${cue.audio}, which is ${Math.round(seconds * 1000)}ms long`);
+        }
+      }
+    }
+  };
+  check(def.guest?.cues, 'guest.cues');
+  for (const [roomId, room] of Object.entries(def.rooms ?? {})) check(room.cues, `rooms.${roomId}.cues`);
+  return found;
+}
 let notInstalled = [];
 
 function loadShow(file) {
@@ -240,6 +285,7 @@ function loadShow(file) {
   loadedShowFile = basename(file);
   assetProblems = missingAssets();
   for (const asset of assetProblems) opLog(`✗ missing asset: ${asset}`);
+  for (const loop of badLoops(def)) opLog(`⚠ ${loop} — that is a tick, not a texture`);
   broadcast({ type: 'assets', assets: currentAssets() }, 'phones');
   sendRoster();
 }
