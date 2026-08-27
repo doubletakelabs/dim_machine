@@ -176,7 +176,7 @@ const DRIVER = `<!doctype html><meta charset="utf-8"><title>Driver</title>
 <div id="log"></div>
 <script>
 // The same recogniser the show's phone client uses: intent leaves here, physics
-// stays on the wall. Deltas are fractions of THIS screen, so device size drops out.
+// stays on the display. Deltas are fractions of THIS screen, so device size drops out.
 const $=(i)=>document.getElementById(i);
 const SWIPE_MIN=60, SWIPE_MAX_MS=900, TAP_MAX_PX=20, HOLD_MS=400;
 let exp=null, me=null;

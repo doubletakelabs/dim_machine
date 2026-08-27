@@ -42,7 +42,7 @@ const INTENTS = ['drag', 'release', 'tap', 'hold', 'swipe'];
 check(manifest.contract === 1, 'manifest declares contract 1', `got ${manifest.contract}`);
 check(/^[a-z0-9-]+$/.test(manifest.experienceId ?? ''), 'experienceId is stable and kebab-case');
 check(typeof manifest.version === 'string', 'version is declared');
-check(typeof manifest.entry?.wall === 'string', 'entry.wall names the display page');
+check(typeof manifest.entry?.display === 'string', 'entry.display names the display page');
 check(
   Array.isArray(manifest.inputs) && manifest.inputs.length
     && manifest.inputs.every((i) => INTENTS.includes(i)),
@@ -53,7 +53,7 @@ check(Number.isInteger(manifest.maxDrivers) && manifest.maxDrivers > 0, 'maxDriv
 
 // A hardcoded address is the fault that only shows up once the piece is in a
 // building that is not the one it was written in.
-const sources = ['server.js', manifest.entry?.wall?.replace(/^\//, '')].filter(Boolean);
+const sources = ['server.js', manifest.entry?.display?.replace(/^\//, '')].filter(Boolean);
 const hardcoded = [];
 for (const file of sources) {
   const path = join(dir, file);
@@ -98,8 +98,8 @@ async function get(path) {
   }
 }
 
-const wall = await get(manifest.entry.wall);
-check(wall.status === 200, `serves ${manifest.entry.wall}`, `HTTP ${wall.status}`);
+const display = await get(manifest.entry.display);
+check(display.status === 200, `serves ${manifest.entry.display}`, `HTTP ${display.status}`);
 
 // --------------------------------------------------------------- broker link
 

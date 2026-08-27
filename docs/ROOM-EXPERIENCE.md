@@ -10,14 +10,14 @@ and `verify` will say so before anyone finds out on the floor.
 ## 1. What you are building, and what you are not
 
 The Museum is a 23-space audio-guided show. Guests carry phones. Some rooms hand
-their interaction to a **separate piece** — a wall, a projection, something with
+their interaction to a **separate piece** — a display, a projection, something with
 its own physics — running **its own server on a machine in that room**. You are
 building one of those.
 
 Two connections reach your server, and they are completely different:
 
 ```
-DIM Machine  ──(broker link: who is driving, what the room is doing)──▶  you ──▶ your wall
+DIM Machine  ──(broker link: who is driving, what the room is doing)──▶  you ──▶ your display
                                                                           ▲
 guest's phone ─────────────(driver link: a thumb, ~60Hz)──────────────────┘
 ```
@@ -30,9 +30,9 @@ because a detour through the show server would be jitter bought for nothing.
 
 ### What you keep
 
-- Serving your own files — wall page, scripts, media — from your own machine.
+- Serving your own files — display page, scripts, media — from your own machine.
 - All of your physics, rendering, timing, and feel.
-- Relaying driver input to your wall however you like.
+- Relaying driver input to your display however you like.
 
 ### What you must remove
 
@@ -55,7 +55,7 @@ and the disagreement is invisible until somebody is holding a dead phone.
   "experienceId": "influence-clickfarm",
   "name": "Click Farm",
   "version": "1.0.0",
-  "entry": { "wall": "/wall.html" },
+  "entry": { "display": "/display.html" },
   "inputs": ["drag", "release", "tap", "hold"],
   "maxDrivers": 4,
   "media": { "dir": "media", "required": false },
@@ -68,7 +68,7 @@ and the disagreement is invisible until somebody is holding a dead phone.
 | `contract` | Always `1` today. Bump when this document does. |
 | `experienceId` | Stable, kebab-case. The show names you by this. |
 | `version` | Yours. Reported to the operator panel so we can see what is running. |
-| `entry.wall` | Path the display machine opens. |
+| `entry.display` | Path the display machine opens. |
 | `inputs` | Only the intents you consume. The phone will not send you others. |
 | `maxDrivers` | The most simultaneous drivers your piece handles well. |
 | `media.dir` | Where large media lives. **Ships separately** — never in a repo. |
@@ -171,7 +171,7 @@ the port.
 ### Optional: tell us how you are
 
 ```json
-{ "t": "status", "wall": 1, "drivers": 2, "note": "anything" }
+{ "t": "status", "displays": 1, "drivers": 2, "note": "anything" }
 ```
 
 Shown in the operator panel. Not required.
@@ -226,7 +226,7 @@ Network jitter must never stutter your motion.
 
 ## 5. Failure, from your side
 
-**DIM may not be there.** Serve your wall, run attract, wait. Do not block, do
+**DIM may not be there.** Serve your display, run attract, wait. Do not block, do
 not crash, do not exit.
 
 **A driver's socket may drop.** Stop honouring them; DIM will re-cue the phone
@@ -238,7 +238,7 @@ state, so simply obeying what arrives is correct. Do not persist driver state
 across a restart — it is stale by definition.
 
 **Your machine may be unplugged.** DIM carries on: the room still admits guests
-and still plays its audio, because a dark wall is bad and a room that turns
+and still plays its audio, because a dark display is bad and a room that turns
 people away because a projector machine is off takes the evening with it. You do
 not need to handle this; just do not make it worse by holding a lock somewhere.
 
@@ -247,7 +247,7 @@ not need to handle this; just do not make it worse by holding a lock somewhere.
 ## 6. What the phone shows
 
 **Assume the phone shows nothing of yours.** In `stream` mode the handset is a
-blind surface — the guest looks at your wall, not down. If it showed a feed,
+blind surface — the guest looks at your display, not down. If it showed a feed,
 everyone looks down and your projection becomes wallpaper.
 
 If your piece needs something on the phone's screen, it is authored as a show
@@ -335,7 +335,7 @@ must pass:
 
 - [ ] `experience.json` present and valid
 - [ ] server starts with no arguments and no `npm install`
-- [ ] serves `entry.wall`
+- [ ] serves `entry.display`
 - [ ] accepts a broker connection and answers `ready`
 - [ ] honours `drivers` as a **set**, replacing rather than accumulating
 - [ ] never assigns its own driver ids, hues, or caps

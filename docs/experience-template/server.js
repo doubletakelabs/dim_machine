@@ -30,7 +30,7 @@ const CALIBRATION = path.join(__dirname, MANIFEST.calibration?.file ?? 'calibrat
  */
 const show = { lifecycle: 'attract', drivers: new Map() };
 
-const walls = new Set();
+const displays = new Set();
 const drivers = new Map();          // socket → driverId
 
 // ------------------------------------------------------------------ http
@@ -69,7 +69,7 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  const file = path.join(__dirname, path.normalize(url === '/' ? '/wall.html' : url).replace(/^(\.\.[/\\])+/, ''));
+  const file = path.join(__dirname, path.normalize(url === '/' ? '/display.html' : url).replace(/^(\.\.[/\\])+/, ''));
   if (!file.startsWith(__dirname) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
     res.writeHead(404);
     return res.end('not found');
@@ -82,7 +82,7 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 const send = (ws, obj) => { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); };
-const toWalls = (obj) => { for (const w of walls) send(w, obj); };
+const toDisplays = (obj) => { for (const d of displays) send(d, obj); };
 
 wss.on('connection', (ws) => {
   let role = null;
@@ -102,10 +102,10 @@ wss.on('connection', (ws) => {
           accepts: MANIFEST.inputs,
         });
       }
-      if (m.role === 'wall') {
-        role = 'wall';
-        walls.add(ws);
-        // A wall that connects late is told everything, for the same reason we
+      if (m.role === 'display') {
+        role = 'display';
+        displays.add(ws);
+        // A display that connects late is told everything, for the same reason we
         // are: arriving in the middle must not be a special case.
         send(ws, { t: 'lifecycle', state: show.lifecycle });
         return send(ws, { t: 'drivers', drivers: [...show.drivers.values()] });
@@ -119,19 +119,19 @@ wss.on('connection', (ws) => {
       }
       role = 'driver';
       drivers.set(ws, m.driverId);
-      toWalls({ t: 'driverJoined', driverId: m.driverId });
+      toDisplays({ t: 'driverJoined', driverId: m.driverId });
       return send(ws, { t: 'claim', driverId: m.driverId, hue: authorised.hue });
     }
 
     if (role === 'broker') {
       if (m.t === 'lifecycle') {
         show.lifecycle = m.state;
-        return toWalls({ t: 'lifecycle', state: m.state });
+        return toDisplays({ t: 'lifecycle', state: m.state });
       }
       // An event, not a state. Clear whatever the last guest built. Nothing is
       // re-sent on reconnect, and nothing needs to be: a piece that was down
       // through a reset came back with nothing to clear.
-      if (m.t === 'reset') return toWalls({ t: 'reset' });
+      if (m.t === 'reset') return toDisplays({ t: 'reset' });
       if (m.t === 'drivers') {
         // Replace. Never merge. A driver no longer in the set is no longer a
         // driver, whatever socket they still happen to be holding open.
@@ -139,7 +139,7 @@ wss.on('connection', (ws) => {
         for (const [sock, driverId] of drivers) {
           if (!show.drivers.has(driverId)) { drivers.delete(sock); sock.close(); }
         }
-        return toWalls({ t: 'drivers', drivers: [...show.drivers.values()] });
+        return toDisplays({ t: 'drivers', drivers: [...show.drivers.values()] });
       }
       return;
     }
@@ -149,25 +149,25 @@ wss.on('connection', (ws) => {
       // Ignore an intent this piece never declared — the phone should not be
       // sending it, and acting on it would make the manifest a lie.
       if (!driverId || !MANIFEST.inputs.includes(m.t)) return;
-      return toWalls({ ...m, driverId });
+      return toDisplays({ ...m, driverId });
     }
   });
 
   ws.on('close', () => {
-    walls.delete(ws);
+    displays.delete(ws);
     const driverId = drivers.get(ws);
     if (driverId) {
       drivers.delete(ws);
       // Their slot is not ours to reassign. The show will re-cue the phone if
       // the guest is still in the room.
-      toWalls({ t: 'driverLeft', driverId });
+      toDisplays({ t: 'driverLeft', driverId });
     }
   });
 });
 
 server.listen(PORT, () => {
   console.log(`${MANIFEST.name} v${MANIFEST.version} — http://localhost:${PORT}/`);
-  console.log(`  wall     ${MANIFEST.entry.wall}`);
+  console.log(`  display  ${MANIFEST.entry.display}`);
   console.log(`  inputs   ${MANIFEST.inputs.join(', ')}`);
   console.log('  waiting for a broker (the show, or tools/experience-harness.mjs)');
 });

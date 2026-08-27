@@ -1,4 +1,4 @@
-<!doctype html><meta charset="utf-8"><title>Reference Experience — wall</title>
+<!doctype html><meta charset="utf-8"><title>Reference Experience — display</title>
 <style>
   html,body{margin:0;height:100%;background:#08080c;color:#e7e9ee;
     font:14px/1.5 ui-monospace,Menlo,monospace;overflow:hidden}
@@ -18,7 +18,7 @@ const $ = (id) => document.getElementById(id);
 let y = 0, vy = 0, lifecycle = 'attract';
 
 const ws = new WebSocket(`ws://${location.host}`);
-ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', role: 'wall' }));
+ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', role: 'display' }));
 ws.onmessage = (e) => {
   const m = JSON.parse(e.data);
   if (m.t === 'lifecycle') { lifecycle = m.state; $('state').textContent = m.state; }

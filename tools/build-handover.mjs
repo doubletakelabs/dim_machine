@@ -28,7 +28,7 @@ const out = resolve(process.argv[2] ?? join(root, 'handover'));
 const REWRITES = [
   ['docs/experience-template', 'reference'],
   ['docs/ROOM-EXPERIENCE.md', 'ROOM-EXPERIENCE.md'],
-  ['docs/BRIEF-influence.md', 'BRIEF.md'],
+  ['docs/EXPERIENCE-BRIEF.md', 'BRIEF.md'],
 ];
 
 const rewrite = (text) => REWRITES.reduce((acc, [from, to]) => acc.split(from).join(to), text);
@@ -40,7 +40,8 @@ const copyText = (from, to) => {
 
 const README = `# DIM Machine — room experience kit
 
-Everything needed to build an interactive piece that runs inside The Museum.
+Everything needed to build an interactive piece that runs inside The Museum —
+a projection, a screen, a monitor wall, whatever the room has.
 
 \`\`\`
 npm install          # one dependency: ws
@@ -50,7 +51,7 @@ npm install          # one dependency: ws
 
 | | |
 |---|---|
-| **BRIEF.md** | What to change in the piece you were given. Start here. |
+| **BRIEF.md** | How to approach the work, and what almost every piece has to change. Start here. |
 | **ROOM-EXPERIENCE.md** | The contract — everything the show promises and expects. |
 | **reference/** | A working example that passes every check. ~150 lines. |
 
@@ -65,11 +66,11 @@ npm run harness -- ws://localhost:8080   # stand in for the show
 
 Then open:
 
-- the wall — <http://localhost:8080/wall.html>
+- the display — <http://localhost:8080/display.html>
 - the control panel — <http://localhost:7420/>
 - the driver page — \`http://<your-lan-ip>:7420/drive\` on a phone, or several
 
-Press the lifecycle buttons and watch the wall. Add drivers. Open the driver page
+Press the lifecycle buttons and watch the display. Add drivers. Open the driver page
 on two phones. This is exactly how the show will drive your piece — the harness
 connects as a **broker**, the same role and the same messages the show uses, so
 your server cannot tell them apart. There is no dev mode.
@@ -102,10 +103,10 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
 copyText('docs/ROOM-EXPERIENCE.md', 'ROOM-EXPERIENCE.md');
-copyText('docs/BRIEF-influence.md', 'BRIEF.md');
+copyText('docs/EXPERIENCE-BRIEF.md', 'BRIEF.md');
 copyText('tools/verify-experience.mjs', 'tools/verify-experience.mjs');
 copyText('tools/experience-harness.mjs', 'tools/experience-harness.mjs');
-for (const file of ['experience.json', 'server.js', 'wall.html']) {
+for (const file of ['experience.json', 'server.js', 'display.html']) {
   copyText(`docs/experience-template/${file}`, `reference/${file}`);
 }
 

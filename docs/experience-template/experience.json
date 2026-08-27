@@ -3,7 +3,7 @@
   "experienceId": "reference-experience",
   "name": "Reference Experience",
   "version": "1.0.0",
-  "entry": { "wall": "/wall.html" },
+  "entry": { "display": "/display.html" },
   "inputs": ["drag", "release", "tap"],
   "maxDrivers": 4,
   "media": { "dir": "media", "required": false },
