@@ -72,6 +72,47 @@ describe('validateShowDefinition', () => {
     }
   });
 
+  it('warns when two rooms claim the same ground', () => {
+    // A guest on the overlap enters whichever room iterates first — a show
+    // that changes behaviour when a JSON key reorders. Hand-nudged vertices
+    // create this silently, which is the whole reason it is checked at load.
+    const warnings = warningsFor((def) => {
+      def.rooms.alpha.zones.alpha.polygon = [[0, 0], [100, 0], [100, 100], [0, 100]];
+      def.rooms.corridor.zones.corridor.polygon = [[90, 90], [200, 90], [200, 200], [90, 200]];
+    });
+    assert.match(warnings.join('\n'), /rooms\.alpha\.zones\.alpha overlaps rooms\.corridor\.zones\.corridor/);
+  });
+
+  it('does not mind rooms that share a wall', () => {
+    // Touching is a boundary, not a claim — two rooms with a common wall are
+    // the normal case in a building, not an authoring mistake.
+    const warnings = warningsFor((def) => {
+      def.rooms.alpha.zones.alpha.polygon = [[0, 0], [100, 0], [100, 100], [0, 100]];
+      def.rooms.corridor.zones.corridor.polygon = [[100, 0], [200, 0], [200, 100], [100, 100]];
+    });
+    assert.deepEqual(warnings.filter((w) => /overlaps/.test(w)), []);
+  });
+
+  it('catches an overlap that leaves no vertex inside either polygon', () => {
+    // Two rectangles crossed like a plus sign: every vertex of each is outside
+    // the other, so a containment-only check would miss it entirely.
+    const warnings = warningsFor((def) => {
+      def.rooms.alpha.zones.alpha.polygon = [[40, 0], [60, 0], [60, 100], [40, 100]];
+      def.rooms.corridor.zones.corridor.polygon = [[0, 40], [100, 40], [100, 60], [0, 60]];
+    });
+    assert.match(warnings.join('\n'), /overlaps/);
+  });
+
+  it('lets one room\'s own zones overlap freely', () => {
+    // An L-shaped room drawn as two boxes that share a corner region is a
+    // perfectly good way to author it — the claim is the room's either way.
+    const warnings = warningsFor((def) => {
+      // Overlaps alpha's own zone and stays clear of the corridor's.
+      def.rooms.alpha.zones.alpha2 = { polygon: [[5, 5], [15, 5], [15, 15], [5, 15]] };
+    });
+    assert.deepEqual(warnings.filter((w) => /overlaps/.test(w)), []);
+  });
+
   it('accepts a minimal definition', () => {
     assert.deepEqual(validateShowDefinition(minimal()).errors, []);
   });

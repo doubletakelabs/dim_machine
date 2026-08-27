@@ -20,6 +20,46 @@ export function pointInPolygon(point, polygon) {
 }
 
 /**
+ * Do two polygons claim any common ground?
+ *
+ * Exists for load-time validation: a point inside two rooms' zones belongs to
+ * whichever room happens to iterate first, which is a show that behaves
+ * differently after a JSON key reorders. Touching is allowed — two rooms
+ * sharing a wall share an edge, and that is a boundary, not a claim.
+ */
+export function polygonsOverlap(a, b) {
+  // Containment is tested with each vertex nudged a hair toward its own
+  // polygon's interior, not with the vertex itself: a vertex sitting exactly
+  // on the other polygon's boundary — a shared wall — is ray-cast roulette,
+  // and the nudged point is unambiguous on the side that actually matters.
+  const inward = (poly) => {
+    const [cx, cy] = poly.reduce(([sx, sy], [x, y]) => [sx + x, sy + y], [0, 0])
+      .map((v) => v / poly.length);
+    return poly.map(([x, y]) => [x + (cx - x) * 1e-6, y + (cy - y) * 1e-6]);
+  };
+  if (inward(a).some((pt) => pointInPolygon(pt, b))
+    || inward(b).some((pt) => pointInPolygon(pt, a))) return true;
+  // Edge crossings catch the rest — two rectangles overlapping in a cross
+  // shape have no vertex inside each other at all.
+  for (let i = 0; i < a.length; i++) {
+    for (let j = 0; j < b.length; j++) {
+      if (segmentsCross(a[i], a[(i + 1) % a.length], b[j], b[(j + 1) % b.length])) return true;
+    }
+  }
+  return false;
+}
+
+/** Proper crossing only — collinear touches and shared endpoints do not count. */
+function segmentsCross(p1, p2, q1, q2) {
+  const orient = ([ax, ay], [bx, by], [cx, cy]) => Math.sign((bx - ax) * (cy - ay) - (by - ay) * (cx - ax));
+  const o1 = orient(p1, p2, q1);
+  const o2 = orient(p1, p2, q2);
+  const o3 = orient(q1, q2, p1);
+  const o4 = orient(q1, q2, p2);
+  return o1 !== o2 && o3 !== o4 && o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0;
+}
+
+/**
  * Classify a floor-plan point against every room's zones.
  *
  * A room may own several zones — a long gallery, an alcove, a space split by a

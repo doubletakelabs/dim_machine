@@ -3,7 +3,7 @@
   "showId": "mad-dim",
   "name": "MAD DIM",
   "floorplan": {
-    "image": "mad-floorplan.png",
+    "image": "mad-floorplan.svg",
     "width": 784,
     "height": 1510
   },

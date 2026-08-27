@@ -24,6 +24,7 @@ import { expandSequences } from './sequence.js';
 import {
   CUE_AUDIENCES, CUE_SLOTS, INPUT_KINDS, INPUT_MODES, EXPERIENCE_INTENTS, defaultCueAudience,
 } from './contract.js';
+import { polygonsOverlap } from './zone-math.js';
 
 function isObject(v) {
   return v != null && typeof v === 'object' && !Array.isArray(v);
@@ -110,6 +111,41 @@ function checkZones(roomId, room, errors, warnings, seenZoneIds) {
     }
     if (!Array.isArray(zone.polygon) || zone.polygon.length < 3) {
       errors.push(`${path}.${zoneId}.polygon must have at least 3 points`);
+    }
+  }
+}
+
+/**
+ * No point on the plan may belong to two rooms.
+ *
+ * A guest standing on an overlap enters whichever room iterates first — a show
+ * that behaves differently after a JSON key reorders, with no symptom beyond
+ * the wrong audio. Zones are hand-edited polygons now that they are traced
+ * over the venue plan, and a hand that nudges one vertex can silently create
+ * this. A warning, not an error: rehearsal should not be blocked by a corner
+ * clipping a corner, but it must be said.
+ *
+ * Zones of the *same* room may overlap freely — the claim is the room's.
+ */
+function checkZoneOverlaps(rooms, warnings) {
+  const zones = [];
+  for (const [roomId, room] of Object.entries(rooms)) {
+    if (!isObject(room) || !isObject(room.zones)) continue;
+    for (const [zoneId, zone] of Object.entries(room.zones)) {
+      if (Array.isArray(zone?.polygon) && zone.polygon.length >= 3) {
+        zones.push({ roomId, zoneId, polygon: zone.polygon });
+      }
+    }
+  }
+  for (let i = 0; i < zones.length; i++) {
+    for (let j = i + 1; j < zones.length; j++) {
+      const a = zones[i];
+      const b = zones[j];
+      if (a.roomId === b.roomId) continue;
+      if (polygonsOverlap(a.polygon, b.polygon)) {
+        warnings.push(`rooms.${a.roomId}.zones.${a.zoneId} overlaps rooms.${b.roomId}.zones.${b.zoneId}`
+          + ' — a guest there lands in whichever room loads first');
+      }
     }
   }
 }
@@ -779,6 +815,8 @@ export function validateShowDefinition(raw) {
       checkZones(roomId, def.rooms[roomId], errors, warnings, seenZoneIds);
     }
   }
+
+  checkZoneOverlaps(def.rooms ?? {}, warnings);
 
   if (def.zones != null) {
     errors.push('top-level "zones" was removed — declare zones inside each room (rooms.<id>.zones)');

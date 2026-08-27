@@ -507,6 +507,11 @@ function renderPlan() {
     img.setAttribute('x', 0); img.setAttribute('y', 0);
     img.setAttribute('width', fp.width ?? vb.w);
     img.setAttribute('height', fp.height ?? vb.h);
+    // Fill the declared box exactly. The zones are traced in that box, so a
+    // letterboxed underlay (the default for an image whose own aspect differs
+    // by even 1%) would shift the whole building relative to every polygon.
+    // The stretch this permits is invisible; the offset it prevents is not.
+    img.setAttribute('preserveAspectRatio', 'none');
     img.setAttribute('opacity', '0.35');
     svg.appendChild(img);
   }
