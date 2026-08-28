@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DIM Machine — exhibit logic simulator</title>
+<title>DIM Machine — museum logic simulator</title>
 <style>
   :root {
     --bg: #0b0c10; --panel: #14161b; --line: #23262f;
@@ -37,7 +37,7 @@
   a { color: var(--dim); }
   .spacer { flex: 1; }
 
-  main { flex: 1; min-height: 0; display: grid; gap: 10px; padding: 10px; grid-template-columns: 1fr 340px; }
+  main { flex: 1; min-height: 0; display: grid; gap: 10px; padding: 10px; grid-template-columns: 1fr 360px; }
   .card {
     background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
     display: flex; flex-direction: column; min-height: 0; overflow: hidden;
@@ -47,101 +47,105 @@
   #scene { flex: 1; min-height: 0; display: block; width: 100%; height: 100%; }
   #hint { flex: none; padding: 5px 12px 8px; color: var(--faint); font-size: 11px; }
 
-  .stateBig {
-    font-size: 22px; font-weight: 700; letter-spacing: .02em;
-    padding: 2px 0 0;
+  .stateBig { font-size: 20px; font-weight: 700; }
+  .offerLine { color: var(--dim); margin-bottom: 10px; }
+  .offerLine b { color: var(--accent); font-weight: 600; }
+
+  /* queue panel */
+  .qRow {
+    display: flex; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 6px;
+    border: 1px solid transparent; margin-bottom: 2px;
   }
-  .memLine { color: var(--dim); margin-bottom: 10px; }
-  .memLine b { color: var(--warn); font-weight: 600; }
+  .qRow.offer { border-color: #2b4a7a; background: #17203050; }
+  .qRow .name { min-width: 74px; font-weight: 600; }
+  .qRow .chip {
+    font-size: 10px; padding: 1px 7px; border-radius: 999px; background: #262b36; color: var(--dim);
+  }
+  .qRow .chip.warn { background: #3d2a14; color: var(--warn); }
+  .qRow .chip.bad { background: #46191c; color: #ffb0b0; }
+  .qRow .chip.ok { background: #163826; color: var(--ok); }
+  .qRow .chip.accent { background: #1e2b45; color: var(--accent); }
+  label.toggle { display: flex; gap: 5px; align-items: center; cursor: pointer; color: var(--dim); font-size: 11px; }
 
-  .roomState { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px;
-    background: #262b36; color: var(--dim); }
-  .roomState.active { background: #163826; color: var(--ok); }
-
-  .stem { display: flex; gap: 8px; align-items: baseline; padding: 3px 6px; border-radius: 5px; }
-  .stem .id { color: var(--faint); font-size: 11px; min-width: 168px; font-family: ui-monospace, Menlo, monospace; }
+  .stem { display: flex; gap: 8px; align-items: baseline; padding: 2px 6px; border-radius: 5px; }
+  .stem .id { color: var(--faint); font-size: 10px; min-width: 160px; font-family: ui-monospace, Menlo, monospace; }
   .stem.lit { background: #1e2532; }
   .stem.lit .id { color: var(--accent); }
 
-  label.toggle { display: flex; gap: 8px; align-items: center; cursor: pointer; color: var(--dim); }
   #log {
     font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #b6bece;
-    max-height: 200px; overflow-y: auto; border-top: 1px solid var(--line); padding: 8px 12px; flex: none;
+    max-height: 190px; overflow-y: auto; border-top: 1px solid var(--line); padding: 8px 12px; flex: none;
   }
   #log div { padding: 1px 0; }
   #log .stemLine { color: var(--accent); }
   #log .lockLine { color: var(--bad); }
+  #log .queueLine { color: var(--warn); }
 
   /* scene */
   .hall { fill: #101216; }
-  .threshold { fill: #6ea8fe14; stroke: #6ea8fe55; stroke-dasharray: 6 5; }
-  .room { fill: #3a4150; fill-opacity: .5; stroke: none; }
+  .room { fill: #3a4150; fill-opacity: .5; }
   .room.active { fill: #2f8f5b; }
-  .walls { fill: none; stroke: #99a3b5; stroke-width: 3.5; stroke-linecap: round; }
-  .doorLabel { fill: #6ea8fe; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; text-anchor: middle; pointer-events: none; }
-  .zoneLabel { fill: #8a93a4; font-size: 11px; text-anchor: middle; pointer-events: none; }
+  .room.fullRoom { fill: #46191c; fill-opacity: .6; }
+  .walls { fill: none; stroke: #99a3b5; stroke-width: 3; stroke-linecap: round; }
+  .threshold { fill: #6ea8fe10; stroke: #6ea8fe44; stroke-dasharray: 5 4; }
+  .threshold.offered { fill: #6ea8fe28; stroke: #6ea8fe; }
+  .roomName { fill: #cfd6e2; font-size: 12px; font-weight: 600; text-anchor: middle; pointer-events: none; }
+  .roomMeta { fill: #8a93a4; font-size: 9px; text-anchor: middle; pointer-events: none; }
+  .compass { fill: #5a6272; font-size: 11px; text-anchor: middle; letter-spacing: .2em; pointer-events: none; }
   #guest { cursor: grab; }
   #guest:active { cursor: grabbing; }
-  .watchRing { fill: none; stroke: var(--warn); stroke-width: 2; stroke-dasharray: 4 4; opacity: 0; }
+  .offerBeam { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 3 5; opacity: 0; }
+  .watchArc { fill: none; stroke: var(--warn); stroke-width: 2; stroke-dasharray: 4 4; opacity: 0; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Exhibit Logic <span class="sub">simulator</span></h1>
-  <span class="tag">experimental — for team discussion</span>
+  <h1>Museum Logic <span class="sub">simulator</span></h1>
+  <span class="tag">experimental — iteration 2</span>
   <span class="spacer"></span>
+  <span id="coolNote" style="color:var(--warn); font-size:11px"></span>
   <a href="/operator.html">operator ↗</a>
 </header>
 
 <main>
   <div class="card">
-    <svg id="scene" viewBox="0 0 640 520" preserveAspectRatio="xMidYMid meet">
-      <rect class="hall" x="0" y="0" width="640" height="520"/>
-      <!-- The threshold sits in front of the door, not around the room:
-           every room has exactly one way in, and "near the room" means
-           near the way in. It tucks under the room edge so there is no
-           sliver of hallway between them for a drag to sample. -->
-      <rect id="thresholdRect" class="threshold" x="240" y="310" width="160" height="100" rx="8"/>
-      <rect id="roomRect" class="room" x="240" y="160" width="160" height="160" rx="0"/>
-      <!-- Walls: solid on three sides, open only at the door. -->
-      <path class="walls" d="M 350 320 L 400 320 L 400 160 L 240 160 L 240 320 L 290 320"/>
-      <text class="zoneLabel" x="320" y="240">EXHIBIT</text>
-      <text id="roomStateLabel" class="zoneLabel" x="320" y="258">idle</text>
-      <text class="doorLabel" x="320" y="316">door</text>
-      <text class="zoneLabel" x="320" y="398">threshold</text>
-      <text class="zoneLabel" x="320" y="480">hallway — drag the guest</text>
-      <circle id="watchRing" class="watchRing" r="16"/>
+    <svg id="scene" viewBox="0 0 640 560" preserveAspectRatio="xMidYMid meet">
+      <rect class="hall" x="0" y="0" width="640" height="560"/>
+      <text class="compass" x="320" y="16">N — hallway entrance</text>
+      <text class="compass" x="320" y="552">S</text>
+      <line id="offerBeam" class="offerBeam"/>
+      <g id="rooms"></g>
+      <circle id="watchArc" class="watchArc" r="15"/>
       <g id="guest">
-        <circle r="10" fill="#58c98a" stroke="#0d0f13" stroke-width="2"/>
-        <text y="-16" text-anchor="middle" fill="#dfe4ee" font-size="10">guest</text>
+        <circle r="9" fill="#58c98a" stroke="#0d0f13" stroke-width="2"/>
+        <text y="-14" text-anchor="middle" fill="#dfe4ee" font-size="10">guest</text>
       </g>
     </svg>
     <div id="hint">
-      One way in — the door. Drag into the dashed threshold to approach, through the
-      door to enter; the walls do not give. Walk away and wait 3s for the rejection
-      watch · <b id="watchNote" style="color:var(--warn)"></b>
+      The hallway calls: the nearest queued room that isn't full or deferred. Walk past
+      its door — nearer to another candidate for 1.5s — and you've refused it. One way
+      into every room. Click anywhere to place the guest.
     </div>
   </div>
 
   <div class="card">
     <div class="cardBody">
-      <h2>Guest ↔ exhibit</h2>
-      <div class="stateBig" id="phase">away</div>
-      <div class="memLine">memory: <b id="memory">fresh</b></div>
-      <div style="margin-bottom:12px">room: <span class="roomState" id="roomState">idle</span></div>
+      <h2>Guest</h2>
+      <div class="stateBig" id="phase">hallway</div>
+      <div class="offerLine">offer: <b id="offer">—</b></div>
 
-      <div class="row" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px">
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px">
         <button id="advanceBtn" disabled>Advance → Interaction</button>
         <button id="completeBtn" disabled>Complete</button>
-      </div>
-      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px">
-        <label class="toggle"><input type="checkbox" id="allowed" checked /> room allowed for this guest</label>
         <span class="spacer"></span>
-        <button id="resetBtn">Reset guest</button>
+        <button id="resetBtn">Reset</button>
       </div>
 
-      <h2>Stems</h2>
+      <h2>Queue <span style="color:var(--faint); text-transform:none; letter-spacing:0">— cycle order; “full” stands in for maxOccupants</span></h2>
+      <div id="queue"></div>
+
+      <h2 style="margin-top:12px">Stems</h2>
       <div id="stems"></div>
     </div>
     <div id="log"></div>
@@ -149,17 +153,50 @@
 </main>
 
 <script type="module">
-import { initialState, transition, STEMS } from './exhibit-machine.js';
+import { initialState, transition, STEMS } from './museum-machine.js';
 
 const $ = (id) => document.getElementById(id);
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// ------------------------------------------------------------------- rooms
+
+/**
+ * Four rooms off a north–south hallway, doors opening onto it. A, B and C are
+ * on this guest's queue; X never was — it exists to demo "no state".
+ */
+const ROOMS = {
+  a: { name: 'Exhibit A', x0: 60,  y0: 40,  x1: 250, y1: 160, side: 'E', door: { y0: 75,  y1: 125 } },
+  b: { name: 'Exhibit B', x0: 390, y0: 130, x1: 580, y1: 250, side: 'W', door: { y0: 165, y1: 215 } },
+  c: { name: 'Exhibit C', x0: 60,  y0: 260, x1: 250, y1: 380, side: 'E', door: { y0: 295, y1: 345 } },
+  x: { name: 'Exhibit X', x0: 390, y0: 350, x1: 580, y1: 470, side: 'W', door: { y0: 385, y1: 435 } },
+};
+const QUEUE0 = ['a', 'b', 'c'];
+const THRESHOLD_DEPTH = 62;
+
+function thresholdRect(r) {
+  const pad = 12;
+  return r.side === 'E'
+    ? { x0: r.x1, y0: r.door.y0 - pad, x1: r.x1 + THRESHOLD_DEPTH, y1: r.door.y1 + pad }
+    : { x0: r.x0 - THRESHOLD_DEPTH, y0: r.door.y0 - pad, x1: r.x0, y1: r.door.y1 + pad };
+}
+function doorCentre(r) {
+  const x = r.side === 'E' ? r.x1 : r.x0;
+  return [x, (r.door.y0 + r.door.y1) / 2];
+}
+const distToDoor = (roomId, x, y) => {
+  const [dx, dy] = doorCentre(ROOMS[roomId]);
+  return Math.hypot(x - dx, y - dy);
+};
 
 // ------------------------------------------------------------------ machine
 
-let state = initialState({ allowed: true });
+let state = initialState({ queue: QUEUE0 });
 let roomActive = false;
+const full = { a: false, b: false, c: false, x: false };
 
 const STEM_LABELS = {
   [STEMS.approach]: 'Exhibit Approach',
+  [STEMS.continue]: 'Continue',
   [STEMS.entrance]: 'Entrance',
   [STEMS.instruction]: 'Instruction',
   [STEMS.interaction]: 'Interaction',
@@ -173,16 +210,23 @@ const STEM_LABELS = {
 
 function send(event) {
   const before = state;
-  const result = transition(state, event);
+  const result = transition(state, typeof event === 'string' ? { type: event } : event);
   state = result.state;
   if (result.roomActive != null) roomActive = result.roomActive;
-  if (state.phase !== before.phase || state.memory !== before.memory || result.play) {
-    log(`${event} → ${state.phase} · ${state.memory}`
+  const type = typeof event === 'string' ? event : event.type;
+  if (state.phase !== before.phase || state.offer !== before.offer || result.play || result.rejected) {
+    log(`${type}${event.roomId ? `(${event.roomId})` : ''} → ${state.phase}`
+      + (state.offer ? ` · offer ${state.offer}` : '')
       + (result.play ? `  ▶ ${STEM_LABELS[result.play]}` : ''),
-      result.play ? 'stemLine' : (state.memory === 'lockedOut' && before.memory !== 'lockedOut' ? 'lockLine' : ''));
+      result.play ? 'stemLine' : '');
   }
-  if (state.memory === 'lockedOut' && before.memory !== 'lockedOut') {
-    log('   guest is locked out of this exhibit', 'lockLine');
+  if (result.rejected) {
+    const mem = state.memory[result.rejected];
+    log(mem === 'lockedOut'
+      ? `   ${result.rejected} is locked out — strike two`
+      : `   ${result.rejected} → back of the queue (strike one)`,
+      mem === 'lockedOut' ? 'lockLine' : 'queueLine');
+    coolUntil = Date.now() + COOL_MS;
   }
   if (result.play) play(result.play);
   render();
@@ -192,10 +236,10 @@ function send(event) {
 
 let audio = null;
 let fadeTimer = null;
+let litStem = null;
+let audioIdleAt = 0;   // evaluate waits for the current stem to finish speaking
 
 function play(stem) {
-  // One voice at a time: a new stem cuts the old with a short fade, per the
-  // agreed interruption rule.
   if (audio) {
     const old = audio;
     clearInterval(fadeTimer);
@@ -205,187 +249,282 @@ function play(stem) {
     }, 30);
   }
   audio = new Audio(`stems/${stem}.wav`);
-  audio.play().catch(() => log('   (tap anywhere once to unlock audio)', ''));
-  litStem = stem;
+  audioIdleAt = Infinity;
+  audio.addEventListener('ended', () => { audioIdleAt = Date.now(); });
+  audio.play().catch(() => { audioIdleAt = Date.now(); log('   (click once to unlock audio)'); });
   if (stem === STEMS.entrance) {
-    // Instruction follows Entrance with no other trigger than the audio ending.
     audio.addEventListener('ended', () => send('entranceEnded'));
   }
+  litStem = stem;
   renderStems();
 }
+const audioQuiet = () => Date.now() - audioIdleAt > 600;
 
-// -------------------------------------------------------------- scene state
+// ----------------------------------------------------------------- geometry
 
-const guest = { x: 320, y: 470 };
-let zone = 'away';           // away | threshold | room
-let watch = null;            // { at, x, y } — the walk-away watch
-const CLEAR_MS = 3000;
-const AWAY_PX = 24;
-
-const ROOM = { x0: 240, y0: 160, x1: 400, y1: 320 };
-const DOOR = { x0: 290, x1: 350 };   // the gap in the south wall
+const guest = { x: 320, y: 28 };
+let zone = { kind: 'hallway', roomId: null };
 
 function zoneAt(x, y) {
-  const t = rect('thresholdRect');
-  if (x >= ROOM.x0 && x <= ROOM.x1 && y >= ROOM.y0 && y <= ROOM.y1) return 'room';
-  if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) return 'threshold';
-  return 'away';
+  for (const [roomId, r] of Object.entries(ROOMS)) {
+    if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) return { kind: 'room', roomId };
+  }
+  for (const [roomId, r] of Object.entries(ROOMS)) {
+    const t = thresholdRect(r);
+    if (x >= t.x0 && x <= t.x1 && y >= t.y0 && y <= t.y1) return { kind: 'threshold', roomId };
+  }
+  return { kind: 'hallway', roomId: null };
 }
 
-const inRoom = (x, y) => x >= ROOM.x0 && x <= ROOM.x1 && y >= ROOM.y0 && y <= ROOM.y1;
-
-/**
- * Every room has exactly one way in. A move that would cross the room
- * boundary is legal only where the boundary is the door — the dot sticks at
- * a wall the way a person does. Without this, dragging through a wall would
- * demo a spatial situation the building cannot produce, and the machine
- * would be argued against evidence it will never see.
- */
+/** One way into every room: a move may cross a room boundary only at its door. */
 function legalMove(px, py, x, y) {
-  if (inRoom(px, py) === inRoom(x, y)) return true;
-  const dx = x - px;
-  const dy = y - py;
-  let first = null; // earliest boundary crossing along the segment
-  const consider = (t, edge, cx) => {
-    if (t >= 0 && t <= 1 && (!first || t < first.t)) first = { t, edge, cx };
-  };
-  if (dy) {
-    for (const [ey, edge] of [[ROOM.y0, 'top'], [ROOM.y1, 'south']]) {
-      const t = (ey - py) / dy;
-      const cx = px + t * dx;
-      if (cx >= ROOM.x0 - 0.01 && cx <= ROOM.x1 + 0.01) consider(t, edge, cx);
+  for (const r of Object.values(ROOMS)) {
+    const inside = (ax, ay) => ax >= r.x0 && ax <= r.x1 && ay >= r.y0 && ay <= r.y1;
+    if (inside(px, py) === inside(x, y)) continue;
+    const dx = x - px;
+    const dy = y - py;
+    let first = null;
+    const consider = (t, edge, along) => {
+      if (t >= 0 && t <= 1 && (!first || t < first.t)) first = { t, edge, along };
+    };
+    if (dy) {
+      for (const [ey, edge] of [[r.y0, 'N'], [r.y1, 'S']]) {
+        const t = (ey - py) / dy;
+        const cx = px + t * dx;
+        if (cx >= r.x0 - 0.01 && cx <= r.x1 + 0.01) consider(t, edge, cx);
+      }
     }
-  }
-  if (dx) {
-    for (const [ex, edge] of [[ROOM.x0, 'left'], [ROOM.x1, 'right']]) {
-      const t = (ex - px) / dx;
-      const cy = py + t * dy;
-      if (cy >= ROOM.y0 - 0.01 && cy <= ROOM.y1 + 0.01) consider(t, edge, ex);
+    if (dx) {
+      for (const [ex, edge] of [[r.x0, 'W'], [r.x1, 'E']]) {
+        const t = (ex - px) / dx;
+        const cy = py + t * dy;
+        if (cy >= r.y0 - 0.01 && cy <= r.y1 + 0.01) consider(t, edge, cy);
+      }
     }
+    if (first?.edge !== r.side) return false;
+    if (first.along < r.door.y0 || first.along > r.door.y1) return false;
   }
-  return first?.edge === 'south' && first.cx >= DOOR.x0 && first.cx <= DOOR.x1;
+  return true;
 }
-
-function rect(id) {
-  const el = $(id);
-  return {
-    x: +el.getAttribute('x'), y: +el.getAttribute('y'),
-    w: +el.getAttribute('width'), h: +el.getAttribute('height'),
-  };
-}
-
-const roomCentre = () => {
-  const r = rect('roomRect');
-  return [r.x + r.w / 2, r.y + r.h / 2];
-};
-const distToRoom = (x, y) => {
-  const [cx, cy] = roomCentre();
-  return Math.hypot(x - cx, y - cy);
-};
 
 /**
- * Geometry → machine events. Only an away→threshold crossing is an approach:
- * stepping out of the room INTO the ring is just leaving the room, not a
- * fresh arrival — otherwise a completed guest would be greeted again by the
- * doorway on their way out.
+ * Geometry → events. Exiting a room lands in its own threshold; that is not a
+ * fresh arrival, so only a hallway→threshold crossing announces one.
  */
 function moveTo(x, y) {
   if (!legalMove(guest.x, guest.y, x, y)) return; // that is a wall
   guest.x = x; guest.y = y;
   const next = zoneAt(x, y);
-  if (next !== zone) {
-    if (zone === 'away' && next === 'threshold') send('enterThreshold');
-    else if (zone === 'threshold' && next === 'away') { armWatchMaybe(); send('exitThreshold'); }
-    else if (next === 'room') send('enterRoom');
-    else if (zone === 'room') send('exitRoom');
+  if (next.kind !== zone.kind || next.roomId !== zone.roomId) {
+    if (zone.kind === 'hallway' && next.kind === 'threshold') {
+      send({ type: 'enterThreshold', roomId: next.roomId });
+    } else if (zone.kind === 'threshold' && next.kind === 'hallway') {
+      send('exitThreshold');
+    } else if (next.kind === 'room') {
+      send({ type: 'enterRoom', roomId: next.roomId, full: full[next.roomId] });
+    } else if (zone.kind === 'room') {
+      send('exitRoom');
+      coolUntil = Date.now() + COOL_MS; // let the exit settle before the next call
+    }
     zone = next;
   }
   renderGuest();
 }
 
-/** The rejection watch: 3s clear of the threshold AND moving away. */
-function armWatchMaybe() {
-  if (state.phase === 'court') watch = { at: Date.now(), x: guest.x, y: guest.y };
-}
+// --------------------------------------------- the hallway's two judgements
+
+const COOL_MS = 4000;
+const PASS_HYSTERESIS = 40;
+const PASS_SUSTAIN_MS = 1500;
+const PASS_FAR = 200;
+let coolUntil = 0;
+let passSince = null;
 
 setInterval(() => {
-  if (!watch) return;
-  if (state.phase !== 'leaving') { watch = null; renderWatch(); return; }
-  const clearFor = Date.now() - watch.at;
-  const movingAway = distToRoom(guest.x, guest.y) > distToRoom(watch.x, watch.y) + AWAY_PX;
-  $('watchNote').textContent = clearFor < CLEAR_MS
-    ? `watch: ${((CLEAR_MS - clearFor) / 1000).toFixed(1)}s`
-    : (movingAway ? '' : 'watch: waiting for them to move away');
-  renderWatch(true);
-  if (clearFor >= CLEAR_MS && movingAway) {
-    watch = null;
-    $('watchNote').textContent = '';
-    renderWatch();
-    send('walkedAway');
+  const cooling = Date.now() < coolUntil;
+  $('coolNote').textContent = cooling ? `cool-off ${((coolUntil - Date.now()) / 1000).toFixed(1)}s` : '';
+
+  // 1. Evaluate: in the hallway, nothing offered, nothing speaking, no cool-off.
+  if (state.phase === 'hallway' && !state.offer && !cooling && audioQuiet()
+      && zone.kind !== 'room') {
+    const distances = Object.fromEntries(Object.keys(ROOMS).map((r) => [r, distToDoor(r, guest.x, guest.y)]));
+    send({ type: 'evaluate', distances, full: { ...full } });
   }
-}, 100);
 
-// ----------------------------------------------------------------- dragging
+  // 2. Passed-door: measurably nearer another candidate than the offer, held
+  //    long enough that a BLE wobble cannot convict anyone.
+  if (state.offer && state.phase === 'hallway') {
+    const dOffer = distToDoor(state.offer, guest.x, guest.y);
+    // Deferred rooms still count as "the next queued room" for this judgement
+    // — they are queued, just not currently offerable. What matters is that
+    // the guest is measurably past the door they were called to.
+    const others = state.queue.filter((r) => r !== state.offer && !full[r]);
+    const dNext = others.length
+      ? Math.min(...others.map((r) => distToDoor(r, guest.x, guest.y)))
+      : null;
+    const past = dNext != null ? dOffer > dNext + PASS_HYSTERESIS : dOffer > PASS_FAR;
+    if (past) {
+      passSince ??= Date.now();
+      renderWatch(true);
+      if (Date.now() - passSince >= PASS_SUSTAIN_MS) {
+        passSince = null;
+        renderWatch(false);
+        send('passedOffer');
+      }
+    } else {
+      passSince = null;
+      renderWatch(false);
+    }
+  } else {
+    passSince = null;
+    renderWatch(false);
+  }
+}, 150);
 
-let dragging = false;
+// ----------------------------------------------------------------- pointers
+
 const svg = $('scene');
+let dragging = false;
 const toScene = (evt) => {
   const pt = svg.createSVGPoint();
   pt.x = evt.clientX; pt.y = evt.clientY;
   const p = pt.matrixTransform(svg.getScreenCTM().inverse());
-  return [Math.max(10, Math.min(630, p.x)), Math.max(10, Math.min(510, p.y))];
+  return [Math.max(8, Math.min(632, p.x)), Math.max(8, Math.min(552, p.y))];
 };
-$('guest').addEventListener('pointerdown', (e) => {
-  dragging = true;
-  svg.setPointerCapture(e.pointerId);
-});
+$('guest').addEventListener('pointerdown', (e) => { dragging = true; svg.setPointerCapture(e.pointerId); });
 svg.addEventListener('pointermove', (e) => { if (dragging) moveTo(...toScene(e)); });
 svg.addEventListener('pointerup', () => { dragging = false; });
-// A click places the guest — handy on a projector, no dragging required.
-svg.addEventListener('click', (e) => { if (e.target.id !== 'guest') moveTo(...toScene(e)); });
+svg.addEventListener('click', (e) => { if (!e.target.closest('#guest')) moveTo(...toScene(e)); });
 
 // ----------------------------------------------------------------- controls
 
 $('advanceBtn').onclick = () => send('advance');
 $('completeBtn').onclick = () => send('complete');
-$('allowed').onchange = (e) => {
-  state = { ...state, allowed: e.target.checked };
-  log(`room is now ${state.allowed ? 'allowed' : 'NOT allowed'} for this guest`);
-  render();
-};
 $('resetBtn').onclick = () => {
-  state = initialState({ allowed: $('allowed').checked });
+  state = initialState({ queue: QUEUE0 });
   roomActive = false;
-  watch = null;
+  coolUntil = 0;
+  passSince = null;
   zone = zoneAt(guest.x, guest.y);
-  // Reset assumes the guest is standing outside; if not, the next crossing
-  // re-derives everything, which is the point of it being a machine.
-  log('— guest memory reset —');
+  log('— reset —');
   render();
 };
 
 // ------------------------------------------------------------------- render
-
-let litStem = null;
 
 function log(line, cls = '') {
   const el = document.createElement('div');
   el.textContent = line;
   if (cls) el.className = cls;
   $('log').appendChild(el);
-  while ($('log').childElementCount > 80) $('log').removeChild($('log').firstChild);
+  while ($('log').childElementCount > 90) $('log').removeChild($('log').firstChild);
   $('log').scrollTop = $('log').scrollHeight;
 }
 
 function renderGuest() {
   $('guest').setAttribute('transform', `translate(${guest.x} ${guest.y})`);
+  renderBeam();
+}
+
+function renderBeam() {
+  const beam = $('offerBeam');
+  if (!state.offer) { beam.style.opacity = 0; return; }
+  const [dx, dy] = doorCentre(ROOMS[state.offer]);
+  beam.setAttribute('x1', guest.x); beam.setAttribute('y1', guest.y);
+  beam.setAttribute('x2', dx); beam.setAttribute('y2', dy);
+  beam.style.opacity = 0.8;
 }
 
 function renderWatch(show) {
-  const ring = $('watchRing');
-  ring.setAttribute('cx', guest.x);
-  ring.setAttribute('cy', guest.y);
-  ring.style.opacity = show && watch ? '0.9' : '0';
+  const arc = $('watchArc');
+  arc.setAttribute('cx', guest.x);
+  arc.setAttribute('cy', guest.y);
+  arc.style.opacity = show ? 0.9 : 0;
+}
+
+function renderScene() {
+  const g = $('rooms');
+  g.innerHTML = '';
+  for (const [roomId, r] of Object.entries(ROOMS)) {
+    const engagedHere = state.room === roomId
+      && ['entrance', 'instruction', 'interaction'].includes(state.phase);
+    const rect = document.createElementNS(SVG_NS, 'rect');
+    rect.setAttribute('x', r.x0); rect.setAttribute('y', r.y0);
+    rect.setAttribute('width', r.x1 - r.x0); rect.setAttribute('height', r.y1 - r.y0);
+    rect.setAttribute('class', `room${engagedHere && roomActive ? ' active' : ''}${full[roomId] ? ' fullRoom' : ''}`);
+    g.appendChild(rect);
+
+    // Walls with a gap only at the door, on the hallway side.
+    const doorX = r.side === 'E' ? r.x1 : r.x0;
+    const farX = r.side === 'E' ? r.x0 : r.x1;
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d',
+      `M ${doorX} ${r.door.y1} L ${doorX} ${r.y1} L ${farX} ${r.y1} L ${farX} ${r.y0} `
+      + `L ${doorX} ${r.y0} L ${doorX} ${r.door.y0}`);
+    path.setAttribute('class', 'walls');
+    g.appendChild(path);
+
+    const t = thresholdRect(r);
+    const tr = document.createElementNS(SVG_NS, 'rect');
+    tr.setAttribute('x', t.x0); tr.setAttribute('y', t.y0);
+    tr.setAttribute('width', t.x1 - t.x0); tr.setAttribute('height', t.y1 - t.y0);
+    tr.setAttribute('rx', 6);
+    tr.setAttribute('class', `threshold${state.offer === roomId ? ' offered' : ''}`);
+    g.appendChild(tr);
+
+    const cx = (r.x0 + r.x1) / 2;
+    const name = document.createElementNS(SVG_NS, 'text');
+    name.setAttribute('x', cx); name.setAttribute('y', (r.y0 + r.y1) / 2 - 2);
+    name.setAttribute('class', 'roomName');
+    name.textContent = r.name;
+    g.appendChild(name);
+    const meta = document.createElementNS(SVG_NS, 'text');
+    meta.setAttribute('x', cx); meta.setAttribute('y', (r.y0 + r.y1) / 2 + 13);
+    meta.setAttribute('class', 'roomMeta');
+    meta.textContent = full[roomId] ? 'full'
+      : engagedHere && roomActive ? 'active'
+      : QUEUE0.includes(roomId) ? memLabel(roomId) : 'not on their list';
+    g.appendChild(meta);
+  }
+}
+
+function memLabel(roomId) {
+  const mem = state.memory[roomId];
+  return mem == null || mem === 'fresh' ? 'idle'
+    : { rejectedOnce: 'rejected once', secondChance: 'second chance', lockedOut: 'locked out',
+        completed: 'completed', completedReturned: 'returned once',
+        noStateHeard: 'no state' }[mem] ?? mem;
+}
+
+function renderQueue() {
+  const rows = [];
+  for (const roomId of state.queue) {
+    rows.push({ roomId, tags: [
+      state.offer === roomId ? { text: 'offered', cls: 'accent' } : null,
+      state.deferred.includes(roomId) ? { text: 'deferred this cycle', cls: 'warn' } : null,
+      state.memory[roomId] === 'rejectedOnce' ? { text: 'strike 1', cls: 'warn' } : null,
+      state.memory[roomId] === 'secondChance' ? { text: 'last chance', cls: 'warn' } : null,
+    ].filter(Boolean) });
+  }
+  for (const roomId of QUEUE0.filter((r) => !state.queue.includes(r))) {
+    const mem = state.memory[roomId];
+    rows.push({ roomId, tags: [
+      mem === 'lockedOut' ? { text: 'locked out', cls: 'bad' }
+        : { text: memLabel(roomId), cls: mem?.startsWith('completed') ? 'ok' : 'bad' },
+    ] });
+  }
+  rows.push({ roomId: 'x', tags: [{ text: state.memory.x ? memLabel('x') : 'never on the list', cls: '' }] });
+
+  $('queue').innerHTML = rows.map(({ roomId, tags }) => `
+    <div class="qRow ${state.offer === roomId ? 'offer' : ''}">
+      <span class="name">${ROOMS[roomId].name}</span>
+      ${tags.map((t) => `<span class="chip ${t.cls}">${t.text}</span>`).join('')}
+      <span class="spacer"></span>
+      <label class="toggle"><input type="checkbox" data-full="${roomId}" ${full[roomId] ? 'checked' : ''}/> full</label>
+    </div>`).join('');
+  for (const box of $('queue').querySelectorAll('[data-full]')) {
+    box.onchange = () => { full[box.dataset.full] = box.checked; render(); };
+  }
 }
 
 function renderStems() {
@@ -396,29 +535,26 @@ function renderStems() {
 }
 
 function render() {
-  $('phase').textContent = state.phase;
-  $('memory').textContent = state.memory;
-  $('memory').style.color = state.memory === 'lockedOut' ? 'var(--bad)'
-    : state.memory === 'completed' ? 'var(--ok)' : '';
-  $('roomState').textContent = roomActive ? 'active' : 'idle';
-  $('roomState').className = `roomState${roomActive ? ' active' : ''}`;
-  $('roomStateLabel').textContent = roomActive ? 'active' : 'idle';
-  $('roomRect').setAttribute('class', `room${roomActive ? ' active' : ''}`);
+  $('phase').textContent = state.phase + (state.room ? ` · ${ROOMS[state.room].name}` : '');
+  $('offer').textContent = state.offer ? ROOMS[state.offer].name : '—';
   $('advanceBtn').disabled = state.phase !== 'instruction';
   $('completeBtn').disabled = state.phase !== 'interaction';
+  renderScene();
+  renderQueue();
   renderStems();
+  renderGuest();
 }
 
-// Exposed so a demo (or a driving script) can place the guest without a mouse.
+// Exposed for demos and for driving over the DevTools protocol.
 window.sim = {
   place: moveTo,
   send,
-  get state() { return { ...state, zone, roomActive }; },
+  setFull: (roomId, value) => { full[roomId] = value; render(); },
+  get state() { return { ...state, zone: { ...zone }, roomActive, full: { ...full } }; },
 };
 
-renderGuest();
 render();
-log('drag the guest, or click anywhere to place them');
+log('the hallway will call the nearest room on the queue');
 </script>
 </body>
 </html>

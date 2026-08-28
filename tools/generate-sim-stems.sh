@@ -18,6 +18,7 @@ gen() {
 }
 
 gen exhibit-approach        "Exhibit approach. Something waits behind this door. Come closer."
+gen continue                "Continue. Yes. This door. You have almost arrived."
 gen entrance                "Entrance. Welcome. You chose to step inside."
 gen instruction             "Instruction. Listen carefully. Here is what you must do."
 gen interaction             "Interaction. The room is alive now. It is responding to you."

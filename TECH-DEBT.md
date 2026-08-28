@@ -64,29 +64,37 @@ having derived standing in the first place.
 
 ---
 
-## 2.5 Experiment in flight — the exhibit machine
+## 2.5 Experiment in flight — the museum machine
 
-The team meeting of 2026-08-27 reshaped the guest↔room relationship for the
-museum rooms, and the new shape is deliberately **not** in the runtime yet:
+Second iteration (team feedback interrogated 2026-08-28). Still deliberately
+**not** in the runtime; lives at `public/sim/museum-machine.js`, rules encoded
+verbatim in `public/__tests__/museum-machine.test.js`, demo at `/sim/`.
 
-- **The exhibit machine** — a per-guest, per-room audio journey (Approach →
-  Entrance → Instruction → Interaction → Complete, with two chances per room,
-  rejection, lockout, and return variants). Lives as a pure module in
-  `public/sim/exhibit-machine.js`, with the team's edge cases encoded verbatim
-  in `public/__tests__/exhibit-machine.test.js` and a demo simulator at
-  `/sim/` (draggable guest, spoken stems, live state). It ports into the
-  runtime only if it survives team review and BLE contact — the rejection
-  trigger (3s clear of the threshold and moving away) sits exactly where RSSI
-  is mushiest.
-- **Threshold zones** — per-room trigger surfaces just outside each DIM room.
-  Not rooms: no state, no occupancy, allowed to overlap hallways and each
-  other. Not yet in the contract; they arrive with the exhibit machine.
-- **Settling is decided out** — rooms will go idle ↔ active, instantly, both
-  ways. Not yet executed in the runtime: the exhibit machine reshapes the same
-  rooms, so both changes land together rather than churning the machines
-  twice.
-- Instruction → Interaction → Complete advance **manually** in the simulator;
-  what advances them for real is an open team question.
+The shape now: each guest carries a **queue** of DIM rooms, seeded
+north→south. The hallway offers the closest queued room that is not full and
+not rejected this cycle ("Exhibit Approach"); a rejected room rotates to the
+back and is only offerable again when everything else is done or full — the
+turn of the cycle announces itself as "Return Later". The offered room's
+threshold plays "Continue"; inside, Entrance → Instruction → Interaction →
+Complete hold. Two refusals lock a room forever. Entering a **full** room
+(maxOccupants) is silence — no stem, no strike, the queue holds their place —
+and the consumed offer cannot convict them on the way out. A room never on
+the queue answers its threshold with "Approach, No State", then "Return, No
+State".
+
+Judgements the harness owns, tuned for BLE scepticism: the offer **latches**
+(evaluated only in the hallway with no offer standing, after a cool-off, and
+never over a playing stem), and "walked past" needs the guest measurably
+nearer another queued door than the offered one, sustained 1.5s — a wobble
+cannot convict, and lingering is not refusing. The team suspects venue BLE
+may not support this reliably; that is precisely what the onsite week tests.
+
+Standing notes: this replaces `paths` in the DIM area (the queue is the
+path — collapses §1.3 into queue-assignment policy); threshold zones join the
+contract with it (not rooms — no state, no occupancy, may overlap hallways);
+settling is decided out (idle ↔ active, instant, landing together with this);
+Instruction → Interaction → Complete still advance manually — what advances
+them for real is an open team question.
 
 ## 3. Not built
 
