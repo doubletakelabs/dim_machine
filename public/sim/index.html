@@ -110,10 +110,10 @@
 
 <main>
   <div class="card">
-    <svg id="scene" viewBox="0 0 640 560" preserveAspectRatio="xMidYMid meet">
-      <rect class="hall" x="0" y="0" width="640" height="560"/>
-      <text class="compass" x="320" y="16">N — hallway entrance</text>
-      <text class="compass" x="320" y="552">S</text>
+    <svg id="scene" viewBox="0 0 840 620" preserveAspectRatio="xMidYMid meet">
+      <rect class="hall" x="0" y="0" width="840" height="620"/>
+      <text class="compass" x="420" y="16">N — hallway entrance</text>
+      <text class="compass" x="420" y="612">S</text>
       <line id="offerBeam" class="offerBeam"/>
       <g id="rooms"></g>
       <circle id="watchArc" class="watchArc" r="15"/>
@@ -124,8 +124,9 @@
     </svg>
     <div id="hint">
       The hallway rolls the dice: a random room among whoever isn't full or deferred,
-      until the entrances are spent. Walk past the offered door — nearer to another
-      candidate for 1.5s — and you've refused it. One way into every room.
+      until the entrances are spent. Refusing takes real walking: retreat from the
+      offered door past your closest approach, nearer to another candidate, for 1.5s.
+      Standing still is deciding. One way into every room.
     </div>
   </div>
 
@@ -173,9 +174,9 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
  */
 const ROOMS = {
   a: { name: 'Exhibit A', x0: 60,  y0: 40,  x1: 250, y1: 160, side: 'E', door: { y0: 75,  y1: 125 } },
-  b: { name: 'Exhibit B', x0: 390, y0: 130, x1: 580, y1: 250, side: 'W', door: { y0: 165, y1: 215 } },
-  c: { name: 'Exhibit C', x0: 60,  y0: 260, x1: 250, y1: 380, side: 'E', door: { y0: 295, y1: 345 } },
-  d: { name: 'Exhibit D', x0: 390, y0: 350, x1: 580, y1: 470, side: 'W', door: { y0: 385, y1: 435 } },
+  b: { name: 'Exhibit B', x0: 590, y0: 160, x1: 780, y1: 280, side: 'W', door: { y0: 195, y1: 245 } },
+  c: { name: 'Exhibit C', x0: 60,  y0: 300, x1: 250, y1: 420, side: 'E', door: { y0: 335, y1: 385 } },
+  d: { name: 'Exhibit D', x0: 590, y0: 440, x1: 780, y1: 560, side: 'W', door: { y0: 475, y1: 525 } },
 };
 const ALL_ROOMS = Object.keys(ROOMS);
 const THRESHOLD_DEPTH = 62;
@@ -270,7 +271,7 @@ const audioQuiet = () => Date.now() - audioIdleAt > 600;
 
 // ----------------------------------------------------------------- geometry
 
-const guest = { x: 320, y: 28 };
+const guest = { x: 420, y: 28 };
 let zone = { kind: 'hallway', roomId: null };
 
 function zoneAt(x, y) {
@@ -344,9 +345,11 @@ function moveTo(x, y) {
 const COOL_MS = 4000;
 const PASS_HYSTERESIS = 40;
 const PASS_SUSTAIN_MS = 1500;
-const PASS_FAR = 200;
+const PASS_FAR = 260;
+const RETREAT = 120;   // how far past their closest approach counts as leaving
 let coolUntil = 0;
 let passSince = null;
+let offerTrack = null; // { roomId, min } — closest they ever got to the offered door
 
 setInterval(() => {
   const cooling = Date.now() < coolUntil;
@@ -359,20 +362,28 @@ setInterval(() => {
     send({ type: 'evaluate', roll: Math.random(), full: { ...full } });
   }
 
-  // 2. Passed-door: measurably nearer another candidate than the offer, held
-  //    long enough that a BLE wobble cannot convict anyone.
+  // 2. Passed-door. Two things must BOTH be true, sustained long enough that
+  //    a BLE wobble cannot convict anyone: the guest has RETREATED — farther
+  //    from the offered door than their closest approach by a real margin —
+  //    and they are measurably nearer some other candidate (or simply gone,
+  //    when no other candidate exists). Retreat is the load-bearing half:
+  //    without it, standing in the middle of a wide hallway is "nearer to
+  //    another door" from the moment the offer lands, and drifting across
+  //    the hall reads as refusal. Standing still is deciding; only moving
+  //    away is an answer.
   if (state.offer && state.phase === 'hallway') {
     const dOffer = distToDoor(state.offer, guest.x, guest.y);
-    // Any candidate door counts as "the next room" for this judgement,
-    // deferred included. What matters is that the guest is measurably past
-    // the door they were called to.
+    if (offerTrack?.roomId !== state.offer) offerTrack = { roomId: state.offer, min: dOffer };
+    offerTrack.min = Math.min(offerTrack.min, dOffer);
     const candidate = (r) => !['lockedOut', 'completed', 'completedReturned', 'noStateHeard']
       .includes(state.memory[r]);
     const others = state.rooms.filter((r) => r !== state.offer && candidate(r) && !full[r]);
     const dNext = others.length
       ? Math.min(...others.map((r) => distToDoor(r, guest.x, guest.y)))
       : null;
-    const past = dNext != null ? dOffer > dNext + PASS_HYSTERESIS : dOffer > PASS_FAR;
+    const retreated = dOffer > offerTrack.min + RETREAT;
+    const past = retreated
+      && (dNext != null ? dOffer > dNext + PASS_HYSTERESIS : dOffer > PASS_FAR);
     if (past) {
       passSince ??= Date.now();
       renderWatch(true);
@@ -387,6 +398,7 @@ setInterval(() => {
     }
   } else {
     passSince = null;
+    offerTrack = null;
     renderWatch(false);
   }
 }, 150);
@@ -399,7 +411,7 @@ const toScene = (evt) => {
   const pt = svg.createSVGPoint();
   pt.x = evt.clientX; pt.y = evt.clientY;
   const p = pt.matrixTransform(svg.getScreenCTM().inverse());
-  return [Math.max(8, Math.min(632, p.x)), Math.max(8, Math.min(552, p.y))];
+  return [Math.max(8, Math.min(832, p.x)), Math.max(8, Math.min(612, p.y))];
 };
 $('guest').addEventListener('pointerdown', (e) => { dragging = true; svg.setPointerCapture(e.pointerId); });
 svg.addEventListener('pointermove', (e) => { if (dragging) moveTo(...toScene(e)); });
