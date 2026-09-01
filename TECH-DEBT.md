@@ -66,7 +66,22 @@ having derived standing in the first place.
 
 ## 2.5 Experiment in flight — the museum machine
 
-Second iteration (team feedback interrogated 2026-08-28). Still deliberately
+**Third iteration** (creative meeting 2026-08-31, confirmed 2026-09-01). The
+queue is gone: each guest gets to **enter four rooms**, and every offer is
+drawn **at random** from the rooms available — not full, not completed, not
+locked — at that moment. No pre-assigned set exists; who you are offered
+depends on where the crowd is when the hallway calls. A slot burns when an
+Entrance begins, so abandonment costs the slot *and* locks the room
+("4 entered" was the team's ruling); entering a full room burns nothing,
+because no entrance ever began — a flagged assumption. Once the slots are
+spent the hallway stops calling and every unvisited door answers "Approach,
+No State". The two-strike lockouts, the cycle deferral, Continue at the
+offered threshold, full-room silence-without-prejudice, and the offer latch
+all survive from iteration 2. The machine takes its randomness as an event
+field (`roll`), so the tests hold the dice.
+
+Superseded second iteration, kept for the record (team feedback interrogated
+2026-08-28). Still deliberately
 **not** in the runtime; lives at `public/sim/museum-machine.js`, rules encoded
 verbatim in `public/__tests__/museum-machine.test.js`, demo at `/sim/`.
 

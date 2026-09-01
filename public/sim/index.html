@@ -102,7 +102,7 @@
 
 <header>
   <h1>Museum Logic <span class="sub">simulator</span></h1>
-  <span class="tag">experimental — iteration 2</span>
+  <span class="tag">experimental — iteration 3</span>
   <span class="spacer"></span>
   <span id="coolNote" style="color:var(--warn); font-size:11px"></span>
   <a href="/operator.html">operator ↗</a>
@@ -123,9 +123,9 @@
       </g>
     </svg>
     <div id="hint">
-      The hallway calls: the nearest queued room that isn't full or deferred. Walk past
-      its door — nearer to another candidate for 1.5s — and you've refused it. One way
-      into every room. Click anywhere to place the guest.
+      The hallway rolls the dice: a random room among whoever isn't full or deferred,
+      until the entrances are spent. Walk past the offered door — nearer to another
+      candidate for 1.5s — and you've refused it. One way into every room.
     </div>
   </div>
 
@@ -133,7 +133,7 @@
     <div class="cardBody">
       <h2>Guest</h2>
       <div class="stateBig" id="phase">hallway</div>
-      <div class="offerLine">offer: <b id="offer">—</b></div>
+      <div class="offerLine">offer: <b id="offer">—</b> · entered <b id="seen" style="color:var(--ink)">0/4</b></div>
 
       <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px">
         <button id="advanceBtn" disabled>Advance → Interaction</button>
@@ -142,8 +142,13 @@
         <button id="resetBtn">Reset</button>
       </div>
 
-      <h2>Queue <span style="color:var(--faint); text-transform:none; letter-spacing:0">— cycle order; “full” stands in for maxOccupants</span></h2>
+      <h2>Rooms <span style="color:var(--faint); text-transform:none; letter-spacing:0">— random draw among the available; full stands in for maxOccupants</span></h2>
       <div id="queue"></div>
+      <div style="margin-top:8px; display:flex; gap:6px; align-items:center" class="offerLine">
+        rooms per guest <input id="limitInput" type="number" min="1" max="4" value="4"
+          style="width:52px; background:#1d2027; color:var(--ink); border:1px solid var(--line); border-radius:5px; padding:3px 6px; font:inherit" />
+        <span style="font-size:11px; color:var(--faint)">applies on Reset — try 2 to feel the cap</span>
+      </div>
 
       <h2 style="margin-top:12px">Stems</h2>
       <div id="stems"></div>
@@ -161,16 +166,18 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 // ------------------------------------------------------------------- rooms
 
 /**
- * Four rooms off a north–south hallway, doors opening onto it. A, B and C are
- * on this guest's queue; X never was — it exists to demo "no state".
+ * Four rooms off a north–south hallway, doors opening onto it. Every room is
+ * a candidate now — the draw is random among whoever is available. Drop the
+ * limit below 4 to feel the cap: the rooms that never got drawn go "no
+ * state" the moment the last slot burns.
  */
 const ROOMS = {
   a: { name: 'Exhibit A', x0: 60,  y0: 40,  x1: 250, y1: 160, side: 'E', door: { y0: 75,  y1: 125 } },
   b: { name: 'Exhibit B', x0: 390, y0: 130, x1: 580, y1: 250, side: 'W', door: { y0: 165, y1: 215 } },
   c: { name: 'Exhibit C', x0: 60,  y0: 260, x1: 250, y1: 380, side: 'E', door: { y0: 295, y1: 345 } },
-  x: { name: 'Exhibit X', x0: 390, y0: 350, x1: 580, y1: 470, side: 'W', door: { y0: 385, y1: 435 } },
+  d: { name: 'Exhibit D', x0: 390, y0: 350, x1: 580, y1: 470, side: 'W', door: { y0: 385, y1: 435 } },
 };
-const QUEUE0 = ['a', 'b', 'c'];
+const ALL_ROOMS = Object.keys(ROOMS);
 const THRESHOLD_DEPTH = 62;
 
 function thresholdRect(r) {
@@ -190,9 +197,10 @@ const distToDoor = (roomId, x, y) => {
 
 // ------------------------------------------------------------------ machine
 
-let state = initialState({ queue: QUEUE0 });
+let limit = 4;
+let state = initialState({ rooms: ALL_ROOMS, limit });
 let roomActive = false;
-const full = { a: false, b: false, c: false, x: false };
+const full = { a: false, b: false, c: false, d: false };
 
 const STEM_LABELS = {
   [STEMS.approach]: 'Exhibit Approach',
@@ -347,18 +355,20 @@ setInterval(() => {
   // 1. Evaluate: in the hallway, nothing offered, nothing speaking, no cool-off.
   if (state.phase === 'hallway' && !state.offer && !cooling && audioQuiet()
       && zone.kind !== 'room') {
-    const distances = Object.fromEntries(Object.keys(ROOMS).map((r) => [r, distToDoor(r, guest.x, guest.y)]));
-    send({ type: 'evaluate', distances, full: { ...full } });
+    // The dice live out here: the machine is pure, so the harness rolls.
+    send({ type: 'evaluate', roll: Math.random(), full: { ...full } });
   }
 
   // 2. Passed-door: measurably nearer another candidate than the offer, held
   //    long enough that a BLE wobble cannot convict anyone.
   if (state.offer && state.phase === 'hallway') {
     const dOffer = distToDoor(state.offer, guest.x, guest.y);
-    // Deferred rooms still count as "the next queued room" for this judgement
-    // — they are queued, just not currently offerable. What matters is that
-    // the guest is measurably past the door they were called to.
-    const others = state.queue.filter((r) => r !== state.offer && !full[r]);
+    // Any candidate door counts as "the next room" for this judgement,
+    // deferred included. What matters is that the guest is measurably past
+    // the door they were called to.
+    const candidate = (r) => !['lockedOut', 'completed', 'completedReturned', 'noStateHeard']
+      .includes(state.memory[r]);
+    const others = state.rooms.filter((r) => r !== state.offer && candidate(r) && !full[r]);
     const dNext = others.length
       ? Math.min(...others.map((r) => distToDoor(r, guest.x, guest.y)))
       : null;
@@ -401,7 +411,8 @@ svg.addEventListener('click', (e) => { if (!e.target.closest('#guest')) moveTo(.
 $('advanceBtn').onclick = () => send('advance');
 $('completeBtn').onclick = () => send('complete');
 $('resetBtn').onclick = () => {
-  state = initialState({ queue: QUEUE0 });
+  limit = Math.max(1, Math.min(4, +($('limitInput').value || 4)));
+  state = initialState({ rooms: ALL_ROOMS, limit });
   roomActive = false;
   coolUntil = 0;
   passSince = null;
@@ -483,7 +494,7 @@ function renderScene() {
     meta.setAttribute('class', 'roomMeta');
     meta.textContent = full[roomId] ? 'full'
       : engagedHere && roomActive ? 'active'
-      : QUEUE0.includes(roomId) ? memLabel(roomId) : 'not on their list';
+      : memLabel(roomId);
     g.appendChild(meta);
   }
 }
@@ -497,23 +508,19 @@ function memLabel(roomId) {
 }
 
 function renderQueue() {
-  const rows = [];
-  for (const roomId of state.queue) {
-    rows.push({ roomId, tags: [
+  const rows = ALL_ROOMS.map((roomId) => {
+    const mem = state.memory[roomId];
+    return { roomId, tags: [
       state.offer === roomId ? { text: 'offered', cls: 'accent' } : null,
       state.deferred.includes(roomId) ? { text: 'deferred this cycle', cls: 'warn' } : null,
-      state.memory[roomId] === 'rejectedOnce' ? { text: 'strike 1', cls: 'warn' } : null,
-      state.memory[roomId] === 'secondChance' ? { text: 'last chance', cls: 'warn' } : null,
-    ].filter(Boolean) });
-  }
-  for (const roomId of QUEUE0.filter((r) => !state.queue.includes(r))) {
-    const mem = state.memory[roomId];
-    rows.push({ roomId, tags: [
-      mem === 'lockedOut' ? { text: 'locked out', cls: 'bad' }
-        : { text: memLabel(roomId), cls: mem?.startsWith('completed') ? 'ok' : 'bad' },
-    ] });
-  }
-  rows.push({ roomId: 'x', tags: [{ text: state.memory.x ? memLabel('x') : 'never on the list', cls: '' }] });
+      mem === 'rejectedOnce' ? { text: 'strike 1', cls: 'warn' } : null,
+      mem === 'secondChance' ? { text: 'last chance', cls: 'warn' } : null,
+      mem === 'lockedOut' ? { text: 'locked out', cls: 'bad' } : null,
+      mem === 'completed' ? { text: 'completed', cls: 'ok' } : null,
+      mem === 'completedReturned' ? { text: 'returned once', cls: 'ok' } : null,
+      mem === 'noStateHeard' ? { text: 'no state', cls: 'bad' } : null,
+    ].filter(Boolean) };
+  });
 
   $('queue').innerHTML = rows.map(({ roomId, tags }) => `
     <div class="qRow ${state.offer === roomId ? 'offer' : ''}">
@@ -536,7 +543,9 @@ function renderStems() {
 
 function render() {
   $('phase').textContent = state.phase + (state.room ? ` · ${ROOMS[state.room].name}` : '');
-  $('offer').textContent = state.offer ? ROOMS[state.offer].name : '—';
+  $('offer').textContent = state.offer ? ROOMS[state.offer].name
+    : state.seen >= state.limit ? 'journey complete' : '—';
+  $('seen').textContent = `${state.seen}/${state.limit}`;
   $('advanceBtn').disabled = state.phase !== 'instruction';
   $('completeBtn').disabled = state.phase !== 'interaction';
   renderScene();
@@ -554,7 +563,7 @@ window.sim = {
 };
 
 render();
-log('the hallway will call the nearest room on the queue');
+log('the hallway will draw a random available room');
 </script>
 </body>
 </html>
