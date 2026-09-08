@@ -51,20 +51,17 @@
   .offerLine { color: var(--dim); margin-bottom: 10px; }
   .offerLine b { color: var(--accent); font-weight: 600; }
 
-  /* queue panel */
   .qRow {
     display: flex; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 6px;
     border: 1px solid transparent; margin-bottom: 2px;
   }
-  .qRow.offer { border-color: #2b4a7a; background: #17203050; }
   .qRow .name { min-width: 74px; font-weight: 600; }
   .qRow .chip {
     font-size: 10px; padding: 1px 7px; border-radius: 999px; background: #262b36; color: var(--dim);
   }
-  .qRow .chip.warn { background: #3d2a14; color: var(--warn); }
   .qRow .chip.bad { background: #46191c; color: #ffb0b0; }
   .qRow .chip.ok { background: #163826; color: var(--ok); }
-  .qRow .chip.accent { background: #1e2b45; color: var(--accent); }
+  .qRow .chip.warn { background: #3d2a14; color: var(--warn); }
   label.toggle { display: flex; gap: 5px; align-items: center; cursor: pointer; color: var(--dim); font-size: 11px; }
 
   .stem { display: flex; gap: 8px; align-items: baseline; padding: 2px 6px; border-radius: 5px; }
@@ -78,8 +75,6 @@
   }
   #log div { padding: 1px 0; }
   #log .stemLine { color: var(--accent); }
-  #log .lockLine { color: var(--bad); }
-  #log .queueLine { color: var(--warn); }
 
   /* scene */
   .hall { fill: #101216; }
@@ -87,24 +82,19 @@
   .room.active { fill: #2f8f5b; }
   .room.fullRoom { fill: #46191c; fill-opacity: .6; }
   .walls { fill: none; stroke: #99a3b5; stroke-width: 3; stroke-linecap: round; }
-  .threshold { fill: #6ea8fe10; stroke: #6ea8fe44; stroke-dasharray: 5 4; }
-  .threshold.offered { fill: #6ea8fe28; stroke: #6ea8fe; }
   .roomName { fill: #cfd6e2; font-size: 12px; font-weight: 600; text-anchor: middle; pointer-events: none; }
   .roomMeta { fill: #8a93a4; font-size: 9px; text-anchor: middle; pointer-events: none; }
   .compass { fill: #5a6272; font-size: 11px; text-anchor: middle; letter-spacing: .2em; pointer-events: none; }
   #guest { cursor: grab; }
   #guest:active { cursor: grabbing; }
-  .offerBeam { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 3 5; opacity: 0; }
-  .watchArc { fill: none; stroke: var(--warn); stroke-width: 2; stroke-dasharray: 4 4; opacity: 0; }
 </style>
 </head>
 <body>
 
 <header>
   <h1>Museum Logic <span class="sub">simulator</span></h1>
-  <span class="tag">experimental — iteration 3</span>
+  <span class="tag">experimental — iteration 4</span>
   <span class="spacer"></span>
-  <span id="coolNote" style="color:var(--warn); font-size:11px"></span>
   <a href="/operator.html">operator ↗</a>
 </header>
 
@@ -114,19 +104,16 @@
       <rect class="hall" x="0" y="0" width="840" height="620"/>
       <text class="compass" x="420" y="16">N — hallway entrance</text>
       <text class="compass" x="420" y="612">S</text>
-      <line id="offerBeam" class="offerBeam"/>
       <g id="rooms"></g>
-      <circle id="watchArc" class="watchArc" r="15"/>
       <g id="guest">
         <circle r="9" fill="#58c98a" stroke="#0d0f13" stroke-width="2"/>
         <text y="-14" text-anchor="middle" fill="#dfe4ee" font-size="10">guest</text>
       </g>
     </svg>
     <div id="hint">
-      The hallway rolls the dice: a random room among whoever isn't full or deferred,
-      until the entrances are spent. Refusing takes real walking: retreat from the
-      offered door past your closest approach, nearer to another candidate, for 1.5s.
-      Standing still is deciding. One way into every room.
+      No offers, no thresholds — the guest chooses. The first rooms they enter are
+      theirs to activate; after the last slot, doors still open but nothing runs.
+      Returning to a room they've been in gets the return clip. One way into every room.
     </div>
   </div>
 
@@ -134,7 +121,7 @@
     <div class="cardBody">
       <h2>Guest</h2>
       <div class="stateBig" id="phase">hallway</div>
-      <div class="offerLine">offer: <b id="offer">—</b> · entered <b id="seen" style="color:var(--ink)">0/4</b></div>
+      <div class="offerLine">entered <b id="seen" style="color:var(--ink)">0/4</b></div>
 
       <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px">
         <button id="advanceBtn" disabled>Advance → Interaction</button>
@@ -143,12 +130,12 @@
         <button id="resetBtn">Reset</button>
       </div>
 
-      <h2>Rooms <span style="color:var(--faint); text-transform:none; letter-spacing:0">— random draw among the available; full stands in for maxOccupants</span></h2>
+      <h2>Rooms <span style="color:var(--faint); text-transform:none; letter-spacing:0">— full stands in for maxOccupants</span></h2>
       <div id="queue"></div>
       <div style="margin-top:8px; display:flex; gap:6px; align-items:center" class="offerLine">
-        rooms per guest <input id="limitInput" type="number" min="1" max="4" value="4"
+        rooms per guest <input id="limitInput" type="number" min="1" max="4" value="3"
           style="width:52px; background:#1d2027; color:var(--ink); border:1px solid var(--line); border-radius:5px; padding:3px 6px; font:inherit" />
-        <span style="font-size:11px; color:var(--faint)">applies on Reset — try 2 to feel the cap</span>
+        <span style="font-size:11px; color:var(--faint)">applies on Reset — 3 with four rooms shows the cap</span>
       </div>
 
       <h2 style="margin-top:12px">Stems</h2>
@@ -166,12 +153,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 // ------------------------------------------------------------------- rooms
 
-/**
- * Four rooms off a north–south hallway, doors opening onto it. Every room is
- * a candidate now — the draw is random among whoever is available. Drop the
- * limit below 4 to feel the cap: the rooms that never got drawn go "no
- * state" the moment the last slot burns.
- */
+/** Four rooms off a north–south hallway, one door each, opening onto it. */
 const ROOMS = {
   a: { name: 'Exhibit A', x0: 60,  y0: 40,  x1: 250, y1: 160, side: 'E', door: { y0: 75,  y1: 125 } },
   b: { name: 'Exhibit B', x0: 590, y0: 160, x1: 780, y1: 280, side: 'W', door: { y0: 195, y1: 245 } },
@@ -179,42 +161,22 @@ const ROOMS = {
   d: { name: 'Exhibit D', x0: 590, y0: 440, x1: 780, y1: 560, side: 'W', door: { y0: 475, y1: 525 } },
 };
 const ALL_ROOMS = Object.keys(ROOMS);
-const THRESHOLD_DEPTH = 62;
-
-function thresholdRect(r) {
-  const pad = 12;
-  return r.side === 'E'
-    ? { x0: r.x1, y0: r.door.y0 - pad, x1: r.x1 + THRESHOLD_DEPTH, y1: r.door.y1 + pad }
-    : { x0: r.x0 - THRESHOLD_DEPTH, y0: r.door.y0 - pad, x1: r.x0, y1: r.door.y1 + pad };
-}
-function doorCentre(r) {
-  const x = r.side === 'E' ? r.x1 : r.x0;
-  return [x, (r.door.y0 + r.door.y1) / 2];
-}
-const distToDoor = (roomId, x, y) => {
-  const [dx, dy] = doorCentre(ROOMS[roomId]);
-  return Math.hypot(x - dx, y - dy);
-};
 
 // ------------------------------------------------------------------ machine
 
-let limit = 4;
+let limit = 3;
 let state = initialState({ rooms: ALL_ROOMS, limit });
 let roomActive = false;
 const full = { a: false, b: false, c: false, d: false };
 
 const STEM_LABELS = {
-  [STEMS.approach]: 'Exhibit Approach',
-  [STEMS.continue]: 'Continue',
   [STEMS.entrance]: 'Entrance',
   [STEMS.instruction]: 'Instruction',
   [STEMS.interaction]: 'Interaction',
   [STEMS.complete]: 'Complete',
-  [STEMS.approachNoState]: 'Exhibit Approach, No State',
+  [STEMS.noActivation]: 'No State (cannot activate)',
   [STEMS.returnNoState]: 'Return, No State',
-  [STEMS.rejection]: 'Rejection',
-  [STEMS.returnLater]: 'Return Later',
-  [STEMS.returnAfterCompletion]: 'Return after Completion',
+  [STEMS.returnVisit]: 'Return (been here before)',
 };
 
 function send(event) {
@@ -223,19 +185,10 @@ function send(event) {
   state = result.state;
   if (result.roomActive != null) roomActive = result.roomActive;
   const type = typeof event === 'string' ? event : event.type;
-  if (state.phase !== before.phase || state.offer !== before.offer || result.play || result.rejected) {
+  if (state.phase !== before.phase || result.play) {
     log(`${type}${event.roomId ? `(${event.roomId})` : ''} → ${state.phase}`
-      + (state.offer ? ` · offer ${state.offer}` : '')
       + (result.play ? `  ▶ ${STEM_LABELS[result.play]}` : ''),
       result.play ? 'stemLine' : '');
-  }
-  if (result.rejected) {
-    const mem = state.memory[result.rejected];
-    log(mem === 'lockedOut'
-      ? `   ${result.rejected} is locked out — strike two`
-      : `   ${result.rejected} → back of the queue (strike one)`,
-      mem === 'lockedOut' ? 'lockLine' : 'queueLine');
-    coolUntil = Date.now() + COOL_MS;
   }
   if (result.play) play(result.play);
   render();
@@ -246,7 +199,6 @@ function send(event) {
 let audio = null;
 let fadeTimer = null;
 let litStem = null;
-let audioIdleAt = 0;   // evaluate waits for the current stem to finish speaking
 
 function play(stem) {
   if (audio) {
@@ -258,16 +210,14 @@ function play(stem) {
     }, 30);
   }
   audio = new Audio(`stems/${stem}.wav`);
-  audioIdleAt = Infinity;
-  audio.addEventListener('ended', () => { audioIdleAt = Date.now(); });
-  audio.play().catch(() => { audioIdleAt = Date.now(); log('   (click once to unlock audio)'); });
+  audio.play().catch(() => log('   (click once to unlock audio)'));
   if (stem === STEMS.entrance) {
+    // Instruction follows Entrance with no other trigger than the audio ending.
     audio.addEventListener('ended', () => send('entranceEnded'));
   }
   litStem = stem;
   renderStems();
 }
-const audioQuiet = () => Date.now() - audioIdleAt > 600;
 
 // ----------------------------------------------------------------- geometry
 
@@ -277,10 +227,6 @@ let zone = { kind: 'hallway', roomId: null };
 function zoneAt(x, y) {
   for (const [roomId, r] of Object.entries(ROOMS)) {
     if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) return { kind: 'room', roomId };
-  }
-  for (const [roomId, r] of Object.entries(ROOMS)) {
-    const t = thresholdRect(r);
-    if (x >= t.x0 && x <= t.x1 && y >= t.y0 && y <= t.y1) return { kind: 'threshold', roomId };
   }
   return { kind: 'hallway', roomId: null };
 }
@@ -316,92 +262,18 @@ function legalMove(px, py, x, y) {
   return true;
 }
 
-/**
- * Geometry → events. Exiting a room lands in its own threshold; that is not a
- * fresh arrival, so only a hallway→threshold crossing announces one.
- */
+/** Geometry → events. Entry is the only spatial trigger left. */
 function moveTo(x, y) {
   if (!legalMove(guest.x, guest.y, x, y)) return; // that is a wall
   guest.x = x; guest.y = y;
   const next = zoneAt(x, y);
   if (next.kind !== zone.kind || next.roomId !== zone.roomId) {
-    if (zone.kind === 'hallway' && next.kind === 'threshold') {
-      send({ type: 'enterThreshold', roomId: next.roomId });
-    } else if (zone.kind === 'threshold' && next.kind === 'hallway') {
-      send('exitThreshold');
-    } else if (next.kind === 'room') {
-      send({ type: 'enterRoom', roomId: next.roomId, full: full[next.roomId] });
-    } else if (zone.kind === 'room') {
-      send('exitRoom');
-      coolUntil = Date.now() + COOL_MS; // let the exit settle before the next call
-    }
+    if (next.kind === 'room') send({ type: 'enterRoom', roomId: next.roomId, full: full[next.roomId] });
+    else if (zone.kind === 'room') send('exitRoom');
     zone = next;
   }
   renderGuest();
 }
-
-// --------------------------------------------- the hallway's two judgements
-
-const COOL_MS = 4000;
-const PASS_HYSTERESIS = 40;
-const PASS_SUSTAIN_MS = 1500;
-const PASS_FAR = 260;
-const RETREAT = 120;   // how far past their closest approach counts as leaving
-let coolUntil = 0;
-let passSince = null;
-let offerTrack = null; // { roomId, min } — closest they ever got to the offered door
-
-setInterval(() => {
-  const cooling = Date.now() < coolUntil;
-  $('coolNote').textContent = cooling ? `cool-off ${((coolUntil - Date.now()) / 1000).toFixed(1)}s` : '';
-
-  // 1. Evaluate: in the hallway, nothing offered, nothing speaking, no cool-off.
-  if (state.phase === 'hallway' && !state.offer && !cooling && audioQuiet()
-      && zone.kind !== 'room') {
-    // The dice live out here: the machine is pure, so the harness rolls.
-    send({ type: 'evaluate', roll: Math.random(), full: { ...full } });
-  }
-
-  // 2. Passed-door. Two things must BOTH be true, sustained long enough that
-  //    a BLE wobble cannot convict anyone: the guest has RETREATED — farther
-  //    from the offered door than their closest approach by a real margin —
-  //    and they are measurably nearer some other candidate (or simply gone,
-  //    when no other candidate exists). Retreat is the load-bearing half:
-  //    without it, standing in the middle of a wide hallway is "nearer to
-  //    another door" from the moment the offer lands, and drifting across
-  //    the hall reads as refusal. Standing still is deciding; only moving
-  //    away is an answer.
-  if (state.offer && state.phase === 'hallway') {
-    const dOffer = distToDoor(state.offer, guest.x, guest.y);
-    if (offerTrack?.roomId !== state.offer) offerTrack = { roomId: state.offer, min: dOffer };
-    offerTrack.min = Math.min(offerTrack.min, dOffer);
-    const candidate = (r) => !['lockedOut', 'completed', 'completedReturned', 'noStateHeard']
-      .includes(state.memory[r]);
-    const others = state.rooms.filter((r) => r !== state.offer && candidate(r) && !full[r]);
-    const dNext = others.length
-      ? Math.min(...others.map((r) => distToDoor(r, guest.x, guest.y)))
-      : null;
-    const retreated = dOffer > offerTrack.min + RETREAT;
-    const past = retreated
-      && (dNext != null ? dOffer > dNext + PASS_HYSTERESIS : dOffer > PASS_FAR);
-    if (past) {
-      passSince ??= Date.now();
-      renderWatch(true);
-      if (Date.now() - passSince >= PASS_SUSTAIN_MS) {
-        passSince = null;
-        renderWatch(false);
-        send('passedOffer');
-      }
-    } else {
-      passSince = null;
-      renderWatch(false);
-    }
-  } else {
-    passSince = null;
-    offerTrack = null;
-    renderWatch(false);
-  }
-}, 150);
 
 // ----------------------------------------------------------------- pointers
 
@@ -423,11 +295,9 @@ svg.addEventListener('click', (e) => { if (!e.target.closest('#guest')) moveTo(.
 $('advanceBtn').onclick = () => send('advance');
 $('completeBtn').onclick = () => send('complete');
 $('resetBtn').onclick = () => {
-  limit = Math.max(1, Math.min(4, +($('limitInput').value || 4)));
+  limit = Math.max(1, Math.min(4, +($('limitInput').value || 3)));
   state = initialState({ rooms: ALL_ROOMS, limit });
   roomActive = false;
-  coolUntil = 0;
-  passSince = null;
   zone = zoneAt(guest.x, guest.y);
   log('— reset —');
   render();
@@ -446,23 +316,12 @@ function log(line, cls = '') {
 
 function renderGuest() {
   $('guest').setAttribute('transform', `translate(${guest.x} ${guest.y})`);
-  renderBeam();
 }
 
-function renderBeam() {
-  const beam = $('offerBeam');
-  if (!state.offer) { beam.style.opacity = 0; return; }
-  const [dx, dy] = doorCentre(ROOMS[state.offer]);
-  beam.setAttribute('x1', guest.x); beam.setAttribute('y1', guest.y);
-  beam.setAttribute('x2', dx); beam.setAttribute('y2', dy);
-  beam.style.opacity = 0.8;
-}
-
-function renderWatch(show) {
-  const arc = $('watchArc');
-  arc.setAttribute('cx', guest.x);
-  arc.setAttribute('cy', guest.y);
-  arc.style.opacity = show ? 0.9 : 0;
+function memLabel(roomId) {
+  return {
+    visited: 'been here', completed: 'completed', noActivation: 'no state',
+  }[state.memory[roomId]] ?? 'open';
 }
 
 function renderScene() {
@@ -477,7 +336,6 @@ function renderScene() {
     rect.setAttribute('class', `room${engagedHere && roomActive ? ' active' : ''}${full[roomId] ? ' fullRoom' : ''}`);
     g.appendChild(rect);
 
-    // Walls with a gap only at the door, on the hallway side.
     const doorX = r.side === 'E' ? r.x1 : r.x0;
     const farX = r.side === 'E' ? r.x0 : r.x1;
     const path = document.createElementNS(SVG_NS, 'path');
@@ -486,14 +344,6 @@ function renderScene() {
       + `L ${doorX} ${r.y0} L ${doorX} ${r.door.y0}`);
     path.setAttribute('class', 'walls');
     g.appendChild(path);
-
-    const t = thresholdRect(r);
-    const tr = document.createElementNS(SVG_NS, 'rect');
-    tr.setAttribute('x', t.x0); tr.setAttribute('y', t.y0);
-    tr.setAttribute('width', t.x1 - t.x0); tr.setAttribute('height', t.y1 - t.y0);
-    tr.setAttribute('rx', 6);
-    tr.setAttribute('class', `threshold${state.offer === roomId ? ' offered' : ''}`);
-    g.appendChild(tr);
 
     const cx = (r.x0 + r.x1) / 2;
     const name = document.createElementNS(SVG_NS, 'text');
@@ -511,36 +361,24 @@ function renderScene() {
   }
 }
 
-function memLabel(roomId) {
-  const mem = state.memory[roomId];
-  return mem == null || mem === 'fresh' ? 'idle'
-    : { rejectedOnce: 'rejected once', secondChance: 'second chance', lockedOut: 'locked out',
-        completed: 'completed', completedReturned: 'returned once',
-        noStateHeard: 'no state' }[mem] ?? mem;
-}
-
-function renderQueue() {
-  const rows = ALL_ROOMS.map((roomId) => {
+function renderRooms() {
+  $('queue').innerHTML = ALL_ROOMS.map((roomId) => {
     const mem = state.memory[roomId];
-    return { roomId, tags: [
-      state.offer === roomId ? { text: 'offered', cls: 'accent' } : null,
-      state.deferred.includes(roomId) ? { text: 'deferred this cycle', cls: 'warn' } : null,
-      mem === 'rejectedOnce' ? { text: 'strike 1', cls: 'warn' } : null,
-      mem === 'secondChance' ? { text: 'last chance', cls: 'warn' } : null,
-      mem === 'lockedOut' ? { text: 'locked out', cls: 'bad' } : null,
+    const tags = [
+      mem === 'visited' ? { text: 'been here', cls: 'warn' } : null,
       mem === 'completed' ? { text: 'completed', cls: 'ok' } : null,
-      mem === 'completedReturned' ? { text: 'returned once', cls: 'ok' } : null,
-      mem === 'noStateHeard' ? { text: 'no state', cls: 'bad' } : null,
-    ].filter(Boolean) };
-  });
-
-  $('queue').innerHTML = rows.map(({ roomId, tags }) => `
-    <div class="qRow ${state.offer === roomId ? 'offer' : ''}">
+      mem === 'noActivation' ? { text: 'no state', cls: 'bad' } : null,
+      !mem && state.seen >= state.limit ? { text: 'will not activate', cls: 'bad' } : null,
+      !mem && state.seen < state.limit ? { text: 'open', cls: '' } : null,
+    ].filter(Boolean);
+    return `
+    <div class="qRow">
       <span class="name">${ROOMS[roomId].name}</span>
       ${tags.map((t) => `<span class="chip ${t.cls}">${t.text}</span>`).join('')}
       <span class="spacer"></span>
       <label class="toggle"><input type="checkbox" data-full="${roomId}" ${full[roomId] ? 'checked' : ''}/> full</label>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   for (const box of $('queue').querySelectorAll('[data-full]')) {
     box.onchange = () => { full[box.dataset.full] = box.checked; render(); };
   }
@@ -555,15 +393,13 @@ function renderStems() {
 
 function render() {
   $('phase').textContent = state.phase + (state.room ? ` · ${ROOMS[state.room].name}` : '');
-  $('offer').textContent = state.offer ? ROOMS[state.offer].name
-    : state.seen >= state.limit ? 'journey complete' : '—';
-  $('seen').textContent = `${state.seen}/${state.limit}`;
+  $('seen').textContent = `${state.seen}/${state.limit}`
+    + (state.seen >= state.limit ? ' · journey complete' : '');
   $('advanceBtn').disabled = state.phase !== 'instruction';
   $('completeBtn').disabled = state.phase !== 'interaction';
   renderScene();
-  renderQueue();
+  renderRooms();
   renderStems();
-  renderGuest();
 }
 
 // Exposed for demos and for driving over the DevTools protocol.
@@ -575,7 +411,7 @@ window.sim = {
 };
 
 render();
-log('the hallway will draw a random available room');
+log('the guest chooses — walk into any room');
 </script>
 </body>
 </html>

@@ -66,7 +66,22 @@ having derived standing in the first place.
 
 ## 2.5 Experiment in flight — the museum machine
 
-**Third iteration** (creative meeting 2026-08-31, confirmed 2026-09-01). The
+**Fourth iteration** (2026-09-08). The approach is gone, and it took the
+fuzzy BLE judgements with it: no offers, no thresholds, no walked-past
+verdicts, no strikes, no Continue. The team traded persuasion for choice
+because beacons cannot referee persuasion. The whole rule set now: guests
+choose; the first `limit` rooms they enter (four in the show) activate and
+run Entrance → Instruction → Interaction → Complete, the slot burning as the
+entrance begins (abandonment keeps the burned slot); a room entered after
+the slots are spent says "no state" once and "Return, No State" thereafter;
+returning to any room they have been in — completed or abandoned — plays the
+return clip, every time (flagged assumption: no laddering). Full rooms still
+refuse by capacity: silence, nothing burned, nothing remembered. Entry is
+the only spatial trigger left, which is exactly the event BLE is best at.
+15 tests; the simulator sheds its thresholds, beams, and watches.
+
+Superseded third iteration, kept for the record (creative meeting
+2026-08-31, confirmed 2026-09-01). The
 queue is gone: each guest gets to **enter four rooms**, and every offer is
 drawn **at random** from the rooms available — not full, not completed, not
 locked — at that moment. No pre-assigned set exists; who you are offered
