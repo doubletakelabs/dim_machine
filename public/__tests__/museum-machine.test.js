@@ -24,19 +24,19 @@ function run(events, opts = {}) {
 }
 
 const enter = (roomId, full = false) => ({ type: 'enterRoom', roomId, full });
-const doRoom = (roomId) => [enter(roomId), 'entranceEnded', 'advance', 'complete', 'exitRoom'];
+const doRoom = (roomId) => [enter(roomId), 'entranceEnded', 'complete', 'exitRoom'];
 
 describe('choosing a room', () => {
-  it('entering runs the journey: entrance → instruction → interaction → complete', () => {
+  it('entering runs the journey: entrance → in_room → complete', () => {
     const { played, state, roomActive } = run(doRoom('a'));
-    assert.deepEqual(played, [STEMS.entrance, STEMS.instruction, STEMS.interaction, STEMS.complete]);
+    assert.deepEqual(played, [STEMS.entrance, STEMS.inRoom, STEMS.complete]);
     assert.equal(state.memory.a, 'completed');
     assert.equal(roomActive, false, 'idle again the instant complete fires');
   });
 
-  it('the room is active exactly while interaction runs', () => {
-    const { roomActive } = run([enter('a'), 'entranceEnded', 'advance']);
-    assert.equal(roomActive, true);
+  it('the room is active exactly while in_room runs — it begins as the welcome ends', () => {
+    const { roomActive } = run([enter('a'), 'entranceEnded']);
+    assert.equal(roomActive, true, 'no manual advance remains between entrance and the room running');
   });
 
   it('the slot burns when the entrance begins', () => {
@@ -53,34 +53,34 @@ describe('the four', () => {
     for (const r of ['a', 'b', 'c', 'd']) assert.equal(state.memory[r], 'completed');
   });
 
-  it('a fifth room cannot activate — it says no state, once', () => {
+  it('a fifth room cannot activate — in_room_disabled, once', () => {
     const { played, state } = run([...FOUR, enter('e')]);
-    assert.equal(played.at(-1), STEMS.noActivation);
+    assert.equal(played.at(-1), STEMS.inRoomDisabled);
     assert.equal(state.phase, 'insideDone', 'they may stand in it; it will not run');
-    assert.equal(state.memory.e, 'noActivation');
+    assert.equal(state.memory.e, 'disabled');
   });
 
-  it('and Return No State on every entry after that', () => {
+  it('and return_disabled on every entry after that', () => {
     const { played } = run([...FOUR, enter('e'), 'exitRoom', enter('e'), 'exitRoom', enter('e')]);
-    assert.deepEqual(played.slice(-3), [STEMS.noActivation, STEMS.returnNoState, STEMS.returnNoState]);
+    assert.deepEqual(played.slice(-3), [STEMS.inRoomDisabled, STEMS.returnDisabled, STEMS.returnDisabled]);
   });
 
   it('a smaller limit closes the museum sooner', () => {
     const { played } = run([...doRoom('a'), ...doRoom('b'), enter('c')], { limit: 2 });
-    assert.equal(played.at(-1), STEMS.noActivation);
+    assert.equal(played.at(-1), STEMS.inRoomDisabled);
   });
 });
 
 describe('returning', () => {
-  it('a completed room greets a return with the return clip, not the entrance', () => {
+  it('a completed room greets a return with return_visited, not the entrance', () => {
     const { played, state } = run([...doRoom('a'), enter('a')]);
-    assert.equal(played.at(-1), STEMS.returnVisit);
-    assert.equal(state.phase, 'insideDone', 'the experience does not run twice');
+    assert.equal(played.at(-1), STEMS.returnVisited);
+    assert.equal(state.phase, 'insideDone', 'the experience does not run twice — a return is a dead room with its clip');
   });
 
   it('every return, not just the first', () => {
     const { played } = run([...doRoom('a'), enter('a'), 'exitRoom', enter('a')]);
-    assert.deepEqual(played.slice(-2), [STEMS.returnVisit, STEMS.returnVisit]);
+    assert.deepEqual(played.slice(-2), [STEMS.returnVisited, STEMS.returnVisited]);
   });
 
   it('returning does not burn another slot', () => {
@@ -91,7 +91,7 @@ describe('returning', () => {
 
 describe('abandonment', () => {
   it('keeps the burned slot and deactivates the room', () => {
-    const { state, roomActive } = run([enter('a'), 'entranceEnded', 'advance', 'exitRoom']);
+    const { state, roomActive } = run([enter('a'), 'entranceEnded', 'exitRoom']);
     assert.equal(state.seen, 1, 'the slot does not come back');
     assert.equal(roomActive, false, 'a room must not stay running for somebody who left');
     assert.equal(state.memory.a, 'visited');
@@ -99,7 +99,7 @@ describe('abandonment', () => {
 
   it('an abandoned room greets a return like any room they have been to', () => {
     const { played } = run([enter('a'), 'exitRoom', enter('a')]);
-    assert.equal(played.at(-1), STEMS.returnVisit);
+    assert.equal(played.at(-1), STEMS.returnVisited);
   });
 
   it('an abandoned slot still counts against the four', () => {
@@ -108,7 +108,7 @@ describe('abandonment', () => {
       ...doRoom('b'), ...doRoom('c'), ...doRoom('d'),
       enter('e'),
     ]);
-    assert.equal(played.at(-1), STEMS.noActivation);
+    assert.equal(played.at(-1), STEMS.inRoomDisabled);
   });
 });
 

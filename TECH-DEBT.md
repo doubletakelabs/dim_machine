@@ -80,6 +80,12 @@ refuse by capacity: silence, nothing burned, nothing remembered. Entry is
 the only spatial trigger left, which is exactly the event BLE is best at.
 15 tests; the simulator sheds its thresholds, beams, and watches.
 
+Vocabulary settled 2026-09-11: six states, six clips — `entrance`,
+`in_room`, `complete`, `return_visited`, `in_room_disabled`,
+`return_disabled`. `in_room` merged Instruction and Interaction, which
+retired the manual advance between them: the room activates the moment the
+entrance clip ends, and Complete remains the one manual act.
+
 Confirmed 2026-09-11: a return is a **dead room with its clip** — no resume,
 even for a room abandoned by accident. And threshold beacons come back as
 **latency pre-warming only**: a beacon just outside each door lets the room

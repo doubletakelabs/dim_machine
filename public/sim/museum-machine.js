@@ -25,14 +25,20 @@
  * best at. Everything a beacon is bad at judging is no longer judged.
  */
 
+/**
+ * The team's vocabulary, verbatim (2026-09-11): six states, six clips.
+ * `in_room` is the whole occupied-and-running stretch — what iteration 4
+ * split into Instruction and Interaction merged into one, which also
+ * retired the manual advance between them. The room is active exactly
+ * while in_room plays.
+ */
 export const STEMS = {
   entrance: 'entrance',
-  instruction: 'instruction',
-  interaction: 'interaction',
+  inRoom: 'in_room',
   complete: 'complete',
-  noActivation: 'approach-no-state',
-  returnNoState: 'return-no-state',
-  returnVisit: 'return-after-completion',
+  returnVisited: 'return_visited',
+  inRoomDisabled: 'in_room_disabled',
+  returnDisabled: 'return_disabled',
 };
 
 export function initialState({ rooms, limit = 4 }) {
@@ -40,9 +46,8 @@ export function initialState({ rooms, limit = 4 }) {
     rooms: [...rooms],
     limit,               // how many rooms this guest gets to activate
     seen: 0,             // entrances begun, abandonments included
-    memory: {},          // roomId → 'visited' | 'completed' | 'noActivation'
-    phase: 'hallway',    // hallway | entrance | instruction | interaction
-                         //         | insideFull | insideDone
+    memory: {},          // roomId → 'visited' | 'completed' | 'disabled'
+    phase: 'hallway',    // hallway | entrance | inRoom | insideFull | insideDone
     room: null,
   };
 }
@@ -69,13 +74,13 @@ export function transition(state, event) {
       // either way, and greets them differently than it did the first time.
       if (mem === 'visited' || mem === 'completed') {
         s.phase = 'insideDone';
-        return { state: s, play: STEMS.returnVisit };
+        return { state: s, play: STEMS.returnVisited };
       }
       // Entered once without a slot: the room said so then; now it just
       // repeats that there is nothing here for them.
-      if (mem === 'noActivation') {
+      if (mem === 'disabled') {
         s.phase = 'insideDone';
-        return { state: s, play: STEMS.returnNoState };
+        return { state: s, play: STEMS.returnDisabled };
       }
       // Refused by capacity is not an entrance: nothing burns, nothing is
       // remembered. They will need to come back.
@@ -87,8 +92,8 @@ export function transition(state, event) {
       // will not run for them.
       if (journeyDone(s)) {
         s.phase = 'insideDone';
-        s.memory[roomId] = 'noActivation';
-        return { state: s, play: STEMS.noActivation };
+        s.memory[roomId] = 'disabled';
+        return { state: s, play: STEMS.inRoomDisabled };
       }
       // One of their four. The slot burns here — an entrance has begun.
       s.phase = 'entrance';
@@ -98,23 +103,21 @@ export function transition(state, event) {
     }
 
     case 'entranceEnded':
+      // in_room begins the moment the welcome ends, and the room runs with
+      // it — the manual advance between instruction and interaction retired
+      // when the two merged.
       if (s.phase !== 'entrance') return stay;
-      s.phase = 'instruction';
-      return { state: s, play: STEMS.instruction };
-
-    case 'advance':
-      if (s.phase !== 'instruction') return stay;
-      s.phase = 'interaction';
-      return { state: s, play: STEMS.interaction, roomActive: true };
+      s.phase = 'inRoom';
+      return { state: s, play: STEMS.inRoom, roomActive: true };
 
     case 'complete':
-      if (s.phase !== 'interaction') return stay;
+      if (s.phase !== 'inRoom') return stay;
       s.phase = 'insideDone';
       s.memory[s.room] = 'completed';
       return { state: s, play: STEMS.complete, roomActive: false };
 
     case 'exitRoom': {
-      if (['entrance', 'instruction', 'interaction'].includes(s.phase)) {
+      if (['entrance', 'inRoom'].includes(s.phase)) {
         // Abandonment. The slot was burned at the door and stays burned; the
         // room deactivates, and remembers them as having been here — their
         // return gets the return clip like anyone else's.

@@ -124,7 +124,6 @@
       <div class="offerLine">entered <b id="seen" style="color:var(--ink)">0/4</b></div>
 
       <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px">
-        <button id="advanceBtn" disabled>Advance → Interaction</button>
         <button id="completeBtn" disabled>Complete</button>
         <span class="spacer"></span>
         <button id="resetBtn">Reset</button>
@@ -171,12 +170,11 @@ const full = { a: false, b: false, c: false, d: false };
 
 const STEM_LABELS = {
   [STEMS.entrance]: 'Entrance',
-  [STEMS.instruction]: 'Instruction',
-  [STEMS.interaction]: 'Interaction',
+  [STEMS.inRoom]: 'In Room',
   [STEMS.complete]: 'Complete',
-  [STEMS.noActivation]: 'No State (cannot activate)',
-  [STEMS.returnNoState]: 'Return, No State',
-  [STEMS.returnVisit]: 'Return (been here before)',
+  [STEMS.returnVisited]: 'Return, Visited',
+  [STEMS.inRoomDisabled]: 'In Room, Disabled',
+  [STEMS.returnDisabled]: 'Return, Disabled',
 };
 
 function send(event) {
@@ -292,7 +290,6 @@ svg.addEventListener('click', (e) => { if (!e.target.closest('#guest')) moveTo(.
 
 // ----------------------------------------------------------------- controls
 
-$('advanceBtn').onclick = () => send('advance');
 $('completeBtn').onclick = () => send('complete');
 $('resetBtn').onclick = () => {
   limit = Math.max(1, Math.min(4, +($('limitInput').value || 3)));
@@ -320,7 +317,7 @@ function renderGuest() {
 
 function memLabel(roomId) {
   return {
-    visited: 'been here', completed: 'completed', noActivation: 'no state',
+    visited: 'been here', completed: 'completed', disabled: 'disabled',
   }[state.memory[roomId]] ?? 'open';
 }
 
@@ -329,7 +326,7 @@ function renderScene() {
   g.innerHTML = '';
   for (const [roomId, r] of Object.entries(ROOMS)) {
     const engagedHere = state.room === roomId
-      && ['entrance', 'instruction', 'interaction'].includes(state.phase);
+      && ['entrance', 'inRoom'].includes(state.phase);
     const rect = document.createElementNS(SVG_NS, 'rect');
     rect.setAttribute('x', r.x0); rect.setAttribute('y', r.y0);
     rect.setAttribute('width', r.x1 - r.x0); rect.setAttribute('height', r.y1 - r.y0);
@@ -367,7 +364,7 @@ function renderRooms() {
     const tags = [
       mem === 'visited' ? { text: 'been here', cls: 'warn' } : null,
       mem === 'completed' ? { text: 'completed', cls: 'ok' } : null,
-      mem === 'noActivation' ? { text: 'no state', cls: 'bad' } : null,
+      mem === 'disabled' ? { text: 'disabled', cls: 'bad' } : null,
       !mem && state.seen >= state.limit ? { text: 'will not activate', cls: 'bad' } : null,
       !mem && state.seen < state.limit ? { text: 'open', cls: '' } : null,
     ].filter(Boolean);
@@ -395,8 +392,7 @@ function render() {
   $('phase').textContent = state.phase + (state.room ? ` · ${ROOMS[state.room].name}` : '');
   $('seen').textContent = `${state.seen}/${state.limit}`
     + (state.seen >= state.limit ? ' · journey complete' : '');
-  $('advanceBtn').disabled = state.phase !== 'instruction';
-  $('completeBtn').disabled = state.phase !== 'interaction';
+  $('completeBtn').disabled = state.phase !== 'inRoom';
   renderScene();
   renderRooms();
   renderStems();
