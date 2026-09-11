@@ -27,9 +27,9 @@ const enter = (roomId, full = false) => ({ type: 'enterRoom', roomId, full });
 const doRoom = (roomId) => [enter(roomId), 'entranceEnded', 'complete', 'exitRoom'];
 
 describe('choosing a room', () => {
-  it('entering runs the journey: entrance → in_room → complete', () => {
+  it('entering runs the journey: entrance → in_room → complete → in_hallway', () => {
     const { played, state, roomActive } = run(doRoom('a'));
-    assert.deepEqual(played, [STEMS.entrance, STEMS.inRoom, STEMS.complete]);
+    assert.deepEqual(played, [STEMS.entrance, STEMS.inRoom, STEMS.complete, STEMS.inHallway]);
     assert.equal(state.memory.a, 'completed');
     assert.equal(roomActive, false, 'idle again the instant complete fires');
   });
@@ -41,6 +41,31 @@ describe('choosing a room', () => {
 
   it('the slot burns when the entrance begins', () => {
     assert.equal(run([enter('a')]).state.seen, 1);
+  });
+});
+
+describe('the hallway between rooms', () => {
+  it('leaving any visit lands in in_hallway, with the count riding along', () => {
+    // The machine names the state; which track it means is the show's pick,
+    // made from `seen` — "two rooms now, play this one".
+    const one = run(doRoom('a'));
+    assert.equal(one.played.at(-1), STEMS.inHallway);
+    assert.equal(one.state.seen, 1);
+    const two = run([...doRoom('a'), ...doRoom('b')]);
+    assert.equal(two.played.at(-1), STEMS.inHallway);
+    assert.equal(two.state.seen, 2);
+  });
+
+  it('fires after abandonment and after disabled and return visits too', () => {
+    const abandoned = run([enter('a'), 'exitRoom']);
+    assert.equal(abandoned.played.at(-1), STEMS.inHallway);
+    const returned = run([...doRoom('a'), enter('a'), 'exitRoom']);
+    assert.equal(returned.played.at(-1), STEMS.inHallway);
+  });
+
+  it('does not fire after a full-room turn-away — nothing happened in there', () => {
+    const { played } = run([enter('a', true), 'exitRoom']);
+    assert.deepEqual(played, []);
   });
 });
 
@@ -62,7 +87,10 @@ describe('the four', () => {
 
   it('and return_disabled on every entry after that', () => {
     const { played } = run([...FOUR, enter('e'), 'exitRoom', enter('e'), 'exitRoom', enter('e')]);
-    assert.deepEqual(played.slice(-3), [STEMS.inRoomDisabled, STEMS.returnDisabled, STEMS.returnDisabled]);
+    // The hallway clip interleaves between visits; the subject here is what
+    // the door itself says, so listen past it.
+    const doors = played.filter((p) => p !== STEMS.inHallway);
+    assert.deepEqual(doors.slice(-3), [STEMS.inRoomDisabled, STEMS.returnDisabled, STEMS.returnDisabled]);
   });
 
   it('a smaller limit closes the museum sooner', () => {
@@ -80,7 +108,8 @@ describe('returning', () => {
 
   it('every return, not just the first', () => {
     const { played } = run([...doRoom('a'), enter('a'), 'exitRoom', enter('a')]);
-    assert.deepEqual(played.slice(-2), [STEMS.returnVisited, STEMS.returnVisited]);
+    const doors = played.filter((p) => p !== STEMS.inHallway);
+    assert.deepEqual(doors.slice(-2), [STEMS.returnVisited, STEMS.returnVisited]);
   });
 
   it('returning does not burn another slot', () => {

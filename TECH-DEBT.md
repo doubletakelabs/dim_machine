@@ -84,7 +84,12 @@ Vocabulary settled 2026-09-11: six states, six clips — `entrance`,
 `in_room`, `complete`, `return_visited`, `in_room_disabled`,
 `return_disabled`. `in_room` merged Instruction and Interaction, which
 retired the manual advance between them: the room activates the moment the
-entrance clip ends, and Complete remains the one manual act.
+entrance clip ends, and Complete remains the one manual act. A seventh state
+joined 2026-09-11: `in_hallway`, fired on stepping back into the hallway
+after each visit (not after a full-room turn-away — capacity refusal stays a
+non-event). The machine names the state; which track it means is the show's
+choice, made from the guest's progress count (`seen`) — "two rooms now, play
+this one". The sim demos it with a spoken track per count.
 
 Confirmed 2026-09-11: a return is a **dead room with its clip** — no resume,
 even for a room abandoned by accident. And threshold beacons come back as

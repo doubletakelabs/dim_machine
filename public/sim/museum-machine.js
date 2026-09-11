@@ -39,6 +39,7 @@ export const STEMS = {
   returnVisited: 'return_visited',
   inRoomDisabled: 'in_room_disabled',
   returnDisabled: 'return_disabled',
+  inHallway: 'in_hallway',
 };
 
 export function initialState({ rooms, limit = 4 }) {
@@ -117,15 +118,26 @@ export function transition(state, event) {
       return { state: s, play: STEMS.complete, roomActive: false };
 
     case 'exitRoom': {
+      // Stepping back into the hallway after a visit is a state of its own:
+      // in_hallway. The machine names the state; WHICH track that means is
+      // the show's choice, made from the guest's progress — `seen` rides in
+      // the state for exactly that ("two rooms now, play this one"). It does
+      // not fire after a full-room turn-away, because refused-by-capacity has
+      // been a non-event in every ruling so far: nothing happened in there.
       if (['entrance', 'inRoom'].includes(s.phase)) {
         // Abandonment. The slot was burned at the door and stays burned; the
         // room deactivates, and remembers them as having been here — their
         // return gets the return clip like anyone else's.
         s.phase = 'hallway';
         s.room = null;
-        return { state: s, play: null, roomActive: false };
+        return { state: s, play: STEMS.inHallway, roomActive: false };
       }
-      if (s.phase === 'insideFull' || s.phase === 'insideDone') {
+      if (s.phase === 'insideDone') {
+        s.phase = 'hallway';
+        s.room = null;
+        return { state: s, play: STEMS.inHallway };
+      }
+      if (s.phase === 'insideFull') {
         s.phase = 'hallway';
         s.room = null;
       }

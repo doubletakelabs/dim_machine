@@ -24,5 +24,12 @@ gen return_visited          "Return, visited. You have been here before. It reme
 gen in_room_disabled        "In room, disabled. This room will not wake for you."
 gen return_disabled         "Return, disabled. Still nothing here for you."
 
+# in_hallway is one STATE with a track per progress count — the show picks
+# which ("two rooms now, play this one"). The sim resolves in_hallway_<seen>.
+gen in_hallway_1            "In hallway. One room is behind you now."
+gen in_hallway_2            "In hallway. Two rooms now. The hall feels longer than it did."
+gen in_hallway_3            "In hallway. Three. You are almost through."
+gen in_hallway_4            "In hallway. Four rooms. There is nothing left to choose."
+
 rm -f /tmp/dim-stem.aiff
 echo "stems → $out"

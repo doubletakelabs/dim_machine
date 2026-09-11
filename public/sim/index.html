@@ -175,6 +175,7 @@ const STEM_LABELS = {
   [STEMS.returnVisited]: 'Return, Visited',
   [STEMS.inRoomDisabled]: 'In Room, Disabled',
   [STEMS.returnDisabled]: 'Return, Disabled',
+  [STEMS.inHallway]: 'In Hallway (track per room count)',
 };
 
 function send(event) {
@@ -199,6 +200,11 @@ let fadeTimer = null;
 let litStem = null;
 
 function play(stem) {
+  // in_hallway is one state with a track per progress count — the machine
+  // names the state, the show (here: the sim) picks the track from `seen`.
+  const file = stem === STEMS.inHallway
+    ? `in_hallway_${Math.max(1, Math.min(4, state.seen))}`
+    : stem;
   if (audio) {
     const old = audio;
     clearInterval(fadeTimer);
@@ -207,7 +213,7 @@ function play(stem) {
       if (old.volume <= 0) { old.pause(); clearInterval(fadeTimer); }
     }, 30);
   }
-  audio = new Audio(`stems/${stem}.wav`);
+  audio = new Audio(`stems/${file}.wav`);
   audio.play().catch(() => log('   (click once to unlock audio)'));
   if (stem === STEMS.entrance) {
     // Instruction follows Entrance with no other trigger than the audio ending.
