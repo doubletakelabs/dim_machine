@@ -21,7 +21,19 @@ const { WebSocketServer } = require('ws');
 
 const PORT = Number(process.env.PORT || 8080);
 const MANIFEST = JSON.parse(fs.readFileSync(path.join(__dirname, 'experience.json'), 'utf8'));
-const CALIBRATION = path.join(__dirname, MANIFEST.calibration?.file ?? 'calibration.json');
+
+/**
+ * Two paths an installation may override from outside (ROOM-EXPERIENCE.md §2):
+ * a venue keeps large media on its own disk, and calibration belongs to the
+ * machine and the building — it must survive this folder being redeployed.
+ * Unset means the manifest path, exactly as before.
+ */
+const MEDIA_DIR = process.env.MEDIA_DIR
+  ? path.resolve(process.env.MEDIA_DIR)
+  : path.join(__dirname, MANIFEST.media?.dir ?? 'media');
+const CALIBRATION = process.env.CALIBRATION_FILE
+  ? path.resolve(process.env.CALIBRATION_FILE)
+  : path.join(__dirname, MANIFEST.calibration?.file ?? 'calibration.json');
 
 /**
  * Everything the show has told us. Replaced wholesale, never merged — which is
@@ -58,6 +70,8 @@ const server = http.createServer((req, res) => {
       req.on('data', (d) => { body += d; if (body.length > 1e6) req.destroy(); });
       return req.on('end', () => {
         try {
+          // CALIBRATION_FILE may name a directory that does not exist yet.
+          fs.mkdirSync(path.dirname(CALIBRATION), { recursive: true });
           fs.writeFileSync(CALIBRATION, JSON.stringify(JSON.parse(body), null, 2));
           res.writeHead(200, { 'content-type': 'application/json' });
           res.end('{"ok":true}');
@@ -67,6 +81,18 @@ const server = http.createServer((req, res) => {
         }
       });
     }
+  }
+
+  // Media may live outside this folder entirely (MEDIA_DIR) — a venue disk,
+  // not the repo. Same traversal guard as the general route below.
+  if (url.startsWith('/media/')) {
+    const media = path.join(MEDIA_DIR, path.normalize(url.slice('/media'.length)).replace(/^(\.\.[/\\])+/, ''));
+    if (!media.startsWith(MEDIA_DIR) || !fs.existsSync(media) || !fs.statSync(media).isFile()) {
+      res.writeHead(404);
+      return res.end('not found');
+    }
+    res.writeHead(200, { 'content-type': MIME[path.extname(media).toLowerCase()] ?? 'application/octet-stream' });
+    return fs.createReadStream(media).pipe(res);
   }
 
   const file = path.join(__dirname, path.normalize(url === '/' ? '/display.html' : url).replace(/^(\.\.[/\\])+/, ''));

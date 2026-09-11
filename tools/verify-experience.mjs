@@ -11,8 +11,9 @@
  *
  * Exit 0 means it will slot in. Exit 1 means it will not, and says why.
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, rmSync } from 'node:fs';
 import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { WebSocket } from 'ws';
 
@@ -67,9 +68,15 @@ check(!hardcoded.length, 'no hardcoded IP addresses', hardcoded.join(', '));
 
 // ------------------------------------------------------------------- the server
 
+// Calibration is pointed at scratch, which checks two things at once: that
+// the piece honours CALIBRATION_FILE (ROOM-EXPERIENCE.md §2), and that a
+// verify run does not leave droppings inside the piece's own folder.
+const scratchCalibration = join(tmpdir(), `dim-verify-calibration-${process.pid}.json`);
+rmSync(scratchCalibration, { force: true });
+
 const child = spawn('node', ['server.js'], {
   cwd: dir,
-  env: { ...process.env, PORT: String(PORT) },
+  env: { ...process.env, PORT: String(PORT), CALIBRATION_FILE: scratchCalibration },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let serverOutput = '';
@@ -220,9 +227,12 @@ check(
   'localStorage is lost on a browser reset, and nobody finds out until load-in',
 );
 check(
-  existsSync(join(dir, manifest.calibration?.file ?? 'calibration.json')),
-  'calibration reached a file on disk',
+  existsSync(scratchCalibration),
+  'calibration honours CALIBRATION_FILE',
+  'the server was launched with CALIBRATION_FILE set, and calibration must land '
+    + 'exactly there — a venue points this at a path that survives redeploys',
 );
+rmSync(scratchCalibration, { force: true });
 
 // -------------------------------------------------------------- restartable
 

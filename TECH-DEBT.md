@@ -80,6 +80,12 @@ refuse by capacity: silence, nothing burned, nothing remembered. Entry is
 the only spatial trigger left, which is exactly the event BLE is best at.
 15 tests; the simulator sheds its thresholds, beams, and watches.
 
+Confirmed 2026-09-11: a return is a **dead room with its clip** — no resume,
+even for a room abandoned by accident. And threshold beacons come back as
+**latency pre-warming only**: a beacon just outside each door lets the room
+start feeling active faster, but nothing in the machine hears thresholds —
+they are an optimisation of entry detection, not a logic surface.
+
 Superseded third iteration, kept for the record (creative meeting
 2026-08-31, confirmed 2026-09-01). The
 queue is gone: each guest gets to **enter four rooms**, and every offer is

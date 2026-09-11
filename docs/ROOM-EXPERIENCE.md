@@ -71,8 +71,24 @@ and the disagreement is invisible until somebody is holding a dead phone.
 | `entry.display` | Path the display machine opens. |
 | `inputs` | Only the intents you consume. The phone will not send you others. |
 | `maxDrivers` | The most simultaneous drivers your piece handles well. |
-| `media.dir` | Where large media lives. **Ships separately** — never in a repo. |
-| `calibration.file` | Where projection calibration is written. See §7. |
+| `media.dir` | Where large media lives. **Ships separately** — never in a repo. `MEDIA_DIR` overrides it at launch. |
+| `calibration.file` | Where projection calibration is written. See §8. `CALIBRATION_FILE` overrides it at launch. |
+
+### Environment overrides
+
+Two paths may be overridden from outside when your server is launched, and
+your server must honour them:
+
+| Variable | Overrides | Why it exists |
+|---|---|---|
+| `MEDIA_DIR` | `media.dir` | Read media from here instead. A venue keeps large media on its own disk, not inside your folder. |
+| `CALIBRATION_FILE` | `calibration.file` | Read **and write** calibration here instead. Calibration belongs to the machine and the building, and must survive your folder being redeployed. |
+
+Unset means the manifest path, exactly as before — the flags exist for
+installations, not for development. Resolve each once at boot, the way the
+reference server does; it is two lines. `verify` launches your server with
+`CALIBRATION_FILE` pointing at a scratch path and fails you if calibration
+lands anywhere else — which also keeps your folder clean while it runs.
 
 ---
 
@@ -280,7 +296,10 @@ once and must not lose.
 a different browser, or a fresh user account loses the mapping — and nobody
 discovers that until the projector is already hung.
 
-Write it through your own server to the file named in the manifest:
+Write it through your own server to the file named in the manifest — unless
+the server was launched with `CALIBRATION_FILE`, which wins (§2). An installer
+pointing a venue machine's calibration at a path that survives your folder
+being redeployed is the entire reason.
 
 ```
 GET  /calibration        → the current JSON (or {} if unset)
@@ -360,9 +379,11 @@ must pass:
 - [ ] accepts a driver presenting a valid `driverId` + `secret`
 - [ ] **refuses** a driver presenting a wrong or unknown secret
 - [ ] relays every intent in `inputs`, and ignores ones it did not declare
-- [ ] calibration round-trips through `GET`/`POST /calibration` to a file
+- [ ] calibration round-trips through `GET`/`POST /calibration` to the file
+      `CALIBRATION_FILE` names, falling back to `calibration.file`
 - [ ] no hardcoded IP addresses or ports — port from `PORT`, default in manifest
-- [ ] media referenced from `media.dir`, not committed
+- [ ] media referenced from `media.dir` — `MEDIA_DIR` overrides it at launch —
+      and never committed
 
 ### What verify cannot check
 
@@ -375,6 +396,11 @@ harness, and they are the three most likely to be wrong:
 2. `settling` → `reset` → `attract`. It must be back to its starting state.
 3. Two drivers driving, then remove one in the harness panel. That driver's
    influence must stop, and the other must be unaffected.
+4. That `MEDIA_DIR` is honoured — verify cannot know which files your piece
+   reads. Launch with `MEDIA_DIR` pointed somewhere empty: your piece should
+   miss its media, loudly. If it carries on as if nothing changed, it is
+   reading past the flag, and will do the same the day the venue puts media
+   on its own disk.
 
 A green verify run means it will connect and speak correctly. It does not mean
 the piece behaves.
