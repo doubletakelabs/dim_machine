@@ -174,6 +174,7 @@ export class SpatialRuntime {
         clock: this.clock,
         openSocket: this.openExperienceSocket,
         onChange: () => this.io.onStateChange?.(),
+        onComplete: () => this.handleExperienceComplete(roomId),
       }));
     }
     this.guestMachineConfig = buildGuestMachine(this.def);
@@ -909,6 +910,29 @@ export class SpatialRuntime {
         link.event('reset');
       }
     }
+  }
+
+  /**
+   * The room's own software says its run is finished.
+   *
+   * Handled exactly like a timed room reaching the end of its `after`: the
+   * machine is sent home through its authored RELEASE transition, and
+   * `dropStaleLock` releases whoever held it as `contentEnded`. Deliberately
+   * NOT `release()` — its successor-transfer semantics would hand the lock to
+   * the next occupant and keep a finished room running. With people still
+   * standing inside, the museum layer reads the room coming home as completion
+   * for everyone engaged, the same way it does for timed rooms.
+   */
+  handleExperienceComplete(roomId) {
+    const room = this.rooms.get(roomId);
+    if (!room || !this.running) return;
+    // Only a running room has anything to end. A repeat, or a complete from a
+    // piece that outlived its guests, lands here and is ignored.
+    if (String(room.state).split('.')[0] !== 'active') return;
+    this.append({ type: 'room.experienceComplete', roomId });
+    room.send('RELEASE');
+    this.io.log?.(`${roomId}: experience reports complete`);
+    this.notifyChange();
   }
 
   /** Every room experience's health, for the operator panel. */

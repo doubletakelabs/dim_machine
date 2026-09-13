@@ -184,6 +184,33 @@ that shuffled when somebody else walked in would read as your piece glitching.
 is a closed network. It stops your server taking orders from anything that finds
 the port.
 
+### Tell the show when the run is over
+
+If your piece has an ending — a puzzle solved, a sequence played out, a goal
+reached — say so, once, on the broker socket:
+
+```json
+{ "t": "complete" }
+```
+
+The show brings the room home: the guests hear their completion audio, the
+room releases, and a `reset` will reach you when it comes back to rest. **This
+is the only thing you ever tell the show to do**, and it is the difference
+between a room that concludes and a room people eventually wander out of.
+
+An event, not a state — send it once, when the run actually finishes. What you
+must **not** do:
+
+- infer it from sockets closing (people walk out mid-run; that is abandonment,
+  and the show handles it without you)
+- send it on a timer as a fallback (if your piece is time-bound, tell us the
+  duration and the show authors the timer)
+- repeat it (a second `complete` while the room is not running is ignored, but
+  it means your piece's idea of "over" has drifted from the show's)
+
+A piece with no ending — an ambient loop, a sandbox — simply never sends it.
+The show ends those rooms itself.
+
 ### Optional: tell us how you are
 
 ```json
@@ -323,6 +350,8 @@ It connects to your server **as a broker** — the same role, the same messages 
 and serves a control page at `http://<lan-ip>:7420/`:
 
 - lifecycle buttons: attract / live / settling / reset
+- when your piece sends `complete`, the harness answers as the show would:
+  lifecycle drops to `attract` and a `reset` follows
 - add and remove drivers, up to your declared `maxDrivers`
 - a QR and URL for a **driver page** that speaks the real intent protocol
 
@@ -388,12 +417,15 @@ must pass:
 ### What verify cannot check
 
 It checks the **protocol**. It cannot check **behaviour**, because it does not
-know what "state" means inside your piece. These three are tested by hand in the
-harness, and they are the three most likely to be wrong:
+know what "state" means inside your piece. These are tested by hand in the
+harness, and they are the most likely to be wrong:
 
 1. Drive the piece somewhere distinctive → `settling` → `live`. It must be
    exactly where it was left.
 2. `settling` → `reset` → `attract`. It must be back to its starting state.
+3. If your piece has an ending: reach it. The harness should log `complete`
+   arriving, drop to `attract`, and send a `reset` — and your piece should
+   sit cleanly in attract afterwards, not re-announce the ending.
 3. Two drivers driving, then remove one in the harness panel. That driver's
    influence must stop, and the other must be unaffected.
 4. That `MEDIA_DIR` is honoured — verify cannot know which files your piece
@@ -421,7 +453,8 @@ DIM → you                              phone → you
 you → DIM
   ready   {experienceId, version,      you → phone
            maxDrivers, accepts}          claim   {driverId, hue}
-  status  {…}              optional      denied  {reason}
+  complete {}   ← event: run is over     denied  {reason}
+  status  {…}              optional
 ```
 
 Two rules underneath all of it:

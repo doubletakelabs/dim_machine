@@ -49,6 +49,16 @@ function connect() {
     try {
       const m = JSON.parse(raw);
       if (m.t === 'ready') { state.remote = m; announce(); }
+      // The piece says its run is over. Answer as the show would: the room
+      // comes home — nobody drives, attract, and a reset once it is at rest.
+      if (m.t === 'complete') {
+        console.log('  ← complete — mirroring the show: drivers cleared, attract, reset');
+        state.lifecycle = 'attract';
+        state.drivers = [];
+        push();
+        broker.send(JSON.stringify({ t: 'reset' }));
+        announce();
+      }
     } catch { /* not ours */ }
   });
   broker.on('close', () => {

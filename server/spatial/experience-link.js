@@ -44,6 +44,8 @@ export class ExperienceLink {
    * @param {object} [opts.clock]
    * @param {(url: string) => object} [opts.openSocket] — injected for tests
    * @param {(roomId: string) => void} [opts.onChange]
+   * @param {(roomId: string) => void} [opts.onComplete] — the experience says
+   *   the run is finished; the show decides what that means
    */
   constructor(opts) {
     this.roomId = opts.roomId;
@@ -51,6 +53,7 @@ export class ExperienceLink {
     this.clock = opts.clock ?? { now: () => Date.now(), setTimeout, clearTimeout };
     this.openSocket = opts.openSocket ?? null;
     this.onChange = opts.onChange ?? (() => {});
+    this.onComplete = opts.onComplete ?? (() => {});
 
     this.socket = null;
     this.state = 'idle';           // idle | connecting | ready | unreachable
@@ -178,6 +181,13 @@ export class ExperienceLink {
     try {
       message = JSON.parse(raw);
     } catch {
+      return;
+    }
+    // The one message an experience sends that changes the show: its run is
+    // over. An event, not a state — fired once by the piece when its content
+    // finishes; the show answers with what "over" means for that room.
+    if (message.t === 'complete') {
+      this.onComplete(this.roomId);
       return;
     }
     if (message.t === 'ready') {

@@ -83,13 +83,18 @@ crowds skew completer rather than abandoner.
 **The sim at `/sim/` stays independent** — it is a prototyping sandbox, not
 the implementation, and is expected to diverge for future prototypes.
 
-**New open item — the complete signal.** Museum rooms complete when their
-machine goes idle: a placeholder 45s `after` today. Influence has no timer,
-because its room software is the experience server — and the experience
-protocol has **no room→show complete message yet**. Until it does, Influence
-only completes by operator RELEASE, and every simulated guest abandons it
-(observed in the crowd run — accurate, not a bug). Add a `complete` signal to
-the broker protocol when the team confirms the shape.
+**~~New open item — the complete signal.~~ Resolved** (2026-09-13): the
+broker protocol carries `{t: "complete"}` up from the experience — the one
+message a piece sends that changes the show. The runtime handles it exactly
+like a timed room reaching the end of its `after` (machine home through its
+authored RELEASE, `dropStaleLock` releases as `contentEnded` — deliberately
+not `release()`, whose successor-transfer would hand the lock onward and keep
+a finished room running), so the museum layer's idle-with-occupants
+completion works unchanged. Documented in ROOM-EXPERIENCE.md §3 and the
+quick reference; the template relays a display's `complete` up; the harness
+mirrors the show's answer (drivers cleared, attract, reset). A `complete`
+from a non-running room is ignored. Influence still needs its actual room
+software to *send* it — but the wire now exists.
 
 ## Superseded: the experiment record
 
@@ -327,6 +332,17 @@ an older `node server/index.js` was still bound to 4000 and serving the previous
 build. Both times the code was already correct. Check `lsof -ti:<port>` before
 believing a live test — and prefer a spare port over killing whatever is there,
 since it may be somebody's running rehearsal.
+
+**A stale editor writing back the whole document.** The zone editor loads the
+show once and `POST /api/shows` saves *all* of it — so a browser tab opened
+before a commit and saved after silently reverts that commit. It happened
+(2026-09-13): a zone-tracing pass undid the shared-rooms change, and the only
+thing that caught it was a test failing in an unrelated branch of work. The
+same shape as `lastEntry`: a client holding a copy of the world and asserting
+it later as truth. The honest fixes, when this bites again: the editor PATCHes
+only the zones it edits, or the save route rejects a document whose non-zone
+content differs from what is on disk. Until then: **refresh the zone editor
+after every commit that touches the show.**
 
 **Sending an event into a machine from inside its own subscriber.** XState
 queues it, so a rollback check reads the state as unchanged and undoes work that

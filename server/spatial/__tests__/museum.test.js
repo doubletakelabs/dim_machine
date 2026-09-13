@@ -14,6 +14,7 @@ import { SpatialRuntime } from '../runtime.js';
 import { ManualClock } from '../clock.js';
 import { roomCentroid } from '../zone-math.js';
 import { validateShowDefinition } from '../validate.js';
+import { applyInstallation } from '../installation.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const museum = JSON.parse(readFileSync(join(root, 'shows/MAD-DIM.json'), 'utf8'));
@@ -225,5 +226,53 @@ describe('the museum block validates', () => {
     const def = structuredClone(museum);
     delete def.museum.stems.complete;
     assert.match(validateShowDefinition(def).warnings.join('\n'), /museum\.stems\.complete/);
+  });
+});
+
+describe('a room completed by its own software', () => {
+  // Influence has no timer: its room server is the experience, and the
+  // experience says when the run is over. This is the whole chain — the
+  // broker `complete` message in, the room home, everyone engaged completed.
+  it('the experience complete signal completes everyone engaged', () => {
+    const sockets = [];
+    const open = (url) => {
+      const handlers = {};
+      const socket = {
+        url,
+        on: (event, fn) => { handlers[event] = fn; },
+        send: () => {},
+        close: () => {},
+        accept: () => handlers.open?.(),
+        reply: (m) => handlers.message?.(JSON.stringify(m)),
+      };
+      sockets.push(socket);
+      return socket;
+    };
+    const rt = new SpatialRuntime({
+      enableTick: false,
+      clock: new ManualClock(),
+      assetSeconds: () => ENTRANCE_SECONDS,
+      openExperienceSocket: open,
+    });
+    const installed = applyInstallation(structuredClone(museum), {
+      installation: 'test',
+      experiences: { influence: 'ws://room.test:8080' },
+    }).def;
+    assert.deepEqual(rt.load(installed).errors, []);
+    rt.start();
+    sockets[0].accept();
+
+    const a = arrive(rt);
+    const b = arrive(rt);
+    walk(rt, a.guestId, 'influence');
+    walk(rt, b.guestId, 'influence');
+    assert.equal(roomState(rt, 'influence'), 'active');
+
+    sockets[0].reply({ t: 'complete' });
+    assert.equal(roomState(rt, 'influence'), 'idle', 'the room came home');
+    for (const g of [a, b]) {
+      assert.equal(snap(rt, g.guestId).rooms.influence, 'completed');
+      assert.equal(voice(rt, g.guestId), 'audio/museum/complete.wav');
+    }
   });
 });

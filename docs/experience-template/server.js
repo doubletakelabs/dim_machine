@@ -44,6 +44,7 @@ const show = { lifecycle: 'attract', drivers: new Map() };
 
 const displays = new Set();
 const drivers = new Map();          // socket → driverId
+let broker = null;                  // the show's socket, for the one message that travels up
 
 // ------------------------------------------------------------------ http
 
@@ -120,6 +121,7 @@ wss.on('connection', (ws) => {
     if (m.t === 'hello') {
       if (m.role === 'broker') {
         role = 'broker';
+        broker = ws;
         return send(ws, {
           t: 'ready',
           experienceId: MANIFEST.experienceId,
@@ -170,6 +172,14 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    if (role === 'display') {
+      // The display is where the piece knows its run has ended. The server
+      // just carries the word up the broker link — once, when it happens.
+      // The show answers by bringing the room home; a `reset` follows.
+      if (m.t === 'complete' && broker) return send(broker, { t: 'complete' });
+      return;
+    }
+
     if (role === 'driver') {
       const driverId = drivers.get(ws);
       // Ignore an intent this piece never declared — the phone should not be
@@ -180,6 +190,7 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
+    if (ws === broker) broker = null;
     displays.delete(ws);
     const driverId = drivers.get(ws);
     if (driverId) {
