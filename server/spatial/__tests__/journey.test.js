@@ -166,22 +166,24 @@ describe('wandering, which is no longer deviance', () => {
 });
 
 describe('operator activation', () => {
-  it('activates for somebody actually standing there', () => {
-    // A post-museum room: the museum layer owns DIM-room activation now, and
-    // an operator re-running a room a guest already spent is a return there,
-    // not an activation. The machinery under test is show-agnostic.
+  it('the post-museum rooms are open to anyone — present, never holder', () => {
+    // Only the DIM rooms can be "theirs" (team, 2026-09-13). Everything else
+    // is shared: it runs for the space, takes no lock, and a guest walking in
+    // is simply present. The lock-based operator activation is covered by the
+    // fixture tests; this show no longer has a room it applies to.
     const rt = makeRuntime();
     const g = arriveAtMuseum(rt);
-    const room = 'warehouse';
-    walk(rt, g.guestId, room, 4000);
-    rt.releaseRoomLock(room);
-    rt.testAdvanceTime(11000);
-    assert.equal(roomOf(rt, room).state, 'idle');
+    walk(rt, g.guestId, 'adminOffice', 4000);
+    const room = roomOf(rt, 'adminOffice');
+    assert.match(String(room.state), /^active/);
+    assert.equal(room.lockHolder, null, 'no lock — nobody owns a shared room');
+    assert.equal(standingOf(rt, g.guestId), 'present');
 
-    const result = rt.activateForOccupant(room);
-    assert.equal(result.ok, true);
-    assert.equal(result.guestId, g.guestId);
-    assert.equal(roomOf(rt, room).lockHolder, g.guestId);
+    // A second guest is just as welcome, and just as unpropertied.
+    const b = arriveAtMuseum(rt);
+    walk(rt, b.guestId, 'adminOffice', 4000);
+    assert.equal(standingOf(rt, b.guestId), 'present');
+    assert.equal(roomOf(rt, 'adminOffice').lockHolder, null);
   });
 
   it('refuses when nobody eligible is inside, rather than running for nobody', () => {
