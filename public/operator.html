@@ -608,40 +608,6 @@ function renderPlan() {
     svg.appendChild(text(label[0], label[1] + 9, bits.join(' · '), 'roomMeta'));
   }
 
-  // The selected guest's route, drawn in order. `goldenPath` is an ordered
-  // list, so this is literally where the tour audio will lead them.
-  const routed = selection?.kind === 'guest'
-    ? (snap?.guests ?? []).find((g) => g.guestId === selection.id)
-    : null;
-  if (routed?.pathId) {
-    const stops = pathRooms(routed.pathId)
-      .map((roomId) => rooms.get(roomId))
-      .filter((r) => r?.centre);
-    if (stops.length > 1) {
-      const line = document.createElementNS(SVG_NS, 'polyline');
-      line.setAttribute('points', stops.map((r) => r.centre.join(',')).join(' '));
-      line.setAttribute('fill', 'none');
-      line.setAttribute('stroke', '#6ea8fe');
-      line.setAttribute('stroke-width', '2');
-      line.setAttribute('stroke-dasharray', '6 5');
-      line.setAttribute('opacity', '0.7');
-      svg.appendChild(line);
-    }
-    stops.forEach((room, i) => {
-      const seen = routed.visitHistory?.[room.roomId]?.seen;
-      const marker = document.createElementNS(SVG_NS, 'circle');
-      marker.setAttribute('cx', room.centre[0]);
-      marker.setAttribute('cy', room.centre[1]);
-      marker.setAttribute('r', 13);
-      marker.setAttribute('fill', seen ? '#6ea8fe' : 'none');
-      marker.setAttribute('fill-opacity', '0.25');
-      marker.setAttribute('stroke', '#6ea8fe');
-      marker.setAttribute('stroke-width', '2');
-      svg.appendChild(marker);
-      svg.appendChild(text(room.centre[0], room.centre[1] - 18, `${i + 1}`, 'roomMeta'));
-    });
-  }
-
   // Dots are kept as live nodes rather than rebuilt, so the animation loop can
   // move them every frame without touching anything else.
   const seen = new Set();
@@ -972,32 +938,6 @@ function guestChip(guestId) {
   return `<span style="color:${colour}">●</span> ${guestName(guestId)}`;
 }
 
-/** The ordered room list for a path id, from the show definition. */
-function pathRooms(pathId) {
-  return showMeta?.paths?.[pathId]?.rooms ?? [];
-}
-
-function pathGuidance(pathId) {
-  return showMeta?.paths?.[pathId]?.guidance ?? 'goldenPath';
-}
-
-/**
- * The route as a list of stops with progress. `goldenPath` is ordered, so the
- * first unseen room is where the guest is being led next.
- */
-function routeFor(guest) {
-  const rooms = pathRooms(guest.pathId);
-  let nextFound = false;
-  return rooms.map((roomId) => {
-    const visit = guest.visitHistory?.[roomId];
-    const here = guest.roomId === roomId;
-    const seen = !!visit?.seen;
-    const next = !seen && !here && !nextFound;
-    if (next) nextFound = true;
-    return { roomId, seen, here, next, visits: visit?.visits ?? 0 };
-  });
-}
-
 // ----------------------------------------------------------------- listings
 
 /**
@@ -1022,8 +962,7 @@ function renderGuests() {
         <br><span class="muted mono" style="font-size:10px">${g.guestId}</span>
       </td>
       <td class="muted">${g.regions?.guidance ?? '—'}${
-        g.museum && g.museum.seen ? ` <span style="color:var(--accent)">· ${g.museum.seen}/${g.museum.limit}</span>` : ''}
-        ${g.pathId ? `<br><span style="font-size:10px">${pathRooms(g.pathId).join(' → ')}</span>` : ''}</td>
+        g.museum && g.museum.seen ? ` <span style="color:var(--accent)">· ${g.museum.seen}/${g.museum.limit}</span>` : ''}</td>
       <td>${g.roomId ?? '<span class="muted">—</span>'}</td>
       <td class="muted">${describeIntent(g)}</td>
       <td style="color:${standingColour(g.currentRoom)}">${describeStanding(g.currentRoom)}</td>
@@ -1120,18 +1059,11 @@ function renderInspector() {
   const guest = (snap?.guests ?? []).find((g) => g.guestId === selection.id);
   if (!guest) { el.textContent = 'Guest not found.'; return; }
   const visits = Object.values(guest.visitHistory ?? {});
-  const route = routeFor(guest);
   el.innerHTML = `
     <dl>
       <dt>Guest</dt><dd><span style="color:${standingColour(guest.currentRoom)}">●</span> ${guest.label}</dd>
       <dt>ID</dt><dd class="mono" style="font-size:11px">${guest.guestId}</dd>
-      <dt>Path</dt><dd>${guest.pathId
-        ? `${guest.pathId} <span class="muted">· ${pathGuidance(guest.pathId)}</span>`
-        : '<span class="muted">not assigned yet</span>'}</dd>
       <dt>Journey</dt><dd>${guest.regions?.guidance ?? '—'}</dd>
-      <dt>Following</dt><dd style="color:${guest.regions?.adherence === 'offPath' ? 'var(--bad)' : 'var(--ok)'}">${
-        guest.regions?.adherence === 'offPath' ? 'off-path' : 'on path'}</dd>
-      <dt>Guiding to</dt><dd>${guest.guidanceTarget ?? '<span class="muted">—</span>'}</dd>
       <dt>Museum</dt><dd>${guest.museum
         ? `${guest.museum.seen}/${guest.museum.limit} entered${
             Object.keys(guest.museum.rooms).length
@@ -1152,16 +1084,6 @@ function renderInspector() {
         ? `<span style="color:#e0b050">${guest.pendingInputs.join(' or ')}</span>${guest.kind === 'phone' ? '' : ' <span class="muted">(simulated — the driver will answer)</span>'}`
         : '<span class="muted">—</span>'}</dd>
     </dl>
-    <h2 style="margin-top:12px">Route</h2>
-    ${route.length ? `<ol style="margin:0;padding-left:20px">${route.map((stop) => `
-      <li style="color:${stop.here ? '#58c98a' : stop.seen ? '#8b93a3' : '#e7e9ee'}">
-        ${stop.roomId}
-        ${stop.here ? '<span class="muted">· here</span>' : ''}
-        ${stop.seen ? '<span class="muted">· seen</span>' : ''}
-        ${stop.next ? '<span style="color:#6ea8fe">· next</span>' : ''}
-      </li>`).join('')}</ol>`
-      : '<p class="muted">This path has no rooms.</p>'}
-
     <h2 style="margin-top:12px">Visits</h2>
     ${visits.length ? `<table><thead><tr><th>Room</th><th>Visits</th><th>Dwell</th><th>Seen</th><th>Mine</th></tr></thead><tbody>
       ${visits.map((v) => `<tr>
@@ -1170,20 +1092,6 @@ function renderInspector() {
         <td>${v.seen ? '✓' : ''}</td><td>${v.activatedByMe ? '✓' : ''}</td>
       </tr>`).join('')}
     </tbody></table>` : '<p class="muted">No rooms entered yet.</p>'}
-    <h2 style="margin-top:12px">Path</h2>
-    <div class="row">
-      <select data-setpath style="flex:1">
-        <option value="">no path</option>
-        ${Object.keys(showMeta?.paths ?? {}).map((p) => `
-          <option value="${p}"${p === guest.pathId ? ' selected' : ''}>${p} — ${(showMeta.paths[p].rooms ?? []).join(', ')}</option>`).join('')}
-      </select>
-    </div>
-    <p class="muted" style="margin:6px 0 0">
-      ${guest.pathPinned
-        ? 'Pinned — the show will not redraw this on arrival at the museum. Choose <em>no path</em> to hand them back.'
-        : 'Rehearsal only. The show assigns a path on arrival at the museum; choosing one here pins it against that.'}
-    </p>
-
     <h2 style="margin-top:12px">Send to</h2>
     <div class="row">
       <select data-sendroom style="flex:1">
@@ -1207,8 +1115,6 @@ function renderInspector() {
   // on the select would keep the operator looking at a stale inspector until
   // they happened to click elsewhere.
   const act = (message) => { document.activeElement?.blur?.(); send(message); };
-  el.querySelector('[data-setpath]').onchange = (e) =>
-    act({ type: 'setGuestPath', guestId: guest.guestId, pathId: e.target.value || null });
   el.querySelector('[data-sendroom]').onchange = (e) =>
     act({ type: 'sendGuestToRoom', guestId: guest.guestId, roomId: e.target.value || null });
   el.querySelector('[data-walk]')?.addEventListener('click',
