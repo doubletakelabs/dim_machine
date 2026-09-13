@@ -10,7 +10,7 @@ const DEFAULTS = {
    */
   dwellPadMs: 2000,
   /** Cap, for rooms with a very long seen threshold. */
-  maxDwellMs: 40000,
+  maxDwellMs: 60000, // must clear a museum room's 45s run, or the cap forces abandonment
   /** How long to wait before setting off again when there is nowhere to go. */
   pauseMs: 2000,
   /**
@@ -198,8 +198,16 @@ export class WalkthroughDriver {
 
   /** Long enough that this room's `seen` threshold is comfortably crossed. */
   dwellMsFor(roomId) {
-    const threshold = this.runtime.def?.rooms?.[roomId]?.seen?.dwellMs ?? 20000;
-    return Math.min(threshold + this.config.dwellPadMs, this.config.maxDwellMs);
+    const room = this.runtime.def?.rooms?.[roomId];
+    const threshold = room?.seen?.dwellMs ?? 20000;
+    // A museum room runs for an authored duration, and a person who chose it
+    // mostly stays for the end. Dwelling only to the "seen" threshold made
+    // every simulated guest an abandoner — real crowds should skew completer,
+    // with abandonment exercised by the operator pulling a dot out early.
+    const runsFor = this.runtime.museum?.rooms.has(roomId)
+      ? Number(Object.keys(room?.machine?.states?.active?.after ?? {})[0] ?? 0)
+      : 0;
+    return Math.min(Math.max(threshold, runsFor) + this.config.dwellPadMs, this.config.maxDwellMs);
   }
 
   /**
@@ -216,12 +224,40 @@ export class WalkthroughDriver {
     const guided = actor?.guidanceTarget();
     const roomId = guided && guided !== guest.roomId
       ? guided
-      : this.nextUnseen(guest, actor);
+      : this.museumChoice(guest) ?? this.nextUnseen(guest, actor);
 
     if (!roomId) return null;
     // Each guest gets their own spot in the room, so a crowd reads as a crowd.
     const point = this.runtime.standingSpot(roomId, guest.guestId);
     return point ? { roomId, point } : null;
+  }
+
+  /**
+   * Free choice, simulated: a random museum room this guest can still engage.
+   *
+   * The museum has no paths and no guidance target — guests choose. A walker
+   * stands in for a person, so it chooses too: any museum room it has not
+   * been to, at random, while it has slots left. Out of slots (or out of
+   * fresh rooms), it stops choosing, exactly like a person who is done.
+   */
+  museumChoice(guest) {
+    const museum = this.runtime.museum;
+    if (!museum) return null;
+    // Only once the show has brought them to the museum — a walker in the
+    // prologue is mid-sequence, and wandering off to a DIM room would walk
+    // out of a question the show is still asking.
+    const guidance = this.runtime.guestActors.get(guest.guestId)?.regions().guidance ?? '';
+    if (String(guidance).split('.')[0] !== 'museum') return null;
+    const snap = museum.snapshot(guest.guestId);
+    if (snap.seen >= snap.limit) return null;
+    const options = [...museum.rooms].filter((roomId) => {
+      if (roomId === guest.roomId) return false;
+      if (snap.rooms[roomId]) return false; // been there, one way or another
+      const info = this.runtime.museum.io.roomInfo(roomId);
+      return info.max == null || info.count < info.max;
+    });
+    if (!options.length) return null;
+    return options[Math.floor(Math.random() * options.length)];
   }
 
   /**

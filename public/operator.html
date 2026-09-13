@@ -1022,7 +1022,7 @@ function renderGuests() {
         <br><span class="muted mono" style="font-size:10px">${g.guestId}</span>
       </td>
       <td class="muted">${g.regions?.guidance ?? '—'}${
-        g.regions?.adherence === 'offPath' ? ' <span style="color:var(--bad)">off-path</span>' : ''}
+        g.museum && g.museum.seen ? ` <span style="color:var(--accent)">· ${g.museum.seen}/${g.museum.limit}</span>` : ''}
         ${g.pathId ? `<br><span style="font-size:10px">${pathRooms(g.pathId).join(' → ')}</span>` : ''}</td>
       <td>${g.roomId ?? '<span class="muted">—</span>'}</td>
       <td class="muted">${describeIntent(g)}</td>
@@ -1132,6 +1132,13 @@ function renderInspector() {
       <dt>Following</dt><dd style="color:${guest.regions?.adherence === 'offPath' ? 'var(--bad)' : 'var(--ok)'}">${
         guest.regions?.adherence === 'offPath' ? 'off-path' : 'on path'}</dd>
       <dt>Guiding to</dt><dd>${guest.guidanceTarget ?? '<span class="muted">—</span>'}</dd>
+      <dt>Museum</dt><dd>${guest.museum
+        ? `${guest.museum.seen}/${guest.museum.limit} entered${
+            Object.keys(guest.museum.rooms).length
+              ? '<br>' + Object.entries(guest.museum.rooms)
+                  .map(([r, m]) => `<span class="muted">${r}</span> ${m}`).join('<br>')
+              : ''}`
+        : '<span class="muted">—</span>'}</dd>
       <dt>Eligible</dt><dd>${guest.eligibleRooms?.join(', ') || '—'}</dd>
       <dt>In room</dt><dd>${guest.roomId ?? '—'}${guest.zoneId ? ` (${guest.zoneId})` : ''}</dd>
       <dt>Standing</dt><dd style="color:${standingColour(guest.currentRoom)}">${describeStanding(guest.currentRoom)}</dd>

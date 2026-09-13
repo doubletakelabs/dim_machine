@@ -93,50 +93,10 @@ describe('the journey', () => {
     assert.equal(regions(rt, g.guestId).guidance, 'museum');
   });
 
-  it('assigns a path on arrival, not at the door', () => {
-    const rt = makeRuntime();
-    const g = rt.spawnGuest();
-    assert.equal(rt.guests.get(g.guestId).pathId, null);
-    for (const roomId of PROLOGUE) walk(rt, g.guestId, roomId);
-    assert.equal(rt.guests.get(g.guestId).pathId, null, 'still nothing through the prologue');
-    walk(rt, g.guestId, 'museumHallway');
-    assert.ok(museum.paths[rt.guests.get(g.guestId).pathId]);
-  });
-
-  it('does not redraw a path somebody chose', () => {
-    const rt = makeRuntime();
-    const g = rt.spawnGuest();
-    assert.equal(rt.setGuestPath(g.guestId, 'pathC'), true);
-    for (const roomId of PROLOGUE) walk(rt, g.guestId, roomId);
-    walk(rt, g.guestId, 'museumHallway');
-    // Reaching the museum is what assigns a path. An operator's choice made
-    // before that must survive it, or the panel looks like it ignored the click.
-    assert.equal(rt.guests.get(g.guestId).pathId, 'pathC');
-
-    // And handing them back to the show lets it draw again.
-    rt.setGuestPath(g.guestId, null);
-    assert.equal(rt.guests.get(g.guestId).pathPinned, false);
-  });
-
-  it('refuses a path the show does not have', () => {
-    const rt = makeRuntime();
-    const g = rt.spawnGuest();
-    assert.equal(rt.setGuestPath(g.guestId, 'pathZ'), false);
-    assert.equal(rt.guests.get(g.guestId).pathId, null);
-  });
-
-  it('rotates paths between guests', () => {
-    const rt = makeRuntime();
-    const assigned = [arriveAtMuseum(rt), arriveAtMuseum(rt)].map((g) => rt.guests.get(g.guestId).pathId);
-    assert.notEqual(assigned[0], assigned[1]);
-  });
-
-  it('guides toward the first unvisited room on the assigned path', () => {
+  it('assigns no path — the museum is free choice now', () => {
     const rt = makeRuntime();
     const g = arriveAtMuseum(rt);
-    const actor = rt.guestActors.get(g.guestId);
-    const path = museum.paths[rt.guests.get(g.guestId).pathId].rooms;
-    assert.equal(actor.guidanceTarget(), path[0]);
+    assert.equal(rt.guests.get(g.guestId).pathId, null, 'paths left with the old museum design');
   });
 
   it('everyone shares the prologue — nobody is turned away, and nobody owns it', () => {
@@ -178,98 +138,42 @@ describe('the journey', () => {
   });
 });
 
-describe('going off-path', () => {
-  /** A room that no path of theirs routes through. */
-  function otherPathRoom(rt, guestId) {
-    const mine = museum.paths[rt.guests.get(guestId).pathId].rooms;
-    return Object.entries(museum.paths)
-      .flatMap(([, p]) => p.rooms)
-      .find((roomId) => !mine.includes(roomId));
-  }
-
-  it('flips when a guest goes to a museum room that is not theirs', () => {
+describe('wandering, which is no longer deviance', () => {
+  it('any museum room is theirs to choose — walking in engages it', () => {
     const rt = makeRuntime();
     const g = arriveAtMuseum(rt);
-    const stray = otherPathRoom(rt, g.guestId);
+    walk(rt, g.guestId, 'faerie', 3000);
+    // No path, no off-path: choosing a room simply engages it.
     assert.equal(regions(rt, g.guestId).adherence, 'onPath');
-    walk(rt, g.guestId, stray);
-    assert.equal(regions(rt, g.guestId).adherence, 'offPath');
-    const event = rt.eventLog.filter((e) => e.type === 'guest.wentOffPath').at(-1);
-    assert.equal(event.roomId, stray);
-    assert.ok(event.target, 'records what guidance was asking for');
-  });
-
-  it('stays off once off — the tour does not get back on the rails', () => {
-    const rt = makeRuntime();
-    const g = arriveAtMuseum(rt);
-    walk(rt, g.guestId, otherPathRoom(rt, g.guestId));
-    walk(rt, g.guestId, 'museumHallway');
-    walk(rt, g.guestId, museum.paths[rt.guests.get(g.guestId).pathId].rooms[0]);
-    assert.equal(regions(rt, g.guestId).adherence, 'offPath');
+    assert.equal(roomOf(rt, 'faerie').state, 'active');
+    assert.equal(rt.museum.snapshot(g.guestId).seen, 1);
   });
 
   it('backtracking out of the museum is not a deviation', () => {
-    // No path routes through the Cyclorama, so there is nothing there to
-    // deviate from.
     const rt = makeRuntime();
     const g = arriveAtMuseum(rt);
     walk(rt, g.guestId, 'cyclorama');
     assert.equal(regions(rt, g.guestId).adherence, 'onPath');
-    // And they were never turned away from it — the Cyclorama is shared.
     assert.equal(standingOf(rt, g.guestId), 'present');
   });
 
-  it('a hallway is never a deviation', () => {
+  it('a hallway is never anything but passage', () => {
     const rt = makeRuntime();
     const g = arriveAtMuseum(rt);
     walk(rt, g.guestId, 'southCorridor');
-    assert.equal(regions(rt, g.guestId).adherence, 'onPath');
     assert.equal(standingOf(rt, g.guestId), 'passingThrough');
-  });
-});
-
-describe('rooms reacting to a guest they were not sent', () => {
-  function strayInto(rt, kind) {
-    for (let i = 0; i < 6; i++) {
-      const g = arriveAtMuseum(rt);
-      const mine = museum.paths[rt.guests.get(g.guestId).pathId].rooms;
-      const target = Object.entries(museum.rooms).find(([id, r]) =>
-        !mine.includes(id)
-        && (r.ineligible?.policy ?? 'ignore') === kind
-        && Object.values(museum.paths).some((p) => p.rooms.includes(id)));
-      if (target) { walk(rt, g.guestId, target[0]); return { g, roomId: target[0] }; }
-      rt.removeGuest(g.guestId);
-    }
-    throw new Error(`no ${kind} room off-path for any guest`);
-  }
-
-  it('most rooms stay dark, and are untouched by the visit', () => {
-    const rt = makeRuntime();
-    const { g, roomId } = strayInto(rt, 'ignore');
-    const room = roomOf(rt, roomId);
-    assert.equal(room.state, 'idle');
-    assert.equal(room.lockHolder, null);
-    assert.equal(room.lastRefuse, null, 'it never even heard a request');
-    assert.equal(standingOf(rt, g.guestId), 'notTheirs');
-  });
-
-  it('a room declaring activateVariant runs its variant, and they hold it', () => {
-    const rt = makeRuntime();
-    const { g, roomId } = strayInto(rt, 'activateVariant');
-    const room = roomOf(rt, roomId);
-    assert.equal(room.state, 'active.offPath');
-    assert.equal(room.lockHolder, g.guestId);
-    assert.equal(standingOf(rt, g.guestId), 'holder');
-    assert.equal(rt.eventLog.filter((e) => e.type === 'room.activated').at(-1).offPath, true);
   });
 });
 
 describe('operator activation', () => {
   it('activates for somebody actually standing there', () => {
+    // A post-museum room: the museum layer owns DIM-room activation now, and
+    // an operator re-running a room a guest already spent is a return there,
+    // not an activation. The machinery under test is show-agnostic.
     const rt = makeRuntime();
     const g = arriveAtMuseum(rt);
-    const room = museum.paths[rt.guests.get(g.guestId).pathId].rooms[0];
-    walk(rt, g.guestId, room);
+    const room = 'warehouse';
+    walk(rt, g.guestId, room, 4000);
     rt.releaseRoomLock(room);
     rt.testAdvanceTime(11000);
     assert.equal(roomOf(rt, room).state, 'idle');

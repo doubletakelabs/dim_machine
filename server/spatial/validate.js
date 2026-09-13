@@ -1,6 +1,7 @@
 import {
   CONTRACT_VERSION,
   REQUIRED_ROOM_STATES,
+  SETTLING_TRANSITIONS,
   REQUIRED_ROOM_TRANSITIONS,
   ELIGIBILITY_STRATEGIES,
   PATH_ASSIGNMENT_STRATEGIES,
@@ -25,6 +26,7 @@ import {
   CUE_AUDIENCES, CUE_SLOTS, INPUT_KINDS, INPUT_MODES, EXPERIENCE_INTENTS, defaultCueAudience,
 } from './contract.js';
 import { polygonsOverlap } from './zone-math.js';
+import { checkMuseum } from './museum.js';
 
 function isObject(v) {
   return v != null && typeof v === 'object' && !Array.isArray(v);
@@ -84,6 +86,15 @@ function checkRoomMachine(machine, path, errors) {
     if (!isObject(states[state])) continue;
     if (!handlesEvent(states[state], event)) {
       errors.push(`${path}.states.${state} must handle "${event}" — ${why}`);
+    }
+  }
+  // Settling is optional since 2026-09-11 — but a machine that authors one
+  // still owes it a way out, or the exit grace strands the room there.
+  if (isObject(states.settling)) {
+    for (const { state, event, why } of SETTLING_TRANSITIONS) {
+      if (!handlesEvent(states[state], event)) {
+        errors.push(`${path}.states.${state} must handle "${event}" — ${why}`);
+      }
     }
   }
 }
@@ -826,6 +837,7 @@ export function validateShowDefinition(raw) {
   }
 
   checkFloorPlan(def.floorplan, errors, warnings);
+  checkMuseum(def.museum, def.rooms, errors, warnings);
 
   checkAdjacency(def.rooms ?? {}, errors, warnings);
   checkGuest(def.guest, def.rooms ?? {}, errors, warnings);

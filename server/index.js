@@ -157,6 +157,9 @@ const runtime = new SpatialRuntime({
   // How the show reaches a room's own server. Injected rather than imported by
   // the runtime so tests drive the protocol without a network.
   openExperienceSocket: (url) => new WebSocket(url),
+  // The museum layer schedules the in_room bed to start exactly when the
+  // entrance clip ends, which needs the clip's real length.
+  assetSeconds: (asset) => wavSeconds(asset),
   clock: showClock,
   log: opLog,
   onStateChange: scheduleRoster,
@@ -193,6 +196,11 @@ function currentAssets() {
   };
   collect(runtime.def?.guest?.cues);
   for (const room of Object.values(runtime.def?.rooms ?? {})) collect(room.cues);
+  // The museum's stems are cues by another road, and a phone that has not
+  // preloaded one plays silence at the exact moment it mattered.
+  for (const value of Object.values(runtime.def?.museum?.stems ?? {})) {
+    for (const asset of [].concat(value)) if (typeof asset === 'string') found.add(asset);
+  }
   return [...found];
 }
 

@@ -8,7 +8,7 @@ export const CONTRACT_VERSION = 3;
  */
 export const OCCUPANCY_STATES = ['outside', 'inside'];
 
-export const ROOM_PRESENTATION_STATES = ['idle', 'active', 'settling'];
+export const ROOM_PRESENTATION_STATES = ['idle', 'active'];
 
 /**
  * What kind of space a room is — really, who the room runs *for*.
@@ -33,13 +33,18 @@ export const ROOM_KINDS = ['destination', 'shared', 'hallway'];
 /**
  * Presentation roots every room machine must declare.
  *
+ * `settling` left the required set on 2026-09-11: the team decided rooms go
+ * idle ⇄ active, instantly, both ways. A machine may still author a settling
+ * state — the actor's exit-grace machinery engages if one exists — but the
+ * contract no longer demands it.
+ *
  * Rooms have no memory of having run before, deliberately. What matters when
  * someone walks in is whether *they* have seen the room, not whether anyone
  * has — a room that reset after A's visit should still play in full for B, who
  * has never been inside. Revisit variants are therefore driven by the
  * activating guest's history, carried on the ACTIVATE event.
  */
-export const REQUIRED_ROOM_STATES = ['idle', 'active', 'settling'];
+export const REQUIRED_ROOM_STATES = ['idle', 'active'];
 
 /**
  * Events the runtime sends into a room machine, and the states that must handle
@@ -49,8 +54,12 @@ export const REQUIRED_ROOM_STATES = ['idle', 'active', 'settling'];
  */
 export const REQUIRED_ROOM_TRANSITIONS = [
   { state: 'idle', event: 'ACTIVATE', why: 'activation' },
-  { state: 'settling', event: 'RESET', why: 'exit grace completion (§3.5)' },
   { state: 'active', event: 'RELEASE', why: 'lock release with no occupants (§3.4)' },
+];
+
+/** Required only when the machine authors a settling state at all. */
+export const SETTLING_TRANSITIONS = [
+  { state: 'settling', event: 'RESET', why: 'exit grace completion (§3.5)' },
 ];
 
 /**

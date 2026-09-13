@@ -64,7 +64,34 @@ having derived standing in the first place.
 
 ---
 
-## 2.5 Experiment in flight — the museum machine
+## 2.5 The museum machine — implemented (2026-09-13)
+
+The prototype graduated: `server/spatial/museum.js` runs the museum for the
+real show, driven by the coordinator's entry/exit events and speaking through
+the ordinary cue slots (`guidance` for the spoken line, `room` for the
+in_room bed, scheduled to start exactly when the entrance clip ends). What
+went with it: **paths, adherence, and settling left MAD-DIM**; settling left
+the *required* room contract (optional now — authored settling still gets the
+exit-grace machinery); eligibility is `all` (the museum layer owns who a DIM
+room runs for, and gates the walk-in auto-activation so a dead room cannot be
+resurrected by a returning guest). Placeholder spoken stems live in
+`public/assets/audio/museum/` until the real files arrive — swapping them is
+a show-JSON edit. The walkthrough driver chooses museum rooms at random like
+a person would, and dwells through a room's authored duration so simulated
+crowds skew completer rather than abandoner.
+
+**The sim at `/sim/` stays independent** — it is a prototyping sandbox, not
+the implementation, and is expected to diverge for future prototypes.
+
+**New open item — the complete signal.** Museum rooms complete when their
+machine goes idle: a placeholder 45s `after` today. Influence has no timer,
+because its room software is the experience server — and the experience
+protocol has **no room→show complete message yet**. Until it does, Influence
+only completes by operator RELEASE, and every simulated guest abandons it
+(observed in the crowd run — accurate, not a bug). Add a `complete` signal to
+the broker protocol when the team confirms the shape.
+
+## Superseded: the experiment record
 
 **Fourth iteration** (2026-09-08). The approach is gone, and it took the
 fuzzy BLE judgements with it: no offers, no thresholds, no walked-past

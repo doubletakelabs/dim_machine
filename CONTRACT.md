@@ -155,12 +155,17 @@ fails to load.
 |---|---|
 | `idle` | Available. Idle/ambient. Must be `initial`. |
 | `active` | Content running. Sub-states carry the room's beats and any intro. |
-| `settling` | Occupancy dropped to zero; exit grace running. |
 
-That is the whole vocabulary. Rooms may declare any additional states they like
-and nest freely — an intro is `active.intro`, or a top-level `activating` if you
-prefer, and the validator does not object. What it does require is that these
-three exist and handle the events below.
+`settling` **left the required set on 2026-09-11**: rooms go idle ⇄ active,
+instantly, both ways. A machine may still author a `settling` state — the
+exit-grace machinery engages if one exists, and everything in the settling
+rows below applies to it — but the contract no longer demands one, and the
+museum rooms in MAD-DIM do without.
+
+Rooms may declare any additional states they like and nest freely — an intro
+is `active.intro`, or a top-level `activating` if you prefer, and the
+validator does not object. What it does require is that `idle` and `active`
+exist and handle the events below.
 
 **Rooms have no memory of having run before.** There is no `dormantSeen`
 equivalent, deliberately: after a room resets, a guest walking in for the
@@ -173,8 +178,8 @@ the spec), carried on `ACTIVATE`.
 | State | Event | Sent when |
 |---|---|---|
 | `idle` | `ACTIVATE` | an eligible guest activates the room |
-| `settling` | `RESET` | exit grace completed |
 | `active` | `RELEASE` | lock released with nobody left in the room |
+| `settling` | `RESET` | exit grace completed — **only when a `settling` state is authored** |
 | `settling` | `RESUME` | the guest who left returned during grace — **only required when `exit.resumeIfReturned` is true** |
 | `settling` | `ACTIVATE` | a *different* eligible guest arrived during grace — **optional; declaring it makes the room interruptible** |
 

@@ -164,7 +164,7 @@ not at the door. See `CONTRACT.md`.
 
 | File | Purpose |
 |---|---|
-| `shows/MAD-DIM.json` | The show: 23 spaces, two hallway hubs, 10 museum rooms, 4 paths. The only show in `shows/`, so it is the only one the panel offers |
+| `shows/MAD-DIM.json` | The show: 23 spaces, two hallway hubs, 10 free-choice museum rooms (the `museum` block — each guest enters four). The only show in `shows/`, so it is the only one the panel offers |
 | `fixtures/small-show.json` | Three rooms and a hallway. Deliberately **not** in `shows/` — it is a test fixture, not a show anyone should be able to load by accident, and most of the suite is written against it because a focused assertion is unreadable against 23 rooms |
 
 Validate via `POST /api/shows/validate` or `SpatialRuntime.load()`.

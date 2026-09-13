@@ -48,17 +48,10 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
             "states": {
               "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
             }
           }
         }
@@ -79,9 +72,6 @@
       "cues": {
         "active": {
           "audio": "whisper.wav"
-        },
-        "settling": {
-          "audio": "chime.wav"
         }
       }
     },
@@ -126,17 +116,10 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
             "states": {
               "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
             }
           }
         }
@@ -153,8 +136,7 @@
       "seen": {
         "dwellMs": 8000,
         "accumulate": true
-      },
-      "cues": {}
+      }
     },
     "entranceHallway": {
       "name": "Entrance Hallway",
@@ -242,17 +224,10 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
             "states": {
               "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
             }
           }
         }
@@ -273,9 +248,6 @@
       "cues": {
         "active": {
           "audio": "whisper.wav"
-        },
-        "settling": {
-          "audio": "chime.wav"
         }
       }
     },
@@ -340,17 +312,10 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
             "states": {
               "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
             }
           }
         }
@@ -371,9 +336,6 @@
       "cues": {
         "active": {
           "audio": "whisper.wav"
-        },
-        "settling": {
-          "audio": "chime.wav"
         }
       }
     },
@@ -430,17 +392,10 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
             "states": {
               "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
             }
           }
         }
@@ -461,9 +416,6 @@
       "cues": {
         "active": {
           "audio": "whisper.wav"
-        },
-        "settling": {
-          "audio": "chime.wav"
         }
       }
     },
@@ -616,25 +568,17 @@
         "states": {
           "idle": {
             "on": {
-              "ACTIVATE": "active",
-              "ACTIVATE_SEEN": "active.abbreviated"
+              "ACTIVATE": "active"
             }
           },
           "active": {
-            "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
-            "states": {
-              "main": {},
-              "abbreviated": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
+            "after": {
+              "45000": {
+                "target": "idle"
+              }
             }
           }
         }
@@ -642,7 +586,7 @@
       "multiGuest": {
         "policy": "collaborative",
         "maxOccupants": 6,
-        "atCapacity": "spectator"
+        "atCapacity": "refuse"
       },
       "ineligible": {
         "policy": "ignore"
@@ -656,27 +600,6 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
-      },
-      "revisit": {
-        "whenSeen": {}
-      },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
       }
     },
     "saas": {
@@ -717,19 +640,13 @@
             }
           },
           "active": {
-            "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
-            "states": {
-              "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
+            "after": {
+              "45000": {
+                "target": "idle"
+              }
             }
           }
         }
@@ -737,7 +654,7 @@
       "multiGuest": {
         "policy": "collaborative",
         "maxOccupants": 6,
-        "atCapacity": "spectator"
+        "atCapacity": "refuse"
       },
       "ineligible": {
         "policy": "ignore"
@@ -751,24 +668,6 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
-      },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
       }
     },
     "influence": {
@@ -809,19 +708,8 @@
             }
           },
           "active": {
-            "initial": "main",
             "on": {
-              "RELEASE": "settling"
-            },
-            "states": {
-              "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
+              "RELEASE": "idle"
             }
           }
         }
@@ -829,7 +717,7 @@
       "multiGuest": {
         "policy": "collaborative",
         "maxOccupants": 6,
-        "atCapacity": "spectator"
+        "atCapacity": "refuse"
       },
       "ineligible": {
         "policy": "ignore"
@@ -843,24 +731,6 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
-      },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
       },
       "experience": {
         "experienceId": "influence-clickfarm",
@@ -912,25 +782,17 @@
         "states": {
           "idle": {
             "on": {
-              "ACTIVATE": "active",
-              "ACTIVATE_OFFPATH": "active.offPath"
+              "ACTIVATE": "active"
             }
           },
           "active": {
-            "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
-            "states": {
-              "main": {},
-              "offPath": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
+            "after": {
+              "45000": {
+                "target": "idle"
+              }
             }
           }
         }
@@ -938,10 +800,10 @@
       "multiGuest": {
         "policy": "collaborative",
         "maxOccupants": 6,
-        "atCapacity": "spectator"
+        "atCapacity": "refuse"
       },
       "ineligible": {
-        "policy": "activateVariant"
+        "policy": "ignore"
       },
       "exit": {
         "policy": "resetAfter",
@@ -952,24 +814,6 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
-      },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
       }
     },
     "kin": {
@@ -1010,19 +854,13 @@
             }
           },
           "active": {
-            "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
-            "states": {
-              "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
+            "after": {
+              "45000": {
+                "target": "idle"
+              }
             }
           }
         }
@@ -1030,7 +868,7 @@
       "multiGuest": {
         "policy": "collaborative",
         "maxOccupants": 6,
-        "atCapacity": "spectator"
+        "atCapacity": "refuse"
       },
       "ineligible": {
         "policy": "ignore"
@@ -1044,24 +882,6 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
-      },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
       }
     },
     "faerie": {
@@ -1102,19 +922,13 @@
             }
           },
           "active": {
-            "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
-            "states": {
-              "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
+            "after": {
+              "45000": {
+                "target": "idle"
+              }
             }
           }
         }
@@ -1122,7 +936,7 @@
       "multiGuest": {
         "policy": "collaborative",
         "maxOccupants": 6,
-        "atCapacity": "spectator"
+        "atCapacity": "refuse"
       },
       "ineligible": {
         "policy": "ignore"
@@ -1136,24 +950,6 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
-      },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
       }
     },
     "superintelligence": {
@@ -1190,19 +986,13 @@
             }
           },
           "active": {
-            "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
-            "states": {
-              "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
+            "after": {
+              "45000": {
+                "target": "idle"
+              }
             }
           }
         }
@@ -1210,7 +1000,7 @@
       "multiGuest": {
         "policy": "collaborative",
         "maxOccupants": 6,
-        "atCapacity": "spectator"
+        "atCapacity": "refuse"
       },
       "ineligible": {
         "policy": "ignore"
@@ -1224,24 +1014,6 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
-      },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
       }
     },
     "consumption1": {
@@ -1278,25 +1050,17 @@
         "states": {
           "idle": {
             "on": {
-              "ACTIVATE": "active",
-              "ACTIVATE_OFFPATH": "active.offPath"
+              "ACTIVATE": "active"
             }
           },
           "active": {
-            "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
-            "states": {
-              "main": {},
-              "offPath": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
+            "after": {
+              "45000": {
+                "target": "idle"
+              }
             }
           }
         }
@@ -1304,10 +1068,10 @@
       "multiGuest": {
         "policy": "collaborative",
         "maxOccupants": 6,
-        "atCapacity": "spectator"
+        "atCapacity": "refuse"
       },
       "ineligible": {
-        "policy": "activateVariant"
+        "policy": "ignore"
       },
       "exit": {
         "policy": "resetAfter",
@@ -1318,24 +1082,6 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
-      },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
       }
     },
     "consumption2": {
@@ -1376,19 +1122,13 @@
             }
           },
           "active": {
-            "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
-            "states": {
-              "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
+            "after": {
+              "45000": {
+                "target": "idle"
+              }
             }
           }
         }
@@ -1396,7 +1136,7 @@
       "multiGuest": {
         "policy": "collaborative",
         "maxOccupants": 6,
-        "atCapacity": "spectator"
+        "atCapacity": "refuse"
       },
       "ineligible": {
         "policy": "ignore"
@@ -1410,24 +1150,6 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
-      },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
       }
     },
     "consumption3": {
@@ -1472,19 +1194,13 @@
             }
           },
           "active": {
-            "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
-            "states": {
-              "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
+            "after": {
+              "45000": {
+                "target": "idle"
+              }
             }
           }
         }
@@ -1492,7 +1208,7 @@
       "multiGuest": {
         "policy": "collaborative",
         "maxOccupants": 6,
-        "atCapacity": "spectator"
+        "atCapacity": "refuse"
       },
       "ineligible": {
         "policy": "ignore"
@@ -1506,24 +1222,6 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
-      },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
       }
     },
     "southCorridor": {
@@ -1630,17 +1328,10 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
             "states": {
               "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
             }
           }
         }
@@ -1675,11 +1366,7 @@
             "loop": true,
             "gain": 0.25
           }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
+        ]
       }
     },
     "adminOffice": {
@@ -1724,17 +1411,10 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
             "states": {
               "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
             }
           }
         }
@@ -1769,11 +1449,7 @@
             "loop": true,
             "gain": 0.25
           }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
+        ]
       }
     },
     "dataCenter": {
@@ -1816,17 +1492,10 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
             "states": {
               "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
             }
           }
         }
@@ -1861,11 +1530,7 @@
             "loop": true,
             "gain": 0.25
           }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
+        ]
       }
     },
     "controlRoom": {
@@ -1909,17 +1574,10 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
             "states": {
               "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
             }
           }
         }
@@ -1954,11 +1612,7 @@
             "loop": true,
             "gain": 0.25
           }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
+        ]
       }
     },
     "library": {
@@ -2025,17 +1679,10 @@
           "active": {
             "initial": "main",
             "on": {
-              "RELEASE": "settling"
+              "RELEASE": "idle"
             },
             "states": {
               "main": {}
-            }
-          },
-          "settling": {
-            "on": {
-              "RESET": "idle",
-              "ACTIVATE": "active",
-              "RESUME": "active.main"
             }
           }
         }
@@ -2070,55 +1717,14 @@
             "loop": true,
             "gain": 0.25
           }
-        ],
-        "settling": {
-          "audio": "chime.wav",
-          "audience": "participants"
-        }
+        ]
       }
-    }
-  },
-  "paths": {
-    "pathA": {
-      "rooms": [
-        "automation",
-        "slop",
-        "consumption1"
-      ],
-      "guidance": "goldenPath"
-    },
-    "pathB": {
-      "rooms": [
-        "saas",
-        "kin",
-        "consumption2"
-      ],
-      "guidance": "goldenPath"
-    },
-    "pathC": {
-      "rooms": [
-        "influence",
-        "faerie",
-        "consumption3"
-      ],
-      "guidance": "goldenPath"
-    },
-    "pathD": {
-      "rooms": [
-        "superintelligence",
-        "slop",
-        "consumption1"
-      ],
-      "guidance": "goldenPath"
     }
   },
   "guest": {
     "eligibility": {
       "golden": {
-        "strategy": "goldenPath",
-        "params": {
-          "allowRevisit": true
-        }
+        "strategy": "all"
       }
     },
     "timers": {
@@ -2180,18 +1786,6 @@
             }
           },
           "museum": {
-            "entry": [
-              {
-                "type": "assignPath",
-                "from": [
-                  "pathA",
-                  "pathB",
-                  "pathC",
-                  "pathD"
-                ],
-                "strategy": "roundRobin"
-              }
-            ],
             "on": {
               "MUSEUM_TIME_UP": "converge"
             }
@@ -2207,28 +1801,16 @@
       "adherence": {
         "initial": "onPath",
         "states": {
-          "onPath": {
-            "on": {
-              "wentOffPath": "offPath"
-            }
-          },
-          "offPath": {}
+          "onPath": {}
         }
       }
     },
     "cues": {
-      "guidance.museum": {
-        "audio": "chime.wav"
-      },
       "guidance.converge": {
         "audio": "chime.wav"
       },
       "guidance.ending": {
         "audio": "chime.wav"
-      },
-      "adherence.offPath": {
-        "audio": "chime.wav",
-        "gain": 0.35
       }
     }
   },
@@ -2240,5 +1822,35 @@
   "inputBindings": {
     "tap": "TAP",
     "swipe": "SWIPE"
+  },
+  "museum": {
+    "limit": 4,
+    "hallway": "museumHallway",
+    "rooms": [
+      "automation",
+      "saas",
+      "influence",
+      "slop",
+      "kin",
+      "faerie",
+      "superintelligence",
+      "consumption1",
+      "consumption2",
+      "consumption3"
+    ],
+    "stems": {
+      "entrance": "audio/museum/entrance.wav",
+      "inRoom": "audio/museum/in_room.wav",
+      "complete": "audio/museum/complete.wav",
+      "returnVisited": "audio/museum/return_visited.wav",
+      "inRoomDisabled": "audio/museum/in_room_disabled.wav",
+      "returnDisabled": "audio/museum/return_disabled.wav",
+      "inHallway": [
+        "audio/museum/in_hallway_1.wav",
+        "audio/museum/in_hallway_2.wav",
+        "audio/museum/in_hallway_3.wav",
+        "audio/museum/in_hallway_4.wav"
+      ]
+    }
   }
 }

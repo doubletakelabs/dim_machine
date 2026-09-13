@@ -12,6 +12,7 @@ import { buildGuestMachine } from './guest-machine.js';
 import { expandSequences } from './sequence.js';
 import { WalkthroughDriver } from './walkthrough.js';
 import { roomStandingSpot, slotForGuest, floorPlanExtent } from './zone-math.js';
+import { MuseumLayer } from './museum.js';
 import { systemClock } from './clock.js';
 import {
   OCCUPANCY_STATES, CUE_SLOTS, AUDIO_CUE_SLOTS, SCREEN_CUE_SLOT, EXPERIENCE_CUE_SLOT,
@@ -134,6 +135,30 @@ export class SpatialRuntime {
 
     this.walkthrough = new WalkthroughDriver({ runtime: this, clock: this.clock });
 
+    // The museum layer: each guest's relationship with the DIM rooms.
+    // Prototyped in /sim/; the rules live in museum.js.
+    this.museum = this.def.museum
+      ? new MuseumLayer(this.def.museum, {
+        now: () => this.now(),
+        assetSeconds: (asset) => this.io.assetSeconds?.(asset) ?? null,
+        activate: (guestId, roomId) => this.requestActivation(guestId, roomId),
+        // A stand-down, not a hand-off: drop the lock first so nothing
+        // transfers it to a bystander, then send the machine home.
+        release: (roomId) => {
+          this.releaseRoomLock(roomId, null);
+          this.sendRoomEvent(roomId, 'RELEASE');
+        },
+        roomInfo: (roomId) => ({
+          count: this.coordinator?.getRoomOccupants(roomId).length ?? 0,
+          max: this.def.rooms?.[roomId]?.multiGuest?.maxOccupants ?? null,
+          active: String(this.rooms.get(roomId)?.state ?? 'idle').split('.')[0] === 'active',
+        }),
+        occupantIds: (roomId) =>
+          (this.coordinator?.getRoomOccupants(roomId) ?? []).map((o) => o.guestId),
+        log: (line) => this.io.log?.(line),
+      })
+      : null;
+
     for (const link of this.experiences.values()) link.stop();
     this.experiences.clear();
     this._drivers.clear();
@@ -166,7 +191,12 @@ export class SpatialRuntime {
         eligibleToHold: (guestId) => this.guestActors.get(guestId)?.isEligible(roomId) ?? false,
         onLockTransferred: (from, to) => this.handleLockTransferred(roomId, from, to),
         onAvailable: () => this.handleRoomAvailable(roomId),
-        onStateChange: () => this.notifyChange(),
+        onStateChange: () => {
+          // The museum layer watches rooms come home: idle with engaged
+          // guests still standing inside is completion.
+          this.museum?.handleRoomState(roomId, String(this.rooms.get(roomId)?.state ?? 'idle').split('.')[0]);
+          this.notifyChange();
+        },
       }));
     }
 
@@ -530,6 +560,7 @@ export class SpatialRuntime {
     // already saw the same event, is untouched by it (§3.4).
     const outcome = this.guestActors.get(event.guestId)?.handleOccupancy(event);
     if (outcome) this.logEntryOutcome(event.guestId, outcome);
+    if (this.running) this.museum?.handleOccupancy(event);
     this.io.onOccupancy?.(event);
     this.notifyChange();
   }
@@ -582,6 +613,11 @@ export class SpatialRuntime {
   activateFor(guestId, roomId, context) {
     const room = this.rooms.get(roomId);
     if (!room) return { ok: false, reason: 'unknown' };
+    // The museum layer owns who wakes a DIM room. A return, a spent guest —
+    // the room is dead to them, and walking in must not resurrect it.
+    if (this.museum && !this.museum.wouldEngage(guestId, roomId)) {
+      return { ok: false, reason: 'museumDeclined' };
+    }
     const result = room.requestActivation(guestId, context);
     if (result.ok) this.guests.get(guestId)?.recordActivation(roomId);
     return result;
@@ -687,6 +723,7 @@ export class SpatialRuntime {
       pendingInputs: this.pendingInputs(g.guestId),
       kind: g.kind,
       position: this.displayPosition(g.guestId),
+      museum: this.museum?.snapshot(g.guestId) ?? null,
       walking: this.walkthrough?.walkers.has(g.guestId) ?? false,
       intent: this.walkthrough?.intent(g.guestId) ?? null,
     }));
@@ -728,6 +765,16 @@ export class SpatialRuntime {
     }
 
     for (const slot of AUDIO_CUE_SLOTS) desired.set(slot, audioPart(resolved[slot]));
+
+    // The museum layer speaks through the same two slots the authored show
+    // uses: `room` for the in_room bed, `guidance` for the spoken line. Where
+    // it has something to say — or deliberate silence, in a dead room — it
+    // wins over the authored cues; everywhere else the show is untouched.
+    const museum = this.museum?.guestCues(guestId, here?.roomId ?? null);
+    if (museum) {
+      desired.set('room', museum.room ? audioPart(museum.room) : null);
+      if (museum.guidance) desired.set('guidance', audioPart(museum.guidance));
+    }
 
     desired.set(EXPERIENCE_CUE_SLOT, this.experienceCueFor(guestId, here));
 

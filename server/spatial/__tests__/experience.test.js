@@ -17,7 +17,30 @@ import { ManualClock } from '../clock.js';
 import { applyInstallation } from '../installation.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
+
+/**
+ * These tests carry their own show rather than loading MAD-DIM: the museum's
+ * design keeps evolving with the team, and the experience PROTOCOL must not
+ * evolve with it — a piece built against the contract works whatever the show
+ * around it decides. The influence room here keeps a `settling` state on
+ * purpose: settling is optional in the room contract now, but the broker
+ * lifecycle still carries it for rooms that author one, and that path needs a
+ * room that authors one.
+ */
 const museum = JSON.parse(readFileSync(join(root, 'shows/MAD-DIM.json'), 'utf8'));
+museum.rooms.influence.machine = {
+  id: 'influence',
+  initial: 'idle',
+  states: {
+    idle: { on: { ACTIVATE: 'active' } },
+    active: { initial: 'main', on: { RELEASE: 'settling' }, states: { main: {} } },
+    settling: { on: { RESET: 'idle', ACTIVATE: 'active', RESUME: 'active.main' } },
+  },
+};
+museum.rooms.influence.exit = { policy: 'resetAfter', graceMs: 10000, resumeIfReturned: true };
+// The museum layer would activate the room itself and fight these tests'
+// explicit activations; the protocol under test predates it and outlives it.
+delete museum.museum;
 
 /** A room server that never was. Records what the show said to it. */
 function fakeRoomServer() {
@@ -75,24 +98,16 @@ function centreOf(roomId) {
   return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
 }
 
-/** Put a guest in the Influence room, on the path that makes it theirs. */
+/** Put a guest in the Influence room. Free choice now — walking in is enough. */
 function driverIn(rt, roomId = 'influence') {
-  for (let i = 0; i < 12; i++) {
-    const g = rt.spawnGuest({ kind: 'phone' });
-    // Reaching the museum hallway is what assigns a path.
-    const [hx, hy] = centreOf('museumHallway');
-    rt.setVirtualPosition(g.guestId, hx, hy);
-    rt.testAdvanceTime(2600);
-    if (!museum.paths[rt.guests.get(g.guestId).pathId]?.rooms?.includes(roomId)) {
-      rt.removeGuest(g.guestId);
-      continue;
-    }
-    const [x, y] = centreOf(roomId);
-    rt.setVirtualPosition(g.guestId, x, y);
-    rt.testAdvanceTime(3000);
-    return g;
-  }
-  assert.fail(`no path routes through ${roomId}`);
+  const g = rt.spawnGuest({ kind: 'phone' });
+  const [hx, hy] = centreOf('museumHallway');
+  rt.setVirtualPosition(g.guestId, hx, hy);
+  rt.testAdvanceTime(2600);
+  const [x, y] = centreOf(roomId);
+  rt.setVirtualPosition(g.guestId, x, y);
+  rt.testAdvanceTime(3000);
+  return g;
 }
 
 describe('the link to a room experience', () => {
