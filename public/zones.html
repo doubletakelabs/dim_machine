@@ -117,7 +117,9 @@
       <div id="help">
         <h2 style="margin-top:14px">Notes</h2>
         <p>Edits land in the show file on Save — a running show keeps its loaded
-           copy until it is reloaded.</p>
+           copy until it is reloaded. Save writes <em>zones only</em>: the rest
+           of the show is merged from disk, so this tab can never overwrite a
+           change made elsewhere while it sat open.</p>
         <p>Coordinates are floorplan pixels, saved as integers. A polygon keeps
            at least three points. Rooms may share a wall; they may not share
            ground — overlaps turn red and are listed here, and the same check
@@ -572,10 +574,18 @@ async function save() {
   for (const z of zonesFlat()) {
     z.polygon.forEach((p, i) => { z.polygon[i] = [Math.round(p[0]), Math.round(p[1])]; });
   }
-  const res = await fetch(`/api/shows/${encodeURIComponent(file)}`, {
+  // Geometry only. The server merges this into the show on disk, so a tab
+  // opened before somebody committed a show change can never write that
+  // change back stale — this editor's copy of everything that is not a
+  // polygon is display context, not truth.
+  const zones = {};
+  for (const [roomId, room] of Object.entries(def.rooms ?? {})) {
+    if (room.zones) zones[roomId] = room.zones;
+  }
+  const res = await fetch(`/api/shows/${encodeURIComponent(file)}/zones`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(def),
+    body: JSON.stringify({ zones }),
   });
   const result = await res.json();
   if (!res.ok) {

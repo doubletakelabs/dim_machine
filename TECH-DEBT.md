@@ -186,7 +186,7 @@ them for real is an open team question.
 | **Phone-reported zones beyond the picker** | The handset's room picker (CONTRACT.md §8.1) covers browser test mode, which is Phase B's exit criterion. It is a `<select>` in the debug status bar, not a guest-facing surface, and it trusts whatever the phone says. Fine for rehearsal, wrong for a show. |
 | **Experience input is untested on a handset** | Partly resolved: what the recogniser *emits* — the stream events, hold begin and end, a drag cancelling a hold, a hold that must not also be a tap — is now covered. What is not is the second socket itself: reconnection, the driver secret, and release velocity are still verified against a fake room server and by hand. |
 | **The room experience protocol has one implementation** | `docs/experience-template` conforms and 02_influence does not yet. Anything the contract got wrong will surface on the second piece, not the first. |
-| ~~**Zone drawing**~~ | **Resolved.** `public/zones.html` traces zones over the vector plan: drag vertices, double-click an edge to add one, right-click or ⌫ to remove, arrows to nudge, ⌘Z to undo, add and delete zones, and save through the same validated `POST /api/shows` route everything else uses. It judges overlaps in the browser with the show's own `zone-math.js` (served at `/lib/zone-math.js`, one source of truth) and flags them red as you drag; the validator repeats the check at save and load. What remains is the *work*, not the tool: the precise tracing pass against the venue, and the two label-mapping assumptions in §1.10. Zone coordinates live in the floorplan box (784×1510, origin top-left); polygons take any number of points ≥3, concave included; a room may own several zones. |
+| ~~**Zone drawing**~~ | **Resolved.** `public/zones.html` traces zones over the vector plan: drag vertices, double-click an edge to add one, right-click or ⌫ to remove, arrows to nudge, ⌘Z to undo, add and delete zones, and save **geometry only** through `POST /api/shows/:file/zones`, which merges into the show on disk — the editor cannot write anything that is not a polygon (see §5, the stale-tab clobber). It judges overlaps in the browser with the show's own `zone-math.js` (served at `/lib/zone-math.js`, one source of truth) and flags them red as you drag; the validator repeats the check at save and load. What remains is the *work*, not the tool: the precise tracing pass against the venue, and the two label-mapping assumptions in §1.10. Zone coordinates live in the floorplan box (784×1510, origin top-left); polygons take any number of points ≥3, concave included; a room may own several zones. |
 | **Scripted walkthrough replay** | Spec §5.4. Record the `setVirtualPosition` stream, replay against a `ManualClock`. Both the clock and the event log were built for it. This is the regression story for the behavioural matrix. **Deliberately deferred until after Phase B** (decided 2026-08-27): the recording is most valuable made against the finished audio layer, and the unit suite carries the risk until then. |
 | **Lock-specific disconnect grace** | Spec §11 wants a lock held briefly when a holder's socket drops. `contactLossMs` covers the coordinator's side; the lock has no separate window. |
 | **Statechart views** | Spec §10.2. React Flow, shared with the authoring tool. The guest machine is now worth looking at. |
@@ -339,10 +339,14 @@ before a commit and saved after silently reverts that commit. It happened
 (2026-09-13): a zone-tracing pass undid the shared-rooms change, and the only
 thing that caught it was a test failing in an unrelated branch of work. The
 same shape as `lastEntry`: a client holding a copy of the world and asserting
-it later as truth. The honest fixes, when this bites again: the editor PATCHes
-only the zones it edits, or the save route rejects a document whose non-zone
-content differs from what is on disk. Until then: **refresh the zone editor
-after every commit that touches the show.**
+it later as truth. **Fixed the day after it was named** (2026-09-14): the editor now saves
+geometry only, through `POST /api/shows/:file/zones` — the server merges the
+polygons into the show on disk, refuses a room the disk copy does not have
+("reload the editor"), and validates the merged whole before writing. A tab
+can now sit open across any number of commits; what it never knew it cannot
+revert. Replayed the exact incident live to prove it: a room renamed on disk
+after the tab loaded survived the next save. The lesson stands for any future
+editor: **a client edits what it edits, never the whole document.**
 
 **Sending an event into a machine from inside its own subscriber.** XState
 queues it, so a rollback check reads the state as unchanged and undoes work that

@@ -39,6 +39,7 @@ const WAIT_TIMEOUT_MS = 5_000;
  *
  * @param {object} [opts]
  * @param {string} [opts.installation] — path to an installation file, repo-relative
+ * @param {object} [opts.env] — extra environment for the child (e.g. SHOWS_DIR)
  * @returns {Promise<{ port: number, url: string, logs: string[], stop: () => Promise<void> }>}
  */
 export async function startServer(opts = {}) {
@@ -54,6 +55,7 @@ export async function startServer(opts = {}) {
       // differently on every laptop it runs on. Covered by a test, because it
       // rests on `??` treating '' as a value.
       ...(opts.installation ? {} : { INSTALLATION: '' }),
+      ...(opts.env ?? {}),
     },
   });
 

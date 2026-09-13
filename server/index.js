@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, basename } from 'node:path';
+import { dirname, join, basename, resolve } from 'node:path';
 import { SpatialRuntime, validateShowDefinition, ScaledClock } from './spatial/index.js';
 import { applyInstallation } from './spatial/installation.js';
 import * as relay from './relay.js';
@@ -49,7 +49,10 @@ if (installationPath) {
     process.exit(1);
   }
 }
-const showsDir = join(root, 'shows');
+// SHOWS_DIR points a test (or an installation) at its own copy of the
+// shows, the same way MEDIA_DIR and CALIBRATION_FILE work for a room
+// experience. Unset means the repo's shows/, exactly as before.
+const showsDir = process.env.SHOWS_DIR ? resolve(process.env.SHOWS_DIR) : join(root, 'shows');
 const assetsDir = join(root, 'public', 'assets');
 
 const app = express();
@@ -99,6 +102,50 @@ app.post('/api/shows/:file', (req, res) => {
   if (!file.endsWith('.json')) return res.status(400).json({ error: 'invalid file name' });
   const def = req.body;
   if (!def || typeof def !== 'object') return res.status(400).json({ error: 'body must be JSON object' });
+  const result = validateShowDefinition(def);
+  if (result.errors.length) return res.status(400).json(result);
+  try {
+    writeFileSync(showPath(file), `${JSON.stringify(def, null, 2)}\n`);
+    res.json({ ok: true, warnings: result.warnings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * The zone editor's save: geometry only, merged into the file on disk.
+ *
+ * The editor used to send the whole show back, which made every save an
+ * assertion that the editor's copy of the *entire* document was still true —
+ * and a tab opened before a commit and saved after silently reverted that
+ * commit (TECH-DEBT §5, 2026-09-13: a tracing pass undid the shared rooms).
+ * Now the disk copy is the base truth for everything that is not a polygon,
+ * and the patch cannot say anything else. Each named room's `zones` block is
+ * replaced wholesale — that is what carries a deleted zone — and the merged
+ * show must validate before anything lands.
+ */
+app.post('/api/shows/:file/zones', (req, res) => {
+  const file = basename(req.params.file);
+  if (!file.endsWith('.json')) return res.status(400).json({ error: 'invalid file name' });
+  const zones = req.body?.zones;
+  if (!zones || typeof zones !== 'object' || Array.isArray(zones)) {
+    return res.status(400).json({ error: 'body must be { zones: { roomId: { zoneId: { polygon } } } }' });
+  }
+  let def;
+  try {
+    def = JSON.parse(readFileSync(showPath(file), 'utf8'));
+  } catch (err) {
+    return res.status(404).json({ error: err.message });
+  }
+  // A room the disk copy does not have is a stale editor talking about a world
+  // that moved — exactly the situation this route exists to refuse loudly.
+  const unknown = Object.keys(zones).filter((roomId) => !def.rooms?.[roomId]);
+  if (unknown.length) {
+    return res.status(400).json({ error: `rooms not in the show on disk: ${unknown.join(', ')} — reload the editor` });
+  }
+  for (const [roomId, roomZones] of Object.entries(zones)) {
+    def.rooms[roomId].zones = roomZones;
+  }
   const result = validateShowDefinition(def);
   if (result.errors.length) return res.status(400).json(result);
   try {

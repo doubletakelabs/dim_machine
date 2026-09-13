@@ -467,3 +467,72 @@ describe('booting', () => {
     }
   });
 });
+
+describe('saving zones', () => {
+  // The zone editor sends geometry only, and the server merges it into the
+  // show on disk. This is the fix for the stale-tab clobber (TECH-DEBT §5): a
+  // save must not be able to assert anything about the show except polygons.
+  // A scratch SHOWS_DIR so writing is safe — the repo's shows stay untouched.
+  let server;
+  let dir;
+  before(async () => {
+    const { mkdtempSync, copyFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    dir = mkdtempSync(join(tmpdir(), 'dim-shows-'));
+    copyFileSync(join(process.cwd(), 'shows/MAD-DIM.json'), join(dir, 'MAD-DIM.json'));
+    server = await startServer({ env: { SHOWS_DIR: dir } });
+  });
+  after(async () => {
+    await server?.stop();
+    const { rmSync } = await import('node:fs');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const onDisk = async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    return JSON.parse(readFileSync(join(dir, 'MAD-DIM.json'), 'utf8'));
+  };
+
+  it('a zones save changes geometry and nothing else — even from a stale tab', async () => {
+    // The exact incident: the show changed on disk after the editor loaded.
+    // Here the editor's knowledge is simply absent; the patch carries only
+    // polygons, so what it never knew it cannot revert.
+    const before = await onDisk();
+    assert.equal(before.rooms.adminOffice.kind, 'shared', 'the fact a stale save once undid');
+    const triangle = { office: { polygon: [[10, 10], [110, 10], [60, 110]] } };
+    const res = await fetch(`${server.url}/api/shows/MAD-DIM.json/zones`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ zones: { adminOffice: triangle } }),
+    });
+    assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+    const after = await onDisk();
+    assert.deepEqual(after.rooms.adminOffice.zones, triangle, 'the geometry landed');
+    assert.equal(after.rooms.adminOffice.kind, 'shared', 'and the room is still shared');
+    assert.deepEqual(after.museum, before.museum, 'the museum block is untouched');
+    assert.deepEqual(after.guest, before.guest, 'so is the guest machine');
+  });
+
+  it('refuses a room the show on disk does not have', async () => {
+    const res = await fetch(`${server.url}/api/shows/MAD-DIM.json/zones`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ zones: { giftShop: { g: { polygon: [[0, 0], [9, 0], [9, 9]] } } } }),
+    });
+    assert.equal(res.status, 400);
+    assert.match((await res.json()).error, /giftShop.*reload/);
+  });
+
+  it('refuses geometry the validator would refuse, and nothing lands', async () => {
+    const before = await onDisk();
+    const res = await fetch(`${server.url}/api/shows/MAD-DIM.json/zones`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ zones: { library: { library: { polygon: [[0, 0], [1, 1]] } } } }),
+    });
+    assert.equal(res.status, 400);
+    assert.deepEqual(await onDisk(), before, 'a refused save writes nothing');
+  });
+});
