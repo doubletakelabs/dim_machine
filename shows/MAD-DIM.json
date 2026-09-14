@@ -1726,6 +1726,11 @@
         "strategy": "all"
       }
     },
+    "audioLayers": {
+      "duckTo": 0.25,
+      "duckMs": 300,
+      "crossfadeMs": 1000
+    },
     "timers": {
       "museumTime": {
         "sinceEntering": "guidance.museum",

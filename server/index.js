@@ -336,7 +336,7 @@ function loadShow(file) {
   assetProblems = missingAssets();
   for (const asset of assetProblems) opLog(`✗ missing asset: ${asset}`);
   for (const loop of badLoops(def)) opLog(`⚠ ${loop} — that is a tick, not a texture`);
-  broadcast({ type: 'assets', assets: currentAssets() }, 'phones');
+  broadcast({ type: 'assets', assets: currentAssets(), audioLayers: runtime.def?.guest?.audioLayers ?? null }, 'phones');
   sendRoster();
 }
 
@@ -636,6 +636,8 @@ wss.on('connection', (ws) => {
           label: label(token),
           serverTime: Date.now(),
           assets: currentAssets(),
+          // How this show mixes: duck depth and crossfade length (CONTRACT §8.1).
+          audioLayers: runtime.def?.guest?.audioLayers ?? null,
           // For the handset's own room picker; see `setRoom`.
           rooms: runtime.roomChoices(),
           snapshot: phoneSnapshot(token),

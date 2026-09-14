@@ -156,3 +156,54 @@ describe('cue director', () => {
     assert.equal(hearing(rt, a.guestId).room, 'whisper.wav');
   });
 });
+
+describe('audio timing — whose clock a room bed runs on', () => {
+  // §8.1 `audio.timing`. masterTimeline (the default) keys the bed to the
+  // state's own timestamp: one moment, shared by everyone standing in the
+  // space, that projection could later align to. perGuest keys it to each
+  // guest's arrival: everyone gets the bed from its top.
+  it('masterTimeline: two guests hear the same moment', () => {
+    const { rt } = makeRuntime();
+    const a = rt.spawnGuest();
+    walk(rt, a.guestId, AT.hallway);
+    const b = rt.spawnGuest();
+    rt.testAdvanceTime(5000);
+    walk(rt, b.guestId, AT.hallway);
+    const cueA = rt.desiredCues(a.guestId).get('room');
+    const cueB = rt.desiredCues(b.guestId).get('room');
+    assert.ok(cueA && cueB, 'both hear the hallway bed');
+    assert.equal(cueA.startAt, cueB.startAt, 'anchored to the state, not to either of them');
+  });
+
+  it('perGuest: each guest hears the bed from their own arrival', () => {
+    const { rt } = makeRuntime((show) => {
+      show.rooms.hallway.audio = { timing: 'perGuest' };
+    });
+    const a = rt.spawnGuest();
+    walk(rt, a.guestId, AT.hallway);
+    const b = rt.spawnGuest();
+    rt.testAdvanceTime(5000);
+    walk(rt, b.guestId, AT.hallway);
+    const cueA = rt.desiredCues(a.guestId).get('room');
+    const cueB = rt.desiredCues(b.guestId).get('room');
+    assert.ok(cueB.startAt > cueA.startAt, 'the later arrival starts later');
+    // And the key carries the difference, so the director actually re-cues
+    // per guest rather than treating both as the same playing thing.
+    assert.notEqual(cueA.key, cueB.key);
+  });
+});
+
+describe('the mixer numbers reach the wire', () => {
+  it('a vacated room bed fades over the show-authored crossfade', () => {
+    const { rt, cues } = makeRuntime((show) => {
+      show.guest = { ...show.guest, audioLayers: { crossfadeMs: 2000 } };
+    });
+    const g = rt.spawnGuest();
+    walk(rt, g.guestId, AT.hallway);
+    assert.ok(rt.desiredCues(g.guestId).get('room'), 'the bed is playing');
+    walk(rt, g.guestId, AT.out);
+    const stop = forGuest(cues, g.guestId).filter((c) => c.kind === 'stopAudio').at(-1);
+    assert.ok(stop, 'leaving vacates the slot');
+    assert.equal(stop.fadeMs, 2000, 'the fade is the authored crossfade, not the hard default');
+  });
+});

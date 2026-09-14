@@ -551,6 +551,28 @@ function checkGuest(guest, rooms, errors, warnings) {
     }
   }
 
+  if (guest.audioLayers !== undefined) {
+    if (!isObject(guest.audioLayers)) {
+      errors.push('guest.audioLayers must be an object');
+    } else {
+      const { duckTo, duckMs, crossfadeMs } = guest.audioLayers;
+      if (duckTo !== undefined && !(typeof duckTo === 'number' && duckTo >= 0 && duckTo <= 1)) {
+        errors.push('guest.audioLayers.duckTo must be a number between 0 and 1 (1 turns ducking off)');
+      }
+      for (const [key, value] of Object.entries({ duckMs, crossfadeMs })) {
+        if (value !== undefined && !(typeof value === 'number' && value >= 0)) {
+          errors.push(`guest.audioLayers.${key} must be a non-negative number of milliseconds`);
+        }
+      }
+      const known = ['duckTo', 'duckMs', 'crossfadeMs'];
+      for (const key of Object.keys(guest.audioLayers)) {
+        if (!known.includes(key)) {
+          warnings.push(`guest.audioLayers.${key} is not a mixer setting (known: ${known.join(', ')})`);
+        }
+      }
+    }
+  }
+
   checkGuestMachine(guest.machine, rooms, errors, warnings);
   checkGuestTimers(guest.timers, guest.machine, errors, warnings);
   checkGuestCues(guest, errors, warnings);

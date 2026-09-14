@@ -6,6 +6,7 @@
 import { createGestureRecogniser, createRepeatGuard } from './gestures.js';
 import { createClock } from './clock-sync.js';
 import { planAudio } from './cue-plan.js';
+import { mixerConfig, duckDecision, voiceEndsAt } from './mixer.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -118,6 +119,56 @@ const videoBlobs = new Map();
 const imageUrls = new Map();
 const playing = new Map(); // assetId → { source, gainNode, timer? }
 const stopping = new Map(); // assetId → same, while fading out
+
+// ---------------------------------------------------------------------------
+// The mixer. Decisions live in mixer.js, where they have tests; this block
+// owns only the gain nodes the decisions are carried out with. The room bed
+// routes through one shared bus so a spoken line in `guidance`/`adherence`
+// can duck it without touching the bed's own cue gain, and release it to
+// exactly where it was.
+// ---------------------------------------------------------------------------
+let mixer = mixerConfig(null); // retuned by the show on welcome
+let roomBus = null;            // GainNode the `room` slot plays through
+const voices = new Map();      // assetId → endsAt (server ms, null = loop)
+let duckTimer = null;
+const VOICE_SLOTS = new Set(['guidance', 'adherence']);
+
+/** Debug readout for the harness and a person with a console. */
+window.DIM.mixerState = () => ({
+  bus: roomBus ? Math.round(roomBus.gain.value * 1000) / 1000 : null,
+  voices: voices.size,
+  playing: [...playing.keys()],
+  config: mixer,
+});
+
+function busFor(slot) {
+  if (slot !== 'room' || !ctx) return ctx?.destination ?? null;
+  if (!roomBus) {
+    roomBus = ctx.createGain();
+    roomBus.connect(ctx.destination);
+  }
+  return roomBus;
+}
+
+/** Bring the room bus in line with who is speaking. Safe to call anytime. */
+function applyDuck() {
+  clearTimeout(duckTimer);
+  duckTimer = null;
+  const now = clock.serverNow();
+  for (const [id, endsAt] of voices) if (endsAt != null && endsAt <= now) voices.delete(id);
+  const { ducked, nextCheckAt } = duckDecision([...voices.values()].map((endsAt) => ({ endsAt })), now);
+  if (roomBus && ctx) {
+    const target = ducked ? mixer.duckTo : 1;
+    roomBus.gain.cancelScheduledValues(ctx.currentTime);
+    roomBus.gain.setValueAtTime(roomBus.gain.value, ctx.currentTime);
+    // setTargetAtTime reaches ~95% of the way in 3 time-constants, so /3000
+    // makes duckMs the audible length of the move — same idiom as the fades.
+    roomBus.gain.setTargetAtTime(target, ctx.currentTime, Math.max(0.001, mixer.duckMs / 3000));
+  }
+  if (nextCheckAt != null) {
+    duckTimer = setTimeout(applyDuck, Math.max(50, clock.toLocal(nextCheckAt) - Date.now()));
+  }
+}
 let joined = false;
 let assetList = [];
 
@@ -177,19 +228,37 @@ function playAudio(cue, { seekIntoLoop = false } = {}) {
   }
   const gainNode = ctx.createGain();
   gainNode.gain.value = cue.gain ?? 1;
-  source.connect(gainNode).connect(ctx.destination);
+  source.connect(gainNode).connect(busFor(cue.slot));
 
   const start = (when) => (plan.startDuration != null
     ? source.start(when, plan.startOffset, plan.startDuration)
     : source.start(when, plan.startOffset));
 
+  let beginsAt = ctx.currentTime;
   if (plan.action === 'schedule') {
     const when = ctxTimeFor(plan.at);
-    start(Math.max(when, ctx.currentTime));
+    beginsAt = Math.max(when, ctx.currentTime);
+    start(beginsAt);
     reportCueAt(cue, when);
   } else {
-    start(ctx.currentTime);
+    start(beginsAt);
   }
+
+  // A room bed fades in over the crossfade window — walking into a room is a
+  // doorway, not a channel change. Paired with the director's fade-out on the
+  // slot it vacated, the handover is a crossfade without either end knowing.
+  if (cue.slot === 'room' && mixer.crossfadeMs > 0) {
+    const target = cue.gain ?? 1;
+    gainNode.gain.setValueAtTime(0.001, beginsAt);
+    gainNode.gain.linearRampToValueAtTime(target, beginsAt + mixer.crossfadeMs / 1000);
+  }
+
+  // A spoken line ducks the bed under it for exactly as long as it sounds.
+  if (VOICE_SLOTS.has(cue.slot)) {
+    voices.set(cue.assetId, voiceEndsAt(cue, plan, clock.serverNow()));
+    applyDuck();
+  }
+
   playing.set(cue.assetId, { source, gainNode });
 }
 
@@ -202,6 +271,7 @@ function stopAudio(assetId, fadeMs = 0) {
 
 function stopOneAudio(id, fadeMs) {
   const p = playing.get(id) || stopping.get(id);
+  if (voices.delete(id)) applyDuck(); // a stopped voice releases its duck
   if (!p) return;
   playing.delete(id);
   if (p.timer) clearTimeout(p.timer);
@@ -709,10 +779,14 @@ function connect() {
         $('label').textContent = msg.label;
         fillRoomPicker(msg.rooms ?? []);
         assetList = msg.assets ?? [];
+        mixer = mixerConfig(msg.audioLayers);
         applySnapshot(msg.snapshot);
         break;
       case 'assets':
         assetList = msg.assets ?? [];
+        // A show reload may retune the mixer along with the asset list.
+        mixer = mixerConfig(msg.audioLayers);
+        applyDuck();
         if (joined) await preload(assetList);
         break;
       case 'pong':

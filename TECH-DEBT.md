@@ -39,11 +39,11 @@ JSON currently cannot keep.
 | Field / value | Where it should land |
 |---|---|
 | Cue `offset`/`duration` | Live, but nothing uses it — the calibration clips are discrete files now. Kept because a long uncut take is a normal thing to be handed |
-| `rooms.*.audio.timing` (`masterTimeline` \| `perGuest`) | Phase B. The thin layer behaves as `perGuest`-with-seek, which is `masterTimeline`'s join behaviour minus the timeline — indistinguishable until projection must stay aligned to it |
+| ~~`rooms.*.audio.timing`~~ | **Live** (2026-09-14, decided "mixed — per room"): `masterTimeline` (default) anchors the bed to the room state's timestamp, one shared moment; `perGuest` anchors it to each guest's arrival. CONTRACT §8.1 |
 | ~~`rooms.*.audio.joinPolicy`~~ | **Dropped** (team meeting 2026-08-27): every guest either gets individualized audio or joins a synchronized room — `inProgress` is the only join there is. Remove the field from the contract when the exhibit-machine experiment settles the room shape |
 | ~~`rooms.*.audio.minRemainingMs`~~ | **Dropped** with `joinPolicy`, same meeting — no late-arrival variant is wanted |
 | `rooms.*.outputs.cues` | Phase D — lighting and DMX. Room *experiences* (docs/ROOM-EXPERIENCE.md) are live and take a different route: a broker link to a piece running its own server, not an output intent |
-| `guest.audioLayers` | Phase B. Three fixed audio slots (`room`, `guidance`, `adherence`) plus `screen` stand in; no ducking, crossfade, or priority |
+| ~~`guest.audioLayers`~~ | **Live** (2026-09-14): a voice in `guidance`/`adherence` ducks the `room` bed to `duckTo` over `duckMs`; room-bed handovers crossfade over `crossfadeMs`. Semantics fixed, show tunes the numbers; decisions in `public/mixer.js` where tests reach them. CONTRACT §8.1 |
 | `server/relay.js` | Live and correct, with no consumer. Its only one was the custom-pages framework, now removed; a room experience talks to its own server directly. Kept because phone-to-phone within a room is plausible for a future room, and the rate limiting and room scoping are the parts that would have to be got right again. Delete it if nothing wants it by the time Phase B closes |
 | `inputBindings` | **Live for phone gestures** (`tap`, `swipe`, `shake` → guest-machine events). In-room device inputs are still Phase D |
 | `ineligible.policy`: `ambientOnly`, `lockedMessage`, `tease` | Still selected and reported without choosing a response — but `audience: "ineligible"` now exists, so a show can author the audio by hand. Wiring the policy to pick it is the remaining step |

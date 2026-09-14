@@ -61,8 +61,7 @@ is allowed in — that keeps them portable across shows (spec §3.1).
   "ineligible": { "policy": "ambientOnly", "audio": "library-locked" },
   "exit":       { "policy": "resetAfter", "graceMs": 10000,
                   "audioOnExit": "fadeOut", "resumeIfReturned": true },
-  "audio":      { "timing": "masterTimeline", "joinPolicy": "inProgress",
-                  "minRemainingMs": 20000 },
+  "audio":      { "timing": "masterTimeline" },   // | "perGuest" — §8.1
   "seen":       { "dwellMs": 20000, "accumulate": true },
   "revisit":    { "whenSeen": {}, "whenCompleted": {} },
   "location":   { "entryConfirmMs": 1500, "exitConfirmMs": 800 },
@@ -84,7 +83,7 @@ is allowed in — that keeps them portable across shows (spec §3.1).
 | `exit.resumeIfReturned` | re-entry during grace cancels the reset and sends `RESUME`; requires `settling` to handle it | **live** |
 | `exit.audioOnExit` | `fadeOut` \| `continue` \| `cut` — governs the *departing phone*, independently of the room | declared |
 | `whenAvailable.policy` | `wait` (default) \| `activate` — what the room does when it frees up with eligible guests still inside | **live** |
-| `audio.timing` | `masterTimeline` \| `perGuest` | declared |
+| `audio.timing` | `masterTimeline` \| `perGuest` | **live** (§8.1) |
 | `audio.joinPolicy` | `inProgress` \| `waitForNext` \| `restart` | declared |
 | `seen.dwellMs` / `accumulate` | dwell inside before the room counts as seen; `accumulate` sums separate visits | **live** |
 | `revisit.whenSeen` / `whenCompleted` | declaring one makes the runtime send `ACTIVATE_SEEN` / `ACTIVATE_COMPLETED` instead of `ACTIVATE`; `idle` must handle it (validated) | **live** |
@@ -640,9 +639,36 @@ one.
 `audience` is an error here — a guest cue has exactly one listener.
 
 **Slots.** A guest hears at most one cue from each of `room`, `guidance`, and
-`adherence` at a time; a new cue in a slot replaces what was there. Three fixed
-audio slots is not the mixer `guest.audioLayers` describes, but it is enough for
-guidance to speak over an ambient room without either cutting the other.
+`adherence` at a time; a new cue in a slot replaces what was there.
+
+**The mixer** (Phase B, live). The slots relate; `guest.audioLayers` tunes how:
+
+```jsonc
+"guest": { "audioLayers": { "duckTo": 0.25, "duckMs": 300, "crossfadeMs": 1000 } }
+```
+
+- **Ducking.** While a spoken line sounds in `guidance` or `adherence`, the
+  `room` bed ducks to `duckTo` (a gain, 0–1; `1` turns ducking off), moving
+  over `duckMs`. The duck holds until the last voice runs out — a looping
+  voice holds it until stopped — then the bed swells back to exactly where it
+  was. Decided 2026-09-13: duck, not pause; the room stays alive under the
+  narration.
+- **Crossfade.** A `room`-slot handover fades the outgoing bed over
+  `crossfadeMs` while the incoming bed fades in over the same window — a
+  doorway, not a channel change. An authored `fadeMs` on the outgoing cue
+  still wins. Voice slots keep a short fixed tail (400ms).
+
+The semantics are fixed; a show only tunes the numbers, and every field is
+optional — the values above are the defaults. The decisions live in
+`public/mixer.js` (tested); the client owns only the gain nodes.
+
+**`audio.timing`** (per room, live): whose clock the room bed runs on.
+`masterTimeline` (the default) anchors `startAt` to the room state's own
+timestamp — one moment shared by everyone standing in the space, which
+projection or lighting could later align to. `perGuest` anchors it to each
+guest's arrival, so every visitor hears the bed from its top; a guest already
+inside when the state began still starts at the state. Decided 2026-09-14:
+mixed, per room — declare it where it matters.
 
 A fourth slot, `screen`, holds an image rather than a sound — a phone has one
 screen, so the sources compete for it instead of mixing. Guidance takes it first,
@@ -789,9 +815,10 @@ memory of its own.
 
 #### Not in this layer
 
-`audio.timing`, `audio.joinPolicy`, `audio.minRemainingMs`, `guest.audioLayers`,
-and `ineligible.policy` selecting a response automatically are all still Phase B
+`audio.joinPolicy` and `audio.minRemainingMs` were dropped (TECH-DEBT.md §2);
+`ineligible.policy` selecting a response automatically is still Phase B
 (TECH-DEBT.md §2). `outputs.cues` — lighting, projection, DMX — is Phase D.
+`audio.timing` and `guest.audioLayers` are live as of 2026-09-14 — see §8.1.
 
 ### 8.2 Room output intents — live (stub adapter)
 

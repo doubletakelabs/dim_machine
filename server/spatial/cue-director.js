@@ -28,6 +28,10 @@
 import {
   CUE_SLOTS, SCREEN_CUE_SLOT, EXPERIENCE_CUE_SLOT, cueAudienceMatches,
 } from './contract.js';
+// The phone's own mixer module, imported here so the fade the server sends
+// and the fade-in the client runs come from one set of numbers — the same
+// one-source rule as zone-math.js, in the other direction.
+import { mixerConfig } from '../../public/mixer.js';
 
 export class CueDirector {
   /**
@@ -46,6 +50,7 @@ export class CueDirector {
 
   load(show) {
     this.show = show;
+    this.mixer = mixerConfig(show?.guest?.audioLayers);
     this.playing.clear();
   }
 
@@ -103,7 +108,9 @@ export class CueDirector {
             cueId: `cue-${++this._seq}`,
             kind: 'stopAudio',
             assetId: have.assetId,
-            fadeMs: have.fadeMs ?? 400,
+            // A vacated room bed fades over the crossfade window, meeting the
+            // incoming bed's fade-in halfway; voices keep the short tail.
+            fadeMs: have.fadeMs ?? (slot === 'room' ? (this.mixer?.crossfadeMs ?? 400) : 400),
           });
       }
       if (!want) {

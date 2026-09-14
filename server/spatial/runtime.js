@@ -757,7 +757,19 @@ export class SpatialRuntime {
       const room = this.rooms.get(here.roomId);
       const def = this.def.rooms?.[here.roomId];
       if (room && def) {
-        resolved.room = roomCueFor(def, room.state, here.standing, room.stateSince);
+        // `audio.timing` decides whose clock the room bed runs on (§8.1).
+        // masterTimeline (the default): the state's own timestamp, one moment
+        // for everyone standing in it — the timeline projection could later
+        // align to. perGuest: this guest's own arrival, so each visitor hears
+        // the bed from its top; joining "in sync" is meaningless for a bed
+        // addressed to one person. A guest who was already inside when the
+        // state began still starts at the state, hence the max.
+        const arrived = this.coordinator?.getRoomOccupants(here.roomId)
+          .find((o) => o.guestId === guestId)?.sinceTs;
+        const startAt = def.audio?.timing === 'perGuest'
+          ? Math.max(arrived ?? room.stateSince, room.stateSince)
+          : room.stateSince;
+        resolved.room = roomCueFor(def, room.state, here.standing, startAt);
       }
     }
     const regions = actor.regions();

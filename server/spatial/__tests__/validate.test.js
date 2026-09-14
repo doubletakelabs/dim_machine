@@ -291,3 +291,30 @@ describe('validateShowDefinition', () => {
     });
   });
 });
+
+describe('guest.audioLayers', () => {
+  const withLayers = (audioLayers) => {
+    const def = minimal();
+    def.guest.audioLayers = audioLayers;
+    return validateShowDefinition(def);
+  };
+
+  it('accepts the tuned mixer', () => {
+    assert.deepEqual(withLayers({ duckTo: 0.25, duckMs: 300, crossfadeMs: 1000 }).errors, []);
+  });
+
+  it('refuses a duck depth that is not a gain', () => {
+    assert.match(withLayers({ duckTo: 3 }).errors.join('\n'), /duckTo/);
+    assert.match(withLayers({ duckTo: 'quiet' }).errors.join('\n'), /duckTo/);
+  });
+
+  it('refuses negative fade times', () => {
+    assert.match(withLayers({ crossfadeMs: -5 }).errors.join('\n'), /crossfadeMs/);
+  });
+
+  it('warns about a setting the mixer does not have', () => {
+    const result = withLayers({ duckAmountDb: -12 });
+    assert.deepEqual(result.errors, []);
+    assert.match(result.warnings.join('\n'), /duckAmountDb/);
+  });
+});
