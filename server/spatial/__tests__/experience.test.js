@@ -284,6 +284,19 @@ describe('the link to a room experience', () => {
       rt.eventLog.filter((e) => e.type === 'room.experienceComplete').length, 1);
   });
 
+  it('a status report reaches the operator snapshot, and dies with the link', () => {
+    const { rt, server } = makeRuntime();
+    const socket = server.latest();
+    socket.reply({ t: 'status', displays: 2, drivers: 1, note: 'warm' });
+    let snap = rt.experienceSnapshot().find((l) => l.roomId === 'influence');
+    assert.deepEqual(snap.status, { displays: 2, drivers: 1, note: 'warm' });
+
+    // A dead link's health report describes a moment that has passed.
+    socket.drop();
+    snap = rt.experienceSnapshot().find((l) => l.roomId === 'influence');
+    assert.equal(snap.status, null);
+  });
+
   it('ignores a complete from a room that is not running', () => {
     const { rt, server } = makeRuntime();
     server.latest().reply({ t: 'complete' });

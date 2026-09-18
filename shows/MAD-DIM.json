@@ -59,12 +59,6 @@
       "ineligible": {
         "policy": "ignore"
       },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
-      },
       "seen": {
         "dwellMs": 8000,
         "accumulate": true
@@ -126,12 +120,6 @@
       },
       "ineligible": {
         "policy": "ignore"
-      },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
       },
       "seen": {
         "dwellMs": 8000,
@@ -235,12 +223,6 @@
       "ineligible": {
         "policy": "ignore"
       },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
-      },
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
@@ -323,12 +305,6 @@
       "ineligible": {
         "policy": "ignore"
       },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
-      },
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
@@ -402,12 +378,6 @@
       },
       "ineligible": {
         "policy": "ignore"
-      },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
       },
       "seen": {
         "dwellMs": 20000,
@@ -595,12 +565,6 @@
       "ineligible": {
         "policy": "ignore"
       },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
-      },
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
@@ -662,12 +626,6 @@
       },
       "ineligible": {
         "policy": "ignore"
-      },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
       },
       "seen": {
         "dwellMs": 20000,
@@ -733,12 +691,6 @@
       },
       "ineligible": {
         "policy": "ignore"
-      },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
       },
       "seen": {
         "dwellMs": 20000,
@@ -813,12 +765,6 @@
       "ineligible": {
         "policy": "ignore"
       },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
-      },
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
@@ -880,12 +826,6 @@
       },
       "ineligible": {
         "policy": "ignore"
-      },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
       },
       "seen": {
         "dwellMs": 20000,
@@ -961,12 +901,6 @@
       "ineligible": {
         "policy": "ignore"
       },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
-      },
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
@@ -1024,12 +958,6 @@
       },
       "ineligible": {
         "policy": "ignore"
-      },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
       },
       "seen": {
         "dwellMs": 20000,
@@ -1093,12 +1021,6 @@
       "ineligible": {
         "policy": "ignore"
       },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
-      },
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
@@ -1160,12 +1082,6 @@
       },
       "ineligible": {
         "policy": "ignore"
-      },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
       },
       "seen": {
         "dwellMs": 20000,
@@ -1232,12 +1148,6 @@
       },
       "ineligible": {
         "policy": "ignore"
-      },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
       },
       "seen": {
         "dwellMs": 20000,
@@ -1363,12 +1273,6 @@
       "ineligible": {
         "policy": "ignore"
       },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
-      },
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
@@ -1441,12 +1345,6 @@
       "ineligible": {
         "policy": "ignore"
       },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
-      },
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
@@ -1516,12 +1414,6 @@
       },
       "ineligible": {
         "policy": "ignore"
-      },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
       },
       "seen": {
         "dwellMs": 20000,
@@ -1593,12 +1485,6 @@
       },
       "ineligible": {
         "policy": "ignore"
-      },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
       },
       "seen": {
         "dwellMs": 20000,
@@ -1693,12 +1579,6 @@
       },
       "ineligible": {
         "policy": "ignore"
-      },
-      "exit": {
-        "policy": "resetAfter",
-        "graceMs": 10000,
-        "audioOnExit": "fadeOut",
-        "resumeIfReturned": true
       },
       "seen": {
         "dwellMs": 30000,

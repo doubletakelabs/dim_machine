@@ -58,6 +58,7 @@ export class ExperienceLink {
     this.socket = null;
     this.state = 'idle';           // idle | connecting | ready | unreachable
     this.remote = null;            // what the experience said about itself
+    this.status = null;            // its last voluntary health report
     this.lastError = null;
     this._attempt = 0;
     this._retry = null;
@@ -75,6 +76,7 @@ export class ExperienceLink {
   stop() {
     this._clearRetry();
     this._sent.clear();
+    this.status = null;
     const socket = this.socket;
     this.socket = null;
     this.state = 'idle';
@@ -198,12 +200,26 @@ export class ExperienceLink {
         maxDrivers: message.maxDrivers ?? null,
       };
       this.onChange(this.roomId);
+      return;
+    }
+    // A voluntary health report, for the operator panel. Optional, so absence
+    // means nothing; presence means somebody at a tech table can see how many
+    // displays a room's piece believes it has.
+    if (message.t === 'status') {
+      this.status = {
+        displays: message.displays ?? null,
+        drivers: message.drivers ?? null,
+        note: message.note ?? null,
+      };
+      this.onChange(this.roomId);
     }
   }
 
   _failed(reason) {
     this.state = 'unreachable';
     this.lastError = reason;
+    // A dead link's health report describes a moment that has passed.
+    this.status = null;
     this._sent.clear();
     this.onChange(this.roomId);
     this._scheduleRetry();
@@ -233,6 +249,7 @@ export class ExperienceLink {
       state: this.state,
       lastError: this.lastError,
       remote: this.remote,
+      status: this.status,
       lifecycle: this._desired.lifecycle,
       drivers: this._desired.drivers.length,
     };

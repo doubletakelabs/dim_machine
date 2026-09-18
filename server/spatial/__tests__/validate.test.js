@@ -318,3 +318,20 @@ describe('guest.audioLayers', () => {
     assert.match(result.warnings.join('\n'), /duckAmountDb/);
   });
 });
+
+describe('a resume promise with nowhere to resume from', () => {
+  it('warns when resumeIfReturned is declared on a machine without settling', () => {
+    const def = minimal();
+    const room = Object.values(def.rooms)[0];
+    // The shape every MAD-DIM room ended up in: settling stripped from the
+    // machine, the exit block's promise left behind.
+    room.machine = {
+      initial: 'idle',
+      states: { idle: { on: { ACTIVATE: 'active' } }, active: { on: { RELEASE: 'idle' } } },
+    };
+    room.exit = { policy: 'resetAfter', graceMs: 10000, resumeIfReturned: true };
+    const result = validateShowDefinition(def);
+    assert.deepEqual(result.errors, []);
+    assert.match(result.warnings.join('\n'), /resumeIfReturned.*no settling/);
+  });
+});

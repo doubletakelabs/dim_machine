@@ -248,6 +248,15 @@ function checkRoom(roomId, room, errors, warnings) {
       && (typeof room.exit.graceMs !== 'number' || room.exit.graceMs < 0)) {
       errors.push(`${path}.exit.graceMs must be a non-negative number`);
     }
+    // A resume promise with nowhere to resume from. Nineteen rooms carried
+    // exactly this after settling left their machines — a dead block nobody
+    // noticed until the handover doc was audited against it.
+    if (room.exit.resumeIfReturned === true && !isObject(room.machine?.states?.settling)) {
+      warnings.push(
+        `${path}.exit.resumeIfReturned is true but the machine has no settling state — `
+        + 'nothing to resume from, so a returning guest gets an ordinary arrival',
+      );
+    }
     if (room.exit.resumeIfReturned === true
       && isObject(room.machine?.states?.settling)
       && !handlesEvent(room.machine.states.settling, 'RESUME')) {

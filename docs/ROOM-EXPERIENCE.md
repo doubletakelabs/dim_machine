@@ -145,6 +145,15 @@ and they are opposites:
 So hold state through `settling`. Someone stepping into a corridor for four
 seconds and returning to a wiped piece is the fault this distinction prevents.
 
+> **Whether you ever see `settling` is the show's choice, per room.** A room
+> only settles if its machine authors that state. In the current Museum
+> design, Influence authors none: a guest who walks out mid-run is done —
+> the room goes straight to `attract` with a `reset`, and their return gets
+> a different (dead-room) experience by design. Implement `settling` handling
+> anyway — it is part of the contract, another show or a redesign may author
+> it, and the harness will exercise it — but do not be surprised that the
+> live show never sends it today.
+
 **Reset.** What *happened* to the room. Sent once, never repeated:
 
 ```json
@@ -394,45 +403,49 @@ all.
 node tools/verify-experience.mjs ./your-folder
 ```
 
-It boots your server, connects as a broker, and checks the contract. All of it
-must pass:
+It boots your server, connects as a broker, and checks the **protocol**,
+mechanically. A green run proves exactly this:
 
-- [ ] `experience.json` present and valid
+- [ ] `experience.json` present and valid — contract, id, version,
+      `entry.display`, `inputs`, `maxDrivers`
+- [ ] no hardcoded IP addresses; port from `PORT`, default in manifest
 - [ ] server starts with no arguments and no `npm install`
 - [ ] serves `entry.display`
-- [ ] accepts a broker connection and answers `ready`
-- [ ] honours `drivers` as a **set**, replacing rather than accumulating
-- [ ] never assigns its own driver ids, hues, or caps
-- [ ] obeys `lifecycle`, and runs attract on command rather than on socket count
-- [ ] **holds state through `settling`**, and clears it on `reset`
-- [ ] accepts a driver presenting a valid `driverId` + `secret`
-- [ ] **refuses** a driver presenting a wrong or unknown secret
-- [ ] relays every intent in `inputs`, and ignores ones it did not declare
+- [ ] accepts a broker connection, answers `ready`, and `ready` names the
+      manifest `experienceId`
+- [ ] a reconnecting broker is answered as if new
+- [ ] **claims** a driver the broker authorised, and **refuses** one it
+      never did
+- [ ] **survives** every declared intent at thumb rate, a shrinking driver
+      set, `settling`, a returning guest, and a `reset` — without crashing
 - [ ] calibration round-trips through `GET`/`POST /calibration` to the file
       `CALIBRATION_FILE` names, falling back to `calibration.file`
-- [ ] no hardcoded IP addresses or ports — port from `PORT`, default in manifest
-- [ ] media referenced from `media.dir` — `MEDIA_DIR` overrides it at launch —
-      and never committed
 
 ### What verify cannot check
 
-It checks the **protocol**. It cannot check **behaviour**, because it does not
-know what "state" means inside your piece. These are tested by hand in the
-harness, and they are the most likely to be wrong:
+"Survives" above is deliberate wording: verify proves your server keeps
+running through those messages, not that it does the right thing with them —
+it does not know what "state" means inside your piece. The rest is tested by
+hand in the harness, and it is the part most likely to be wrong:
 
-1. Drive the piece somewhere distinctive → `settling` → `live`. It must be
+1. Drivers are a **set**. Two drivers driving, then remove one in the panel:
+   that driver's influence must stop — replaced, not accumulated — and the
+   other must be unaffected.
+2. Drive the piece somewhere distinctive → `settling` → `live`. It must be
    exactly where it was left.
-2. `settling` → `reset` → `attract`. It must be back to its starting state.
-3. If your piece has an ending: reach it. The harness should log `complete`
+3. `settling` → `reset` → `attract`. It must be back to its starting state.
+4. If your piece has an ending: reach it. The harness should log `complete`
    arriving, drop to `attract`, and send a `reset` — and your piece should
    sit cleanly in attract afterwards, not re-announce the ending.
-3. Two drivers driving, then remove one in the harness panel. That driver's
-   influence must stop, and the other must be unaffected.
-4. That `MEDIA_DIR` is honoured — verify cannot know which files your piece
+5. That `MEDIA_DIR` is honoured — verify cannot know which files your piece
    reads. Launch with `MEDIA_DIR` pointed somewhere empty: your piece should
    miss its media, loudly. If it carries on as if nothing changed, it is
    reading past the flag, and will do the same the day the venue puts media
    on its own disk.
+
+And one thing neither tool can see from outside: that nothing in your piece
+still assigns its own driver ids, hues, or caps (§1). Only reading the code
+shows that.
 
 A green verify run means it will connect and speak correctly. It does not mean
 the piece behaves.
