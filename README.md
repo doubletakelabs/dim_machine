@@ -105,19 +105,12 @@ Open decisions, declared-but-unused config, and known warts are tracked in
 
 **Room experiences.** A room can hand its interaction to a separate piece —
 a wall, a projection — running its own server on a machine in that room. The
-contract for building one is [`docs/ROOM-EXPERIENCE.md`](docs/ROOM-EXPERIENCE.md),
-with a conforming reference in `docs/experience-template/`.
-
-```
-node tools/experience-harness.mjs ws://localhost:8080   # develop against a fake show
-node tools/verify-experience.mjs ./the-piece            # check it before it ships
-npm run handover                                        # ./handover — the kit to send out
-```
-
-`npm run handover` assembles the contract, the brief, both tools and the working
-reference into one self-contained folder. It is generated rather than kept, so it
-cannot drift from the thing it describes — re-run it after any change to the
-contract and send the folder.
+contract, the handover procedure, the harness and verifier, and the reference
+template all live in [doubletakelabs/dim_rooms](https://github.com/doubletakelabs/dim_rooms),
+which is also the pipeline that carries each room's code from the developer to
+the show (`source/` + `build/` per room, deployed by dim_central from `build/`).
+A protocol change here means updating the contract there, in the same piece of
+work. The old zip-based `npm run handover` kit is retired.
 
 **Installations.** A show describes the work; an *installation* says which
 machines run its pieces, so rehearsing elsewhere is a different file rather than
