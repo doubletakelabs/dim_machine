@@ -304,6 +304,22 @@ describe('the link to a room experience', () => {
     assert.equal(rt.eventLog.filter((e) => e.type === 'room.experienceComplete').length, 0);
   });
 
+  it('sends refresh once when an operator asks, and not to a dead link', () => {
+    const { rt, server } = makeRuntime();
+    const socket = server.latest();
+    assert.equal(rt.refreshExperience('influence'), true);
+    assert.equal(socket.of('refresh').length, 1, 'one press, one event');
+
+    // A dead link has nothing to refresh — and a reconnect must not replay it:
+    // events fire once, only conditions are resent.
+    socket.drop();
+    assert.equal(rt.refreshExperience('influence'), false);
+    rt.testAdvanceTime(2000);           // reconnect backoff
+    const fresh = server.latest();
+    fresh.accept();
+    assert.equal(fresh.of('refresh').length, 0, 'not replayed on reconnect');
+  });
+
   it('respects a cap the experience itself declares', () => {
     const { rt, server } = makeRuntime();
     server.latest().reply({ t: 'ready', experienceId: 'influence-clickfarm', version: '1.0.0', maxDrivers: 1 });

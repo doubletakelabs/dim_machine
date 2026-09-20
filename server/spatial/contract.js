@@ -279,15 +279,21 @@ export const EXPERIENCE_LIFECYCLE = ['attract', 'live', 'settling'];
 /**
  * Things that happen to a room, as distinct from things that are true of it.
  *
- * `reset` is the only one so far, and it is genuinely an event: the room has
- * returned to rest and whatever the last guest built should not be waiting for
- * the next one. It cannot be a lifecycle value, because a state is re-sent on
- * every reconnect and a piece would wipe itself every time the link flapped.
+ * `reset`: the room has returned to rest and whatever the last guest built
+ * should not be waiting for the next one. It cannot be a lifecycle value,
+ * because a state is re-sent on every reconnect and a piece would wipe itself
+ * every time the link flapped.
+ *
+ * `refresh`: an operator asking the piece to reload its display pages — the
+ * un-wedge button for a stuck wall. Not a reset: run state survives, because
+ * a display already receives everything on connect (arriving late is never a
+ * special case), so reloading it is safe at any moment.
  *
  * Missing one while disconnected is harmless — a piece that was down through a
- * reset came back with nothing to clear.
+ * reset came back with nothing to clear, and a refresh nobody received will be
+ * pressed again by the person still looking at the stuck wall.
  */
-export const EXPERIENCE_EVENTS = ['reset'];
+export const EXPERIENCE_EVENTS = ['reset', 'refresh'];
 
 /**
  * Colours handed to drivers, in order. An experience uses them to tint whatever

@@ -947,6 +947,17 @@ export class SpatialRuntime {
     this.notifyChange();
   }
 
+  /**
+   * An operator asking a room's piece to reload its display pages — the
+   * un-wedge button for a stuck wall. An event, not a state: run state
+   * survives, and a refresh that finds the link down simply doesn't happen.
+   */
+  refreshExperience(roomId) {
+    const sent = this.experiences.get(roomId)?.event('refresh') ?? false;
+    if (sent) this.io.log?.(`${roomId}: refresh sent to experience`);
+    return sent;
+  }
+
   /** Every room experience's health, for the operator panel. */
   experienceSnapshot() {
     return [...this.experiences.values()].map((link) => link.snapshot());

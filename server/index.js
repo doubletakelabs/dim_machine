@@ -782,6 +782,12 @@ wss.on('connection', (ws) => {
         return;
       }
 
+      case 'refreshExperience': {
+        if (!isOperator) return;
+        if (runtime.refreshExperience(msg.roomId)) opLog(`${msg.roomId} ← refresh experience`);
+        return;
+      }
+
       case 'removeGuest': {
         if (!isOperator) return;
         if (runtime.removeGuest(msg.guestId)) sendRoster();

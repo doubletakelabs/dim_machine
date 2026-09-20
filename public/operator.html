@@ -910,7 +910,9 @@ function describeExperience(roomId) {
       <dt>Endpoint</dt><dd class="mono">${link.endpoint ?? '—'}</dd>
       <dt>Link</dt><dd style="color:${ok ? '#58c98a' : '#e0705a'}">${link.state}${
         link.lastError && !ok ? ` <span class="muted">${link.lastError}</span>` : ''}</dd>
-      <dt>Telling it</dt><dd>${link.lifecycle} · ${link.drivers} driver${link.drivers === 1 ? '' : 's'}</dd>
+      <dt>Telling it</dt><dd>${link.lifecycle} · ${link.drivers} driver${link.drivers === 1 ? '' : 's'}
+        <button class="tiny" data-refresh-exp="1" ${ok ? '' : 'disabled'}
+          title="Ask the piece to reload its display pages. Run state survives — a display gets everything on connect.">Refresh displays</button></dd>
       ${link.status ? `<dt>It says</dt><dd>${[
         link.status.displays != null ? `${link.status.displays} display${link.status.displays === 1 ? '' : 's'}` : null,
         link.status.drivers != null ? `${link.status.drivers} driving` : null,
@@ -1056,6 +1058,9 @@ function renderInspector() {
     }
     el.querySelector('[data-unlock]').onclick =
       () => send({ type: 'releaseRoomLock', roomId: room.roomId });
+    const refreshExp = el.querySelector('[data-refresh-exp]');
+    if (refreshExp) refreshExp.onclick =
+      () => send({ type: 'refreshExperience', roomId: room.roomId });
     el.querySelector('[data-activate-occupant]').onclick =
       () => send({ type: 'activateForOccupant', roomId: room.roomId });
     return;
