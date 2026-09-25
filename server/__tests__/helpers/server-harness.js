@@ -18,7 +18,7 @@
  * itself: argument handling, installation resolution, and the express routes are
  * all covered by the act of getting a socket open.
  *
- * `PORT=0` asks the OS for a free port. That is not only for isolation: 4000 is
+ * `PORT=0` asks the OS for a free port. That is not only for isolation: 4100 is
  * usually somebody's running rehearsal, and a test suite that kills it, or that
  * quietly passes against it, is worse than no test suite. The server reports the
  * port it actually bound over the fork IPC channel.

@@ -23,12 +23,12 @@ directly.
 
 ```sh
 npm install
-npm start          # → http://localhost:4000
+npm start          # → http://localhost:4100  (4000 is dim_central's; PORT=… to change)
 npm test           # the spatial core, the server over a real socket, the recogniser
 ```
 
-- **Test panel:** `http://localhost:4000/operator.html` → load **MAD-DIM.json** → Start
-- **Phones:** `http://localhost:4000/` — connect one and it becomes a guest. Room and
+- **Test panel:** `http://localhost:4100/operator.html` → load **MAD-DIM.json** → Start
+- **Phones:** `http://localhost:4100/` — connect one and it becomes a guest. Room and
   guidance audio play through the thin audio layer (CONTRACT.md §8.1); the operator
   panel shows what each phone is hearing, per slot
 

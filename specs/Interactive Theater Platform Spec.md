@@ -436,7 +436,7 @@ The goal is a complete authoring → runtime → phone loop, with **no location,
 - **Interactive pages:** a small set of declarative phone "screens" (audio player, video player, prompt/choice page, gesture-capture surface) selectable by action, so participants compose experiences without custom front-end work.
 - **Exit criteria:** a participant authors a statechart in the separate tool, loads it, and a room of phones responds to their inputs and receives their outputs live — with no engineer in the loop at run time.
 
-**Built (repo: `dim_machine`, port 4000):**
+**Built (repo: `dim_machine`, port 4100):**
 
 | Area | Status | Notes |
 |---|---|---|

@@ -11,7 +11,8 @@ import { SpatialRuntime, validateShowDefinition, ScaledClock } from './spatial/i
 import { applyInstallation } from './spatial/installation.js';
 import * as relay from './relay.js';
 
-const PORT = process.env.PORT || 4000;
+// Not 4000: dim_central (the deploy dashboard) runs there on the same machine.
+const PORT = process.env.PORT || 4100;
 const BASE_ASSETS = ['click.wav', 'ambient.wav', 'whisper.wav', 'chime.wav'];
 const OFFLINE_HIDE_MS = 60_000;
 
@@ -885,7 +886,7 @@ wss.on('connection', (ws) => {
 httpServer.listen(PORT, () => {
   // The bound port, not the asked-for one. `PORT=0` means "any free port",
   // which is how the test harness boots a server without fighting whatever is
-  // already on 4000 — and it also makes the banner honest in that case.
+  // already on 4100 — and it also makes the banner honest in that case.
   const port = httpServer.address().port;
   console.log('DIM Machine — spatial runtime (v0.3 Phase A)');
   console.log(`  phone client:   http://localhost:${port}/`);
