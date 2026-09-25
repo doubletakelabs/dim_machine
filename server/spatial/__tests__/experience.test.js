@@ -261,27 +261,15 @@ describe('the link to a room experience', () => {
     assert.deepEqual(cues.filter((c) => c.kind === 'experience'), [], 'and cues nobody to drive');
   });
 
-  it('the experience saying complete brings the room home', () => {
-    // The one message that travels up: the piece's own software says the run
-    // is over. Handled like a timed room reaching the end of its `after` —
-    // the machine goes home through its authored RELEASE and nobody keeps the
-    // lock, even with the guest still standing inside.
+  it('the experience saying complete ends nothing', () => {
+    // Rooms have no completion (2026-09-25): only the last guest it is running
+    // for walking out ends a room. An older piece may still send `complete`.
     const { rt, server } = makeRuntime();
     const g = driverIn(rt);
-    const socket = server.latest();
+    server.latest().reply({ t: 'complete' });
     assert.equal(String(rt.rooms.get('influence').state).split('.')[0], 'active');
-
-    socket.reply({ t: 'complete' });
-    assert.equal(String(rt.rooms.get('influence').state).split('.')[0], 'settling');
-    assert.ok(!rt.coordinator.getLock('influence'), 'nobody holds a finished room');
-    assert.equal(rt.guests.get(g.guestId).roomId, 'influence', 'they are still in it');
-    assert.equal(
-      rt.eventLog.filter((e) => e.type === 'room.experienceComplete').length, 1);
-
-    // A repeat is a piece talking past the end of its run, not a second run.
-    socket.reply({ t: 'complete' });
-    assert.equal(
-      rt.eventLog.filter((e) => e.type === 'room.experienceComplete').length, 1);
+    assert.ok(rt.coordinator.getLock('influence'), 'the lock stays with its holder');
+    assert.equal(rt.guests.get(g.guestId).roomId, 'influence');
   });
 
   it('a status report reaches the operator snapshot, and dies with the link', () => {
@@ -295,13 +283,6 @@ describe('the link to a room experience', () => {
     socket.drop();
     snap = rt.experienceSnapshot().find((l) => l.roomId === 'influence');
     assert.equal(snap.status, null);
-  });
-
-  it('ignores a complete from a room that is not running', () => {
-    const { rt, server } = makeRuntime();
-    server.latest().reply({ t: 'complete' });
-    assert.equal(String(rt.rooms.get('influence').state).split('.')[0], 'idle');
-    assert.equal(rt.eventLog.filter((e) => e.type === 'room.experienceComplete').length, 0);
   });
 
   it('sends refresh once when an operator asks, and not to a dead link', () => {

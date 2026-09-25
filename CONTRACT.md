@@ -750,8 +750,10 @@ be handed.
 #### Museum clips, per room — live
 
 The museum layer (`museum` block) speaks from shared `stems`: one entrance,
-in_room bed, complete, return and disabled clip for every museum room, and an
-`inHallway` track per progress count. A room may have its own take on any of
+in_room bed, return and disabled clip for every museum room, and an
+`inHallway` track per progress count. There is no completion: a museum room
+runs, with no timer, until the last guest it is running for walks out — and
+nothing its own software sends can end it (2026-09-25). A room may have its own take on any of
 the per-room stems; whatever it does not declare falls back to the shared one.
 
 ```jsonc
@@ -763,8 +765,7 @@ the per-room stems; whatever it does not declare falls back to the shared one.
 }
 ```
 
-Per-room stems: `entrance`, `inRoom`, `complete` (played when the room drops
-back to idle with the guest still inside), `returnVisited`, `inRoomDisabled`,
+Per-room stems: `entrance`, `inRoom`, `returnVisited`, `inRoomDisabled`,
 `returnDisabled`. `inHallway` belongs to the hallway and cannot be overridden
 per room. Validated: the room must be one of `museum.rooms`, and each key a
 per-room stem naming an asset.

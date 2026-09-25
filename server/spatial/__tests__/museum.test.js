@@ -74,23 +74,23 @@ describe('choosing a room', () => {
     assert.equal(cue.startAt, engagedAt + ENTRANCE_SECONDS * 1000);
   });
 
-  it('the room completes on its own, and the guest hears it', () => {
+  it('the room runs for as long as they stay — nothing ends it but leaving', () => {
     const rt = makeRuntime();
     const g = arrive(rt);
     walk(rt, g.guestId, 'kin');
-    rt.testAdvanceTime(46000); // the placeholder room runs 45s
-    assert.equal(roomState(rt, 'kin'), 'idle');
-    assert.equal(snap(rt, g.guestId).rooms.kin, 'completed');
-    assert.equal(voice(rt, g.guestId), 'audio/museum/complete.wav');
-    assert.equal(bed(rt, g.guestId), null, 'the bed dies with the room');
+    rt.testAdvanceTime(10 * 60 * 1000); // far past the old 45s placeholder
+    assert.equal(roomState(rt, 'kin'), 'active', 'no timer, no completion');
+    assert.equal(bed(rt, g.guestId).assetId, 'audio/museum/in_room.wav', 'the bed plays on');
+    assert.equal(snap(rt, g.guestId).rooms.kin, 'visited');
   });
 
-  it('stepping out afterwards is in_hallway, the track for one room done', () => {
+  it('stepping out is in_hallway, the track for one room done', () => {
     const rt = makeRuntime();
     const g = arrive(rt);
     walk(rt, g.guestId, 'kin');
-    rt.testAdvanceTime(46000);
+    rt.testAdvanceTime(60000);
     walk(rt, g.guestId, 'museumHallway');
+    assert.equal(roomState(rt, 'kin'), 'idle', 'their leaving ended it');
     assert.equal(voice(rt, g.guestId), 'audio/museum/in_hallway_1.wav');
   });
 
@@ -99,7 +99,7 @@ describe('choosing a room', () => {
     const g = arrive(rt);
     for (const roomId of ['kin', 'slop']) {
       walk(rt, g.guestId, roomId);
-      rt.testAdvanceTime(46000);
+      rt.testAdvanceTime(60000);
       walk(rt, g.guestId, 'museumHallway');
     }
     assert.equal(voice(rt, g.guestId), 'audio/museum/in_hallway_2.wav');
@@ -107,20 +107,20 @@ describe('choosing a room', () => {
   });
 });
 
-describe('abandonment', () => {
+describe('leaving', () => {
   it('keeps the slot, stands the room down, and the hallway still speaks', () => {
     const rt = makeRuntime();
     const g = arrive(rt);
     walk(rt, g.guestId, 'faerie');
     assert.equal(roomState(rt, 'faerie'), 'active');
-    walk(rt, g.guestId, 'museumHallway'); // out before the room finishes
+    walk(rt, g.guestId, 'museumHallway');
     assert.equal(roomState(rt, 'faerie'), 'idle', 'a room must not run for nobody');
     assert.equal(snap(rt, g.guestId).seen, 1, 'the slot does not come back');
-    assert.equal(snap(rt, g.guestId).rooms.faerie, 'visited', 'not completed');
+    assert.equal(snap(rt, g.guestId).rooms.faerie, 'visited');
     assert.equal(voice(rt, g.guestId), 'audio/museum/in_hallway_1.wav');
   });
 
-  it('a return to an abandoned room is a dead room with the return clip', () => {
+  it('a return is a dead room with the return clip', () => {
     const rt = makeRuntime();
     const g = arrive(rt);
     walk(rt, g.guestId, 'faerie');
@@ -136,7 +136,7 @@ describe('the four', () => {
   function spend(rt, g, rooms) {
     for (const roomId of rooms) {
       walk(rt, g.guestId, roomId);
-      rt.testAdvanceTime(46000);
+      rt.testAdvanceTime(60000);
       walk(rt, g.guestId, 'museumHallway');
     }
   }
@@ -154,7 +154,7 @@ describe('the four', () => {
     assert.equal(voice(rt, g.guestId), 'audio/museum/return_disabled.wav');
   });
 
-  it('a completed room greets a return with return_visited', () => {
+  it('a room they spent a slot on greets a return with return_visited', () => {
     const rt = makeRuntime();
     const g = arrive(rt);
     spend(rt, g, ['automation']);
@@ -165,7 +165,7 @@ describe('the four', () => {
 });
 
 describe('two guests, one room', () => {
-  it('a joiner gets their own entrance, and the shared complete', () => {
+  it('a joiner gets their own entrance and their own slot', () => {
     const rt = makeRuntime();
     const a = arrive(rt);
     walk(rt, a.guestId, 'kin');
@@ -175,12 +175,6 @@ describe('two guests, one room', () => {
     assert.equal(voice(rt, b.guestId), 'audio/museum/entrance.wav', 'their own welcome');
     assert.equal(snap(rt, b.guestId).seen, 1, 'their own slot burns');
     assert.equal(roomState(rt, 'kin'), 'active', 'one room, running once');
-
-    rt.testAdvanceTime(46000); // the room finishes for everyone at once
-    assert.equal(snap(rt, a.guestId).rooms.kin, 'completed');
-    assert.equal(snap(rt, b.guestId).rooms.kin, 'completed');
-    assert.equal(voice(rt, a.guestId), 'audio/museum/complete.wav');
-    assert.equal(voice(rt, b.guestId), 'audio/museum/complete.wav');
   });
 
   it('one guest leaving does not stand the room down under the other', () => {
@@ -189,12 +183,29 @@ describe('two guests, one room', () => {
     const b = arrive(rt);
     walk(rt, a.guestId, 'kin');
     walk(rt, b.guestId, 'kin');
-    walk(rt, a.guestId, 'museumHallway'); // a abandons
+    walk(rt, a.guestId, 'museumHallway'); // a leaves
     assert.equal(roomState(rt, 'kin'), 'active', 'b is still inside their room');
-    assert.equal(snap(rt, a.guestId).rooms.kin, 'visited');
-    rt.testAdvanceTime(46000);
-    assert.equal(snap(rt, b.guestId).rooms.kin, 'completed', 'b finishes alone');
-    assert.equal(snap(rt, a.guestId).rooms.kin, 'visited', 'a does not — they left');
+    rt.testAdvanceTime(10 * 60 * 1000);
+    assert.equal(roomState(rt, 'kin'), 'active', 'and it runs for b as long as b stays');
+    walk(rt, b.guestId, 'museumHallway');
+    assert.equal(roomState(rt, 'kin'), 'idle', 'the last of them out ends it');
+  });
+
+  it('someone it is not running for does not keep it going', () => {
+    // The rule: a room ends when everyone eligible has left. A guest whose
+    // slots were spent can stand in it; the room is not theirs.
+    const rt = makeRuntime();
+    const spent = arrive(rt);
+    for (const roomId of ['automation', 'saas', 'slop', 'faerie']) {
+      walk(rt, spent.guestId, roomId);
+      walk(rt, spent.guestId, 'museumHallway');
+    }
+    const a = arrive(rt);
+    walk(rt, a.guestId, 'kin');
+    walk(rt, spent.guestId, 'kin');
+    assert.equal(voice(rt, spent.guestId), 'audio/museum/in_room_disabled.wav');
+    walk(rt, a.guestId, 'museumHallway');
+    assert.equal(roomState(rt, 'kin'), 'idle', 'nobody eligible left inside');
   });
 });
 
@@ -224,16 +235,21 @@ describe('the museum block validates', () => {
 
   it('warns when a stem is silent', () => {
     const def = structuredClone(museum);
-    delete def.museum.stems.complete;
-    assert.match(validateShowDefinition(def).warnings.join('\n'), /museum\.stems\.complete/);
+    delete def.museum.stems.returnVisited;
+    assert.match(validateShowDefinition(def).warnings.join('\n'), /museum\.stems\.returnVisited/);
+  });
+
+  it('says so when a show still names the complete clip', () => {
+    const def = structuredClone(museum);
+    def.museum.stems.complete = 'audio/museum/complete.wav';
+    assert.match(validateShowDefinition(def).warnings.join('\n'), /complete is no longer used/);
   });
 });
 
-describe('a room completed by its own software', () => {
-  // Influence has no timer: its room server is the experience, and the
-  // experience says when the run is over. This is the whole chain — the
-  // broker `complete` message in, the room home, everyone engaged completed.
-  it('the experience complete signal completes everyone engaged', () => {
+describe('a room with its own software', () => {
+  // Influence's room server is the experience. Whatever it says, it cannot
+  // end the room: only the last engaged guest walking out does (2026-09-25).
+  it('a complete from the experience ends nothing', () => {
     const sockets = [];
     const open = (url) => {
       const handlers = {};
@@ -269,11 +285,8 @@ describe('a room completed by its own software', () => {
     assert.equal(roomState(rt, 'influence'), 'active');
 
     sockets[0].reply({ t: 'complete' });
-    assert.equal(roomState(rt, 'influence'), 'idle', 'the room came home');
-    for (const g of [a, b]) {
-      assert.equal(snap(rt, g.guestId).rooms.influence, 'completed');
-      assert.equal(voice(rt, g.guestId), 'audio/museum/complete.wav');
-    }
+    assert.equal(roomState(rt, 'influence'), 'active', 'still running for them');
+    for (const g of [a, b]) assert.equal(snap(rt, g.guestId).rooms.influence, 'visited');
   });
 });
 
@@ -315,6 +328,7 @@ describe('a room with its own clips', () => {
     assert.match(errorsFor({ kin: { inHallway: 'x.wav' } }), /roomStems\.kin\.inHallway is not a room stem/);
     assert.match(errorsFor({ library: { entrance: 'x.wav' } }), /"library" is not one of museum\.rooms/);
     assert.match(errorsFor({ kin: { entrance: 7 } }), /roomStems\.kin\.entrance must be an asset name/);
-    assert.equal(errorsFor({ kin: { complete: 'chime.wav' } }), '');
+    assert.match(errorsFor({ kin: { complete: 'chime.wav' } }), /roomStems\.kin\.complete is not a room stem/);
+    assert.equal(errorsFor({ kin: { returnDisabled: 'chime.wav' } }), '');
   });
 });

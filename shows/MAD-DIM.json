@@ -548,11 +548,6 @@
           "active": {
             "on": {
               "RELEASE": "idle"
-            },
-            "after": {
-              "45000": {
-                "target": "idle"
-              }
             }
           }
         }
@@ -610,11 +605,6 @@
           "active": {
             "on": {
               "RELEASE": "idle"
-            },
-            "after": {
-              "45000": {
-                "target": "idle"
-              }
             }
           }
         }
@@ -748,11 +738,6 @@
           "active": {
             "on": {
               "RELEASE": "idle"
-            },
-            "after": {
-              "45000": {
-                "target": "idle"
-              }
             }
           }
         }
@@ -810,11 +795,6 @@
           "active": {
             "on": {
               "RELEASE": "idle"
-            },
-            "after": {
-              "45000": {
-                "target": "idle"
-              }
             }
           }
         }
@@ -884,11 +864,6 @@
           "active": {
             "on": {
               "RELEASE": "idle"
-            },
-            "after": {
-              "45000": {
-                "target": "idle"
-              }
             }
           }
         }
@@ -942,11 +917,6 @@
           "active": {
             "on": {
               "RELEASE": "idle"
-            },
-            "after": {
-              "45000": {
-                "target": "idle"
-              }
             }
           }
         }
@@ -1004,11 +974,6 @@
           "active": {
             "on": {
               "RELEASE": "idle"
-            },
-            "after": {
-              "45000": {
-                "target": "idle"
-              }
             }
           }
         }
@@ -1066,11 +1031,6 @@
           "active": {
             "on": {
               "RELEASE": "idle"
-            },
-            "after": {
-              "45000": {
-                "target": "idle"
-              }
             }
           }
         }
@@ -1132,11 +1092,6 @@
           "active": {
             "on": {
               "RELEASE": "idle"
-            },
-            "after": {
-              "45000": {
-                "target": "idle"
-              }
             }
           }
         }
@@ -1725,7 +1680,6 @@
     "stems": {
       "entrance": "audio/museum/entrance.wav",
       "inRoom": "audio/museum/in_room.wav",
-      "complete": "audio/museum/complete.wav",
       "returnVisited": "audio/museum/return_visited.wav",
       "inRoomDisabled": "audio/museum/in_room_disabled.wav",
       "returnDisabled": "audio/museum/return_disabled.wav",

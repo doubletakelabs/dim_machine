@@ -83,6 +83,13 @@ crowds skew completer rather than abandoner.
 **The sim at `/sim/` stays independent** — it is a prototyping sandbox, not
 the implementation, and is expected to diverge for future prototypes.
 
+**Removed 2026-09-25: rooms do not complete.** A museum room runs until the
+last guest it is running for (everyone eligible) walks out — nothing else ends
+it. Gone: the `complete` clip and "completed" memory in the museum layer, the
+45s placeholder timers on nine MAD-DIM rooms, and the experience `complete`
+message (a piece that still sends it is ignored). The history below is kept
+as the record of how it worked.
+
 **~~New open item — the complete signal.~~ Resolved** (2026-09-13): the
 broker protocol carries `{t: "complete"}` up from the experience — the one
 message a piece sends that changes the show. The runtime handles it exactly

@@ -5,21 +5,22 @@
  * the show. Deliberately NOT the same file: the sim is a prototyping sandbox
  * that will diverge again; this is the current design, wired to the runtime.
  *
- * The rules, as the team settled them (2026-09-08 … 2026-09-11):
+ * The rules, as the team settled them (2026-09-08 … 2026-09-11; complete
+ * removed 2026-09-25):
  *
  * - Guests choose. The first `limit` museum rooms a guest enters are theirs:
  *   entering activates the room and the journey runs — entrance, then
- *   in_room the moment the entrance clip ends, then complete when the room
- *   finishes. The slot burns as the entrance begins, so abandonment keeps it.
+ *   in_room the moment the entrance clip ends, for as long as they stay. The
+ *   slot burns as the entrance begins. There is no completion: a room runs
+ *   until every guest it is running for has walked out.
  * - A room entered after the slots are spent cannot activate: in_room_disabled
  *   once, return_disabled every entry after.
- * - Returning to any room they have been in — completed or abandoned — is a
- *   dead room with the return_visited clip. Every return; no resume.
+ * - Returning to any room they have been in is a dead room with the
+ *   return_visited clip. Every return; no resume.
  * - A full room (maxOccupants) refuses by capacity: silence, nothing burned,
  *   nothing remembered. Walking away from it can never count against anyone.
  * - A below-capacity room that is already running activates *for the joiner*
- *   too: they burn a slot and get their own entrance and in_room. When the
- *   room completes, everyone engaged gets the same complete at the same time.
+ *   too: they burn a slot and get their own entrance and in_room.
  * - Stepping back into the world after each visit is in_hallway — one state,
  *   a track per progress count, the show's pick. Not after a capacity refusal.
  *
@@ -27,20 +28,19 @@
  *
  * Entry and exit come from the coordinator's committed occupancy events — the
  * one spatial trigger the whole design was reduced to, because it is the one
- * BLE reports well. Completion comes from the room going idle on its own
- * (authored duration today, the room's own software tomorrow); this layer
- * tells an abandoned room to stand down itself, and tells the two apart by
- * who initiated the transition.
+ * BLE reports well. The only thing that ends a museum room is this layer
+ * standing it down, when the last guest it is running for walks out — no
+ * timer, and nothing the room's own software says.
  *
  * Audio rides the existing cue slots, reconciled like everything else:
  * `room` carries the in_room bed (scheduled to start exactly when the
  * entrance clip ends — the server knows the clip's length), and `guidance`
- * carries the spoken line (entrance, complete, the returns, in_hallway).
+ * carries the spoken line (entrance, the returns, in_hallway).
  * A reconnecting phone converges on the right audio for free.
  */
 
 export const MUSEUM_STEMS = [
-  'entrance', 'inRoom', 'complete', 'returnVisited',
+  'entrance', 'inRoom', 'returnVisited',
   'inRoomDisabled', 'returnDisabled', 'inHallway',
 ];
 
@@ -71,15 +71,13 @@ export class MuseumLayer {
     this.guests = new Map();
     /** roomId → Set<guestId> currently engaged (their room, running for them) */
     this.engaged = new Map();
-    /** Rooms this layer itself stood down — their idle is abandonment, not completion. */
-    this.selfReleased = new Set();
   }
 
   guest(guestId) {
     if (!this.guests.has(guestId)) {
       this.guests.set(guestId, {
         seen: 0,
-        memory: new Map(),   // roomId → 'visited' | 'completed' | 'disabled'
+        memory: new Map(),   // roomId → 'visited' | 'disabled'
         engagedRoom: null,
         engagedAt: 0,
         visitKind: null,     // what this entry was, consumed on exit
@@ -122,7 +120,7 @@ export class MuseumLayer {
     const now = this.io.now();
 
     // Been here before — the room is dead to them, but it remembers.
-    if (mem === 'visited' || mem === 'completed') {
+    if (mem === 'visited') {
       g.visitKind = 'return';
       return this.say(g, 'returnVisited', now, roomId);
     }
@@ -158,7 +156,7 @@ export class MuseumLayer {
     this.say(g, 'entrance', now, roomId);
     // First one in wakes the room; a joiner finds it already running and the
     // room activates *for them* all the same — their own entrance, their own
-    // in_room, and the shared complete when it lands.
+    // in_room.
     if (!info.active) this.io.activate(guestId, roomId);
     this.io.log?.(`museum: ${guestId} engaged ${roomId} (${g.seen}/${this.limit})`);
   }
@@ -173,47 +171,17 @@ export class MuseumLayer {
     if (kind && kind !== 'full') this.say(g, 'inHallway', this.io.now());
   }
 
-  /** Walked out mid-experience: the slot stays burned, the room may stand down. */
+  /** Walked out: the slot stays burned, and the room may stand down. */
   disengage(guestId, roomId) {
     const g = this.guest(guestId);
     g.engagedRoom = null;
     const set = this.engaged.get(roomId);
     set?.delete(guestId);
     if (set && set.size === 0 && this.io.roomInfo(roomId).active) {
-      // Nobody left inside whose room this is — stand it down. Marked as ours
-      // so the resulting idle reads as abandonment, not completion.
-      this.selfReleased.add(roomId);
+      // Nobody left inside whose room this is — the one thing that ends a
+      // museum room. Anyone still standing there it was not running for.
       this.io.release(roomId);
-      this.io.log?.(`museum: ${roomId} abandoned — standing down`);
-    }
-  }
-
-  /**
-   * A museum room's machine changed state. Idle with engaged guests still
-   * inside means the room finished on its own — that is completion, and
-   * everyone engaged hears the same complete at the same moment.
-   */
-  handleRoomState(roomId, rootState) {
-    if (!this.rooms.has(roomId)) return;
-    if (rootState !== 'idle') return;
-    if (this.selfReleased.delete(roomId)) return; // our own stand-down: abandonment
-    const set = this.engaged.get(roomId);
-    if (!set?.size) return;
-    // Only guests still physically inside completed. The room actor reacts to
-    // a departure before this layer hears about it, so an emptying room can
-    // reach idle while the leaver is still in the engaged set — and someone
-    // mid-walk-out did not finish the experience.
-    const inside = new Set(this.io.occupantIds(roomId));
-    const now = this.io.now();
-    for (const guestId of [...set]) {
-      if (!inside.has(guestId)) continue;
-      const g = this.guest(guestId);
-      g.memory.set(roomId, 'completed');
-      g.engagedRoom = null;
-      g.visitKind = 'engaged'; // their exit still earns the hallway line
-      this.say(g, 'complete', now, roomId);
-      this.io.log?.(`museum: ${guestId} completed ${roomId}`);
-      set.delete(guestId);
+      this.io.log?.(`museum: ${roomId} — its last guest left, standing down`);
     }
   }
 
@@ -310,6 +278,13 @@ export function checkMuseum(museum, rooms, errors, warnings) {
     errors.push(`museum.hallway names "${museum.hallway}", which the show does not have`);
   }
   const stems = museum.stems ?? {};
+  for (const stem of Object.keys(stems)) {
+    if (!MUSEUM_STEMS.includes(stem)) {
+      warnings.push(stem === 'complete'
+        ? 'museum.stems.complete is no longer used — museum rooms do not complete'
+        : `museum.stems.${stem} is not a museum stem (${MUSEUM_STEMS.join(', ')})`);
+    }
+  }
   for (const stem of MUSEUM_STEMS) {
     const value = stems[stem];
     if (value == null) {

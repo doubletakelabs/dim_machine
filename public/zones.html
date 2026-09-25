@@ -439,14 +439,10 @@ let audioFiles = [];
 /** Rooms whose doors or clips were edited here — only those are saved. */
 const touched = new Set();
 
-/**
- * The museum stems a room may have its own take on (server/spatial/museum.js
- * ROOM_STEMS), with what triggers each — `complete` is easy to forget exists.
- */
+/** The museum stems a room may have its own take on (server/spatial/museum.js ROOM_STEMS). */
 const ROOM_STEMS = [
   ['entrance', 'Entrance', 'spoken as they walk in and the room starts'],
   ['inRoom', 'In room', 'the bed, from the end of the entrance'],
-  ['complete', 'Complete', 'when the room goes back to idle with them inside'],
   ['returnVisited', 'Return', 'walking back into a room they have been in'],
   ['inRoomDisabled', 'Out of rooms', 'first time in, after their rooms are spent'],
   ['returnDisabled', 'Out, return', 'back again, rooms still spent'],

@@ -200,14 +200,9 @@ export class WalkthroughDriver {
   dwellMsFor(roomId) {
     const room = this.runtime.def?.rooms?.[roomId];
     const threshold = room?.seen?.dwellMs ?? 20000;
-    // A museum room runs for an authored duration, and a person who chose it
-    // mostly stays for the end. Dwelling only to the "seen" threshold made
-    // every simulated guest an abandoner — real crowds should skew completer,
-    // with abandonment exercised by the operator pulling a dot out early.
-    const runsFor = this.runtime.museum?.rooms.has(roomId)
-      ? Number(Object.keys(room?.machine?.states?.active?.after ?? {})[0] ?? 0)
-      : 0;
-    return Math.min(Math.max(threshold, runsFor) + this.config.dwellPadMs, this.config.maxDwellMs);
+    // Rooms have no end of their own — they run until their guests leave — so
+    // a simulated guest stays past the "seen" threshold and then walks on.
+    return Math.min(threshold + this.config.dwellPadMs, this.config.maxDwellMs);
   }
 
   /**
