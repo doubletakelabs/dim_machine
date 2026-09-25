@@ -1115,6 +1115,18 @@ function renderInspector() {
         ? 'Placement, not travel — they stay put until sent again. Walking is for simulated guests only.'
         : 'One-shot placement. Walk drives them room to room on a timer.'}
     </p>
+    ${(showMeta?.thresholds ?? []).length ? `
+    <h2 style="margin-top:12px">At door</h2>
+    <div class="row">
+      <select data-threshold style="flex:1">
+        <option value="">not at a door</option>
+        ${showMeta.thresholds.map((t) => `
+          <option value="${t.thresholdId}"${t.thresholdId === guest.threshold ? ' selected' : ''}>${t.roomName} — ${t.thresholdId}</option>`).join('')}
+      </select>
+    </div>
+    <p class="muted" style="margin:6px 0 0">
+      Stands them at a doorway: its clips play, nothing enters the room. Moving them anywhere ends it.
+    </p>` : ''}
     ${guest.kind === 'phone' ? '' : `
     <div class="row" style="margin-top:10px">
       <button class="tiny" data-walk="1">Walk</button>
@@ -1127,6 +1139,8 @@ function renderInspector() {
   const act = (message) => { document.activeElement?.blur?.(); send(message); };
   el.querySelector('[data-sendroom]').onchange = (e) =>
     act({ type: 'sendGuestToRoom', guestId: guest.guestId, roomId: e.target.value || null });
+  el.querySelector('[data-threshold]')?.addEventListener('change', (e) =>
+    act({ type: 'setGuestThreshold', guestId: guest.guestId, thresholdId: e.target.value || null }));
   el.querySelector('[data-walk]')?.addEventListener('click',
     () => send({ type: 'startWalkthrough', guestIds: [guest.guestId] }));
   el.querySelector('[data-nowalk]')?.addEventListener('click',

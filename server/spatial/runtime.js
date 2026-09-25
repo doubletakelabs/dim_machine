@@ -86,6 +86,12 @@ export class SpatialRuntime {
     this._drivers = new Map();
     /** roomId → last presentation state seen, so a reset can be spotted once. */
     this._roomStateWas = new Map();
+    /**
+     * guestId → the doorway they are standing at (§4.2c):
+     * { thresholdId, roomId, from, since }. `from` is the room they were in on
+     * arriving — moving anywhere puts the door behind them.
+     */
+    this.atThreshold = new Map();
     /** Injected so tests drive a link without a socket; see experience-link.js. */
     this.openExperienceSocket = io.openExperienceSocket ?? null;
     /** Show-clock instant the show started, for elapsed-time display. */
@@ -117,6 +123,7 @@ export class SpatialRuntime {
     this._guestSeq = 0;
     this.outputLog = [];
     this.eventLog = [];
+    this.atThreshold.clear();
 
     this.coordinator = new OccupancyCoordinator({
       rooms: this.def.rooms,
@@ -245,6 +252,7 @@ export class SpatialRuntime {
       }
     }
     this.walkthrough?.stop();
+    this.atThreshold.clear();
     for (const link of this.experiences.values()) link.stop();
     for (const actor of this.guestActors.values()) actor.stop();
     this.startedAt = null;
@@ -345,6 +353,7 @@ export class SpatialRuntime {
     this.guestActors.delete(guestId);
     this.walkthrough?.remove(guestId);
     this.virtualLocation?.forget(guestId);
+    this.atThreshold.delete(guestId);
     this.director.dropGuest(guestId);
     this.append({ type: 'guest.left', guestId, roomId: occupied });
     this.notifyChange();
@@ -499,6 +508,70 @@ export class SpatialRuntime {
   }
 
   /**
+   * A guest is at a room's doorway, or has left it (thresholdId null) — §4.2c.
+   *
+   * Immediate: deciding that someone has stopped at a door rather than walked
+   * past is the beacon tracking side's job (RSSI over the threshold's value).
+   * It never touches occupancy, so it cannot enter the room, activate it, or
+   * spend one of the guest's rooms; it only sounds. Every arrival restarts the
+   * clips — each approach is heard — and staying put restarts nothing.
+   */
+  setGuestThreshold(guestIdOrToken, thresholdId) {
+    const guestId = this.resolveGuestId(guestIdOrToken);
+    if (!guestId || !this.running) return false;
+    const was = this.atThreshold.get(guestId) ?? null;
+    if (thresholdId == null) {
+      if (!was) return true;
+      this.atThreshold.delete(guestId);
+      this.append({ type: 'guest.threshold', guestId, thresholdId: null, left: was.thresholdId });
+    } else {
+      const found = this.findThreshold(thresholdId);
+      if (!found) return false;
+      if (was?.thresholdId === thresholdId) return true;
+      const from = this.guestActors.get(guestId)?.currentRoom()?.roomId ?? null;
+      this.atThreshold.set(guestId, { thresholdId, roomId: found.roomId, from, since: this.now() });
+      this.append({ type: 'guest.threshold', guestId, thresholdId, roomId: found.roomId });
+    }
+    this.notifyChange();
+    return true;
+  }
+
+  /** A threshold by id, with the room it leads into. */
+  findThreshold(thresholdId) {
+    for (const [roomId, room] of Object.entries(this.def?.rooms ?? {})) {
+      const def = room?.thresholds?.[thresholdId];
+      if (def) return { roomId, def };
+    }
+    return null;
+  }
+
+  /**
+   * The clips a guest at a doorway hears, by slot. Nothing once they are inside
+   * the room the door leads to, or anywhere other than where they stood.
+   */
+  thresholdCues(guestId, roomId) {
+    const at = this.atThreshold.get(guestId);
+    if (!at || roomId !== at.from || roomId === at.roomId) return {};
+    const out = {};
+    for (const [slot, cue] of Object.entries(this.findThreshold(at.thresholdId)?.def.cues ?? {})) {
+      if (!cue?.audio && !cue?.image) continue;
+      out[slot] = { ...cue, assetId: cue.audio, startAt: at.since, key: `threshold.${at.thresholdId}.${slot}:${at.since}` };
+    }
+    return out;
+  }
+
+  /** Every threshold in the show, for the panel's doorway picker. */
+  thresholdChoices() {
+    const out = [];
+    for (const [roomId, room] of Object.entries(this.def?.rooms ?? {})) {
+      for (const thresholdId of Object.keys(room?.thresholds ?? {})) {
+        out.push({ thresholdId, roomId, roomName: this.rooms.get(roomId)?.name ?? roomId });
+      }
+    }
+    return out;
+  }
+
+  /**
    * User-actor seam (A3). A2 exposes this so activation can be tested
    * without putting eligibility in handleOccupancyCommitted.
    */
@@ -562,6 +635,11 @@ export class SpatialRuntime {
     const outcome = this.guestActors.get(event.guestId)?.handleOccupancy(event);
     if (outcome) this.logEntryOutcome(event.guestId, outcome);
     if (this.running) this.museum?.handleOccupancy(event);
+    // Walking into the room, or anywhere else, puts the door behind them.
+    const door = this.atThreshold.get(event.guestId);
+    if (door && (this.guestActors.get(event.guestId)?.currentRoom()?.roomId ?? null) !== door.from) {
+      this.atThreshold.delete(event.guestId);
+    }
     this.io.onOccupancy?.(event);
     this.notifyChange();
   }
@@ -685,6 +763,7 @@ export class SpatialRuntime {
       pathIds: Object.keys(this.def?.paths ?? {}),
       // For the panel's Send to picker.
       rooms: this.roomChoices(),
+      thresholds: this.thresholdChoices(),
       // Full definitions, not just ids: the panel needs the ordered route to
       // show where a guest is being led and how far along they are.
       paths: this.def?.paths ?? {},
@@ -726,6 +805,7 @@ export class SpatialRuntime {
       position: this.displayPosition(g.guestId),
       museum: this.museum?.snapshot(g.guestId) ?? null,
       walking: this.walkthrough?.walkers.has(g.guestId) ?? false,
+      threshold: this.atThreshold.get(g.guestId)?.thresholdId ?? null,
       intent: this.walkthrough?.intent(g.guestId) ?? null,
     }));
   }
@@ -787,6 +867,13 @@ export class SpatialRuntime {
     if (museum) {
       desired.set('room', museum.room ? audioPart(museum.room) : null);
       if (museum.guidance) desired.set('guidance', audioPart(museum.guidance));
+    }
+
+    // At a doorway (§4.2c) its clips take the slots they declare, over the show
+    // and the museum layer alike, for exactly as long as the guest stands there.
+    for (const [slot, cue] of Object.entries(this.thresholdCues(guestId, here?.roomId ?? null))) {
+      desired.set(slot, audioPart(cue));
+      resolved[slot] = cue;
     }
 
     desired.set(EXPERIENCE_CUE_SLOT, this.experienceCueFor(guestId, here));

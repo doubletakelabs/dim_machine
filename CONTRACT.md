@@ -345,8 +345,60 @@ because a duplicate would make an event ambiguous. There is no top-level `zones`
 map; that split existed in an earlier draft and only created two things to keep
 in sync.
 
-BLE thresholds will hang off the same zone entries when Phase C lands
-(`beacons`, `rssiEnter`, `rssiExit`) — *declared*, not yet consumed.
+**BLE hangs off each zone** — a beacon sits in one part of a room, not the whole
+of it. *Declared and validated, not yet consumed*: the beacon tracking side will
+read it when Phase C lands.
+
+```jsonc
+"library-main": {
+  "polygon": [[120,80],[280,80],[280,200],[120,200]],
+  "ble": { "beacons": ["b-14"], "rssiEnter": -62, "rssiExit": -70 }
+}
+```
+
+Validated: `rssiExit` must be weaker (more negative) than `rssiEnter` — the gap
+is the hysteresis; an entry beacon may mean only one room; and `ble` on the room
+itself is an error, since an earlier draft (spec v0.3 §5.2) put it there.
+
+### 4.2c Thresholds — live (operator panel; beacons pending)
+
+A room's doorways. A guest standing at one hears its clips — and that is all a
+threshold does. It never enters the room: no occupancy change, no activation,
+nothing counted toward the guest's rooms. Entry is still the room's zones.
+
+```jsonc
+"influence": {
+  "zones": { "influence": { "polygon": [...], "ble": { "beacons": ["b-14"], "rssiEnter": -62, "rssiExit": -70 } } },
+  "thresholds": {
+    "influence-door": {
+      "beacons": ["b-31"],
+      "rssi": -60,
+      "cues": {
+        "guidance": { "audio": "influence-tease.mp3" },
+        "room":     { "audio": "influence-bleed.mp3", "loop": true }
+      }
+    }
+  }
+}
+```
+
+- **Triggering is immediate.** RSSI above `rssi` means the guest is at the door
+  rather than walking past; smoothing that reading is the beacon tracking
+  side's job, so the runtime acts on arrival at once. Hold times may come later.
+- **Every approach is heard.** Arriving starts the clips from the top; staying
+  put restarts nothing; stepping away and coming back plays them again.
+- **Cues** declare either or both slots, `guidance` and `room`, with the usual
+  cue fields (§8.1). While the guest stands there they win those slots over
+  the show and the museum layer alike, so a guidance clip ducks the bed and a
+  room cue crossfades from it.
+- **Leaving ends it.** Stepping away (`thresholdId: null`), walking into the
+  room, or moving anywhere else stops the clips and hands the slots back.
+- Threshold ids are unique show-wide. A threshold's beacons may not also be an
+  entry beacon of its own room — standing at the door would count as inside.
+
+Set by `setGuestThreshold { guestId, thresholdId | null }` over the operator
+socket, or `POST /api/spatial/threshold`. Today the operator panel's **At door**
+picker sends it; the beacon tracking side will send the same message.
 
 ### 4.2b Show floor plan — live
 

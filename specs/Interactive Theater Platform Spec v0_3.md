@@ -542,17 +542,21 @@ not an exit and does not disturb it.
 "rooms": {
   "library": {
     "zones": {
-      "library-main":   { "polygon": [[x,y], ...] },
+      "library-main":   { "polygon": [[x,y], ...],
+                          "ble": { "beacons": ["b-14"], "rssiEnter": -62, "rssiExit": -70 } },
       "library-alcove": { "polygon": [[x,y], ...] }
     },
-    "location": { "entryConfirmMs": 1500, "exitConfirmMs": 800 },
-    "ble": { "beacons": ["b-14"], "rssiEnter": -62, "rssiExit": -70 }
+    "location": { "entryConfirmMs": 1500, "exitConfirmMs": 800 }
   }
 }
 ```
 
 Zone ids are unique show-wide, not merely within a room, so an event is never
 ambiguous about which room it concerns.
+
+BLE settings sit on each **zone**, since a room may own several and a beacon
+sits in one of them. Doorway beacons are **thresholds** (CONTRACT.md §4.2c): a
+guest at one hears its clips but never enters the room.
 
 All tuning lives in the show definition, editable per venue without code changes. Expect these numbers to be re-tuned on site; that is normal and the reason they are data.
 

@@ -233,6 +233,7 @@ describe('who is allowed to drive the show', () => {
       { type: 'startWalkthrough' },
       { type: 'sendRoomEvent', roomId: 'library', event: 'RELEASE' },
       { type: 'setVirtualPosition', guestId: phone.welcome.guestId, x: 10, y: 10 },
+      { type: 'setGuestThreshold', guestId: phone.welcome.guestId, thresholdId: null },
     ]) phone.send(msg);
 
     await new Promise((r) => setTimeout(r, 500));
@@ -405,6 +406,21 @@ describe('the HTTP surface', () => {
     assert.equal(res.status, 400);
     const list = await (await fetch(`${server.url}/api/shows`)).json();
     assert.ok(!list.includes('scratch.json'), 'and nothing lands on disk');
+  });
+
+  it('refuses a threshold for nobody', async () => {
+    const res = await fetch(`${server.url}/api/spatial/threshold`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ guestId: 'nobody', thresholdId: 'any-door' }),
+    });
+    assert.equal(res.status, 400);
+    const missing = await fetch(`${server.url}/api/spatial/threshold`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ thresholdId: 'any-door' }),
+    });
+    assert.equal(missing.status, 400);
   });
 
   it('serves the phone client, the panel, and the zone tracer', async () => {

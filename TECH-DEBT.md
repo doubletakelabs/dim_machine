@@ -129,6 +129,12 @@ even for a room abandoned by accident. And threshold beacons come back as
 start feeling active faster, but nothing in the machine hears thresholds —
 they are an optimisation of entry detection, not a logic surface.
 
+Revised 2026-09-25: thresholds **may play audio** (CONTRACT.md §4.2c). A guest
+at a room's door — RSSI over the threshold's value, smoothed on the tracking
+side — hears that threshold's guidance and/or room clips, every approach, and
+they stop on leaving. Still not an entry: no occupancy, no activation, no slot
+spent. Hold times at thresholds are deliberately not implemented yet.
+
 Superseded third iteration, kept for the record (creative meeting
 2026-08-31, confirmed 2026-09-01). The
 queue is gone: each guest gets to **enter four rooms**, and every offer is

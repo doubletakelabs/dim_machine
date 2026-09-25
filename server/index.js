@@ -180,6 +180,19 @@ app.post('/api/spatial/tier', (req, res) => {
   res.json({ ok: true, spatial: runtime.getOperatorSnapshot() });
 });
 
+/**
+ * A guest at a room's doorway, or leaving it (thresholdId null) — §4.2c.
+ * The operator panel uses it today; the beacon tracking side will once BLE lands.
+ */
+app.post('/api/spatial/threshold', (req, res) => {
+  const { guestId, token, thresholdId } = req.body ?? {};
+  const id = guestId ?? token;
+  if (!id) return res.status(400).json({ error: 'guestId|token required' });
+  const ok = runtime.setGuestThreshold(id, thresholdId ?? null);
+  if (!ok) return res.status(400).json({ error: 'show not running, unknown guest, or unknown threshold' });
+  res.json({ ok: true, spatial: runtime.getOperatorSnapshot() });
+});
+
 app.post('/api/spatial/activate', (req, res) => {
   const { guestId, token, roomId } = req.body ?? {};
   const id = guestId ?? token;
@@ -834,6 +847,14 @@ wss.on('connection', (ws) => {
         const id = msg.guestId ?? msg.token;
         if (!id || !msg.occupancy) return;
         if (runtime.setVirtualOccupancy(id, msg.roomId ?? null, msg.occupancy)) sendRoster();
+        return;
+      }
+
+      case 'setGuestThreshold': {
+        if (!isOperator) return;
+        const id = msg.guestId ?? msg.token;
+        if (!id) return;
+        if (runtime.setGuestThreshold(id, msg.thresholdId ?? null)) sendRoster();
         return;
       }
 
