@@ -31,6 +31,10 @@ npm test           # the spatial core, the server over a real socket, the recogn
 - **Phones:** `http://localhost:4100/` — connect one and it becomes a guest. Room and
   guidance audio play through the thin audio layer (CONTRACT.md §8.1); the operator
   panel shows what each phone is hearing, per slot
+- **Zone editor:** `http://localhost:4100/zones.html` — trace zone polygons, and in
+  the side panel set each zone's beacons and RSSI, a room's doors (thresholds:
+  beacons, trigger RSSI, guidance/room clips) and a museum room's own clips.
+  Pick a zone on the plan or in the list; Save writes only what the page edits
 
 ### Test panel (A8)
 

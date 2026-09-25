@@ -531,6 +531,49 @@ describe('saving zones', () => {
     assert.deepEqual(after.guest, before.guest, 'so is the guest machine');
   });
 
+  it('saves doors and room clips for the rooms named, and only those', async () => {
+    const before = await onDisk();
+    const door = { beacons: ['b-31'], rssi: -60, cues: { guidance: { audio: 'whisper.wav' } } };
+    const post = (body) => fetch(`${server.url}/api/shows/MAD-DIM.json/zones`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ zones: {}, ...body }),
+    });
+    let res = await post({
+      thresholds: { influence: { 'influence-door': door } },
+      roomStems: { influence: { entrance: 'whisper.wav' } },
+    });
+    assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+    let after = await onDisk();
+    assert.deepEqual(after.rooms.influence.thresholds, { 'influence-door': door });
+    assert.deepEqual(after.museum.roomStems, { influence: { entrance: 'whisper.wav' } });
+    assert.deepEqual(after.museum.stems, before.museum.stems, 'the shared clips are untouched');
+    assert.deepEqual(after.rooms.influence.zones, before.rooms.influence.zones, 'and so is the geometry');
+
+    // A room the save does not name keeps what it has; null removes.
+    res = await post({ thresholds: { influence: null }, roomStems: { influence: null } });
+    assert.equal(res.status, 200);
+    after = await onDisk();
+    assert.equal(after.rooms.influence.thresholds, undefined);
+    assert.equal(after.museum.roomStems, undefined);
+  });
+
+  it('refuses clips for a room that is not a museum room', async () => {
+    const res = await fetch(`${server.url}/api/shows/MAD-DIM.json/zones`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ zones: {}, roomStems: { library: { entrance: 'whisper.wav' } } }),
+    });
+    assert.equal(res.status, 400);
+  });
+
+  it('lists the audio the editor can assign', async () => {
+    const files = await (await fetch(`${server.url}/api/assets/audio`)).json();
+    assert.ok(files.includes('audio/museum/entrance.wav'));
+    assert.ok(files.includes('whisper.wav'));
+    assert.ok(files.every((f) => !f.split('/').some((p) => p.startsWith('.'))), 'no dotfiles');
+  });
+
   it('refuses a room the show on disk does not have', async () => {
     const res = await fetch(`${server.url}/api/shows/MAD-DIM.json/zones`, {
       method: 'POST',

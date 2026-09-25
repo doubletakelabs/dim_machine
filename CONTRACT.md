@@ -88,6 +88,8 @@ is allowed in — that keeps them portable across shows (spec §3.1).
 | `seen.dwellMs` / `accumulate` | dwell inside before the room counts as seen; `accumulate` sums separate visits | **live** |
 | `revisit.whenSeen` / `whenCompleted` | declaring one makes the runtime send `ACTIVATE_SEEN` / `ACTIVATE_COMPLETED` instead of `ACTIVATE`; `idle` must handle it (validated) | **live** |
 | `zones` | one or more polygons; occupancy is reported for the **room**, not the zone | **live** |
+| `zones.<id>.ble` | `beacons`, `rssiEnter`, `rssiExit` for that zone (§4.2) | declared |
+| `thresholds` | the room's doorways: `beacons`, `rssi`, `cues.guidance` / `cues.room` — plays at the door, never enters (§4.2c) | **live** (operator panel) |
 | `location` | per-room `entryConfirmMs` / `exitConfirmMs` overrides | **live** |
 
 Unknown keys are preserved and ignored, so authoring can run ahead of the runtime.
@@ -744,6 +746,34 @@ own bounds, so a late-joining phone lands inside the segment rather than inside
 the file. Nothing in the current shows uses this — the calibration clips are
 discrete files — but a long take that has not been cut up is a normal thing to
 be handed.
+
+#### Museum clips, per room — live
+
+The museum layer (`museum` block) speaks from shared `stems`: one entrance,
+in_room bed, complete, return and disabled clip for every museum room, and an
+`inHallway` track per progress count. A room may have its own take on any of
+the per-room stems; whatever it does not declare falls back to the shared one.
+
+```jsonc
+"museum": {
+  "stems": { "entrance": "audio/museum/entrance.wav", "inRoom": "audio/museum/in_room.wav", … },
+  "roomStems": {
+    "influence": { "entrance": "audio/influence/entrance.wav", "inRoom": "audio/influence/bed.wav" }
+  }
+}
+```
+
+Per-room stems: `entrance`, `inRoom`, `complete` (played when the room drops
+back to idle with the guest still inside), `returnVisited`, `inRoomDisabled`,
+`returnDisabled`. `inHallway` belongs to the hallway and cannot be overridden
+per room. Validated: the room must be one of `museum.rooms`, and each key a
+per-room stem naming an asset.
+
+The zone editor (`/zones.html`) edits these, a room's thresholds (§4.2c) and
+each zone's `ble` (§4.2) in its side panel, picking clips from
+`GET /api/assets/audio` — every sound under `public/assets`. Its save
+(`POST /api/shows/:file/zones`) writes only zones, and the thresholds and room
+clips of the rooms it names; everything else is merged from the file on disk.
 
 #### Moving a guest without beacons
 

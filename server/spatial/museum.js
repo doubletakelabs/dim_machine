@@ -44,6 +44,12 @@ export const MUSEUM_STEMS = [
   'inRoomDisabled', 'returnDisabled', 'inHallway',
 ];
 
+/**
+ * The stems a single room may have its own take on (`museum.roomStems`).
+ * `inHallway` is the hallway's, chosen by progress count, never a room's.
+ */
+export const ROOM_STEMS = MUSEUM_STEMS.filter((stem) => stem !== 'inHallway');
+
 export class MuseumLayer {
   /**
    * @param {object} config — the show's `museum` block
@@ -118,11 +124,11 @@ export class MuseumLayer {
     // Been here before — the room is dead to them, but it remembers.
     if (mem === 'visited' || mem === 'completed') {
       g.visitKind = 'return';
-      return this.say(g, 'returnVisited', now);
+      return this.say(g, 'returnVisited', now, roomId);
     }
     if (mem === 'disabled') {
       g.visitKind = 'return';
-      return this.say(g, 'returnDisabled', now);
+      return this.say(g, 'returnDisabled', now, roomId);
     }
 
     // Refused by capacity is not an entrance: nothing burns, nothing is
@@ -138,7 +144,7 @@ export class MuseumLayer {
     if (g.seen >= this.limit) {
       g.memory.set(roomId, 'disabled');
       g.visitKind = 'return';
-      return this.say(g, 'inRoomDisabled', now);
+      return this.say(g, 'inRoomDisabled', now, roomId);
     }
 
     // One of their four. The slot burns here — an entrance has begun.
@@ -149,7 +155,7 @@ export class MuseumLayer {
     g.visitKind = 'engaged';
     if (!this.engaged.has(roomId)) this.engaged.set(roomId, new Set());
     this.engaged.get(roomId).add(guestId);
-    this.say(g, 'entrance', now);
+    this.say(g, 'entrance', now, roomId);
     // First one in wakes the room; a joiner finds it already running and the
     // room activates *for them* all the same — their own entrance, their own
     // in_room, and the shared complete when it lands.
@@ -205,22 +211,26 @@ export class MuseumLayer {
       g.memory.set(roomId, 'completed');
       g.engagedRoom = null;
       g.visitKind = 'engaged'; // their exit still earns the hallway line
-      this.say(g, 'complete', now);
+      this.say(g, 'complete', now, roomId);
       this.io.log?.(`museum: ${guestId} completed ${roomId}`);
       set.delete(guestId);
     }
   }
 
   /** One spoken line at a time; a new one replaces whatever was saying. */
-  say(g, stem, startAt) {
-    const assetId = this.stemAsset(stem, g);
+  say(g, stem, startAt, roomId = null) {
+    const assetId = this.stemAsset(stem, g, roomId);
     if (!assetId) return;
     g.voice = { stem, assetId, startAt };
   }
 
-  stemAsset(stem, g) {
+  /**
+   * A room's own take on a stem wins (`museum.roomStems.<roomId>`); anything it
+   * does not declare falls back to the shared `museum.stems`.
+   */
+  stemAsset(stem, g, roomId = null) {
     const stems = this.config.stems ?? {};
-    if (stem !== 'inHallway') return stems[stem] ?? null;
+    if (stem !== 'inHallway') return this.config.roomStems?.[roomId]?.[stem] ?? stems[stem] ?? null;
     const variants = stems.inHallway ?? [];
     if (!variants.length) return null;
     // A track per progress count — "two rooms now, play this one".
@@ -251,11 +261,11 @@ export class MuseumLayer {
     if (g.engagedRoom && g.engagedRoom === roomIdHere && this.io.roomInfo(roomIdHere).active) {
       // The bed starts exactly when the entrance clip ends — the server knows
       // the clip's length, so the phone just schedules it.
-      const entrance = this.config.stems?.entrance;
+      const entrance = this.stemAsset('entrance', g, roomIdHere);
       const lead = entrance ? (this.io.assetSeconds(entrance) ?? 0) * 1000 : 0;
       const startAt = g.engagedAt + Math.round(lead);
       cues.room = {
-        assetId: this.config.stems?.inRoom,
+        assetId: this.stemAsset('inRoom', g, roomIdHere),
         startAt,
         loop: true,
         seek: true,
@@ -310,6 +320,27 @@ export function checkMuseum(museum, rooms, errors, warnings) {
       }
     } else if (typeof value !== 'string') {
       errors.push(`museum.stems.${stem} must be an asset name`);
+    }
+  }
+  // Per-room takes on the shared stems. Only museum rooms play them, and only
+  // the stems that belong to a room — a typo would otherwise be silence.
+  const roomStems = museum.roomStems;
+  if (roomStems == null) return;
+  if (typeof roomStems !== 'object' || Array.isArray(roomStems)) {
+    errors.push('museum.roomStems must be an object keyed by room id');
+    return;
+  }
+  const museumRooms = new Set(Array.isArray(museum.rooms) ? museum.rooms : []);
+  for (const [roomId, own] of Object.entries(roomStems)) {
+    const at = `museum.roomStems.${roomId}`;
+    if (!museumRooms.has(roomId)) errors.push(`${at}: "${roomId}" is not one of museum.rooms`);
+    if (own == null || typeof own !== 'object' || Array.isArray(own)) {
+      errors.push(`${at} must be an object of stem → asset name`);
+      continue;
+    }
+    for (const [stem, value] of Object.entries(own)) {
+      if (!ROOM_STEMS.includes(stem)) errors.push(`${at}.${stem} is not a room stem (${ROOM_STEMS.join(', ')})`);
+      else if (typeof value !== 'string' || !value) errors.push(`${at}.${stem} must be an asset name`);
     }
   }
 }

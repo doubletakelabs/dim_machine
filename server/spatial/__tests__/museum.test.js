@@ -276,3 +276,45 @@ describe('a room completed by its own software', () => {
     }
   });
 });
+
+describe('a room with its own clips', () => {
+  // museum.roomStems: a room's own take on any shared stem; everything it does
+  // not declare falls back to museum.stems.
+  function withOwnClips() {
+    const def = JSON.parse(JSON.stringify(museum));
+    def.museum.roomStems = { kin: { entrance: 'whisper.wav', inRoom: 'ambient.wav', returnVisited: 'click.wav' } };
+    const rt = new SpatialRuntime({ enableTick: false, clock: new ManualClock(), assetSeconds: () => ENTRANCE_SECONDS });
+    assert.deepEqual(rt.load(def).errors, []);
+    rt.start();
+    return rt;
+  }
+
+  it('plays its own entrance, bed and return; other rooms keep the shared ones', () => {
+    const rt = withOwnClips();
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'kin');
+    assert.equal(voice(rt, g.guestId), 'whisper.wav');
+    assert.equal(bed(rt, g.guestId).assetId, 'ambient.wav');
+
+    walk(rt, g.guestId, 'museumHallway');
+    walk(rt, g.guestId, 'faerie');
+    assert.equal(voice(rt, g.guestId), 'audio/museum/entrance.wav', 'faerie has none of its own');
+    assert.equal(bed(rt, g.guestId).assetId, 'audio/museum/in_room.wav');
+
+    walk(rt, g.guestId, 'museumHallway');
+    walk(rt, g.guestId, 'kin');
+    assert.equal(voice(rt, g.guestId), 'click.wav', 'its own return');
+  });
+
+  it('validates what a room can override', () => {
+    const errorsFor = (roomStems) => {
+      const def = JSON.parse(JSON.stringify(museum));
+      def.museum.roomStems = roomStems;
+      return validateShowDefinition(def).errors.join('\n');
+    };
+    assert.match(errorsFor({ kin: { inHallway: 'x.wav' } }), /roomStems\.kin\.inHallway is not a room stem/);
+    assert.match(errorsFor({ library: { entrance: 'x.wav' } }), /"library" is not one of museum\.rooms/);
+    assert.match(errorsFor({ kin: { entrance: 7 } }), /roomStems\.kin\.entrance must be an asset name/);
+    assert.equal(errorsFor({ kin: { complete: 'chime.wav' } }), '');
+  });
+});

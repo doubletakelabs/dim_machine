@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, basename, resolve } from 'node:path';
+import { dirname, join, basename, resolve, sep } from 'node:path';
 import { SpatialRuntime, validateShowDefinition, ScaledClock } from './spatial/index.js';
 import { applyInstallation } from './spatial/installation.js';
 import * as relay from './relay.js';
@@ -114,23 +114,47 @@ app.post('/api/shows/:file', (req, res) => {
 });
 
 /**
- * The zone editor's save: geometry only, merged into the file on disk.
+ * Audio files the editor can assign — every sound under public/assets, as the
+ * path a cue names (`audio/museum/entrance.wav`).
+ */
+const AUDIO_EXT = /\.(wav|mp3|m4a|aac|ogg|opus|flac)$/i;
+app.get('/api/assets/audio', (_req, res) => {
+  try {
+    const files = readdirSync(assetsDir, { recursive: true })
+      .map((f) => String(f).split(sep).join('/'))
+      .filter((f) => AUDIO_EXT.test(f) && !f.split('/').some((part) => part.startsWith('.')))
+      .sort();
+    res.json(files);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * The zone editor's save: what the editor owns, merged into the file on disk.
  *
  * The editor used to send the whole show back, which made every save an
  * assertion that the editor's copy of the *entire* document was still true —
  * and a tab opened before a commit and saved after silently reverted that
  * commit (TECH-DEBT §5, 2026-09-13: a tracing pass undid the shared rooms).
- * Now the disk copy is the base truth for everything that is not a polygon,
- * and the patch cannot say anything else. Each named room's `zones` block is
- * replaced wholesale — that is what carries a deleted zone — and the merged
- * show must validate before anything lands.
+ * Now the disk copy is the base truth for everything the editor does not own,
+ * and the patch cannot say anything else. The editor owns, per room: `zones`
+ * (polygons and their `ble`), `thresholds`, and the room's own museum clips
+ * (`museum.roomStems.<roomId>`). Each named block is replaced wholesale — that
+ * is what carries a deletion; `null` or `{}` removes it — and the merged show
+ * must validate before anything lands.
  */
 app.post('/api/shows/:file/zones', (req, res) => {
   const file = basename(req.params.file);
   if (!file.endsWith('.json')) return res.status(400).json({ error: 'invalid file name' });
   const zones = req.body?.zones;
-  if (!zones || typeof zones !== 'object' || Array.isArray(zones)) {
-    return res.status(400).json({ error: 'body must be { zones: { roomId: { zoneId: { polygon } } } }' });
+  const thresholds = req.body?.thresholds ?? {};
+  const roomStems = req.body?.roomStems ?? {};
+  const isMap = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  if (!isMap(zones) || !isMap(thresholds) || !isMap(roomStems)) {
+    return res.status(400).json({
+      error: 'body must be { zones: { roomId: { zoneId: { polygon, ble? } } }, thresholds?: { roomId: {…} }, roomStems?: { roomId: {…} } }',
+    });
   }
   let def;
   try {
@@ -140,12 +164,28 @@ app.post('/api/shows/:file/zones', (req, res) => {
   }
   // A room the disk copy does not have is a stale editor talking about a world
   // that moved — exactly the situation this route exists to refuse loudly.
-  const unknown = Object.keys(zones).filter((roomId) => !def.rooms?.[roomId]);
+  const named = new Set([...Object.keys(zones), ...Object.keys(thresholds), ...Object.keys(roomStems)]);
+  const unknown = [...named].filter((roomId) => !def.rooms?.[roomId]);
   if (unknown.length) {
     return res.status(400).json({ error: `rooms not in the show on disk: ${unknown.join(', ')} — reload the editor` });
   }
   for (const [roomId, roomZones] of Object.entries(zones)) {
     def.rooms[roomId].zones = roomZones;
+  }
+  const empty = (v) => v == null || (isMap(v) && !Object.keys(v).length);
+  for (const [roomId, doors] of Object.entries(thresholds)) {
+    if (empty(doors)) delete def.rooms[roomId].thresholds;
+    else def.rooms[roomId].thresholds = doors;
+  }
+  if (Object.keys(roomStems).length) {
+    if (!isMap(def.museum)) return res.status(400).json({ error: 'this show has no museum block to hold room clips' });
+    const all = { ...(def.museum.roomStems ?? {}) };
+    for (const [roomId, own] of Object.entries(roomStems)) {
+      if (empty(own)) delete all[roomId];
+      else all[roomId] = own;
+    }
+    if (Object.keys(all).length) def.museum.roomStems = all;
+    else delete def.museum.roomStems;
   }
   const result = validateShowDefinition(def);
   if (result.errors.length) return res.status(400).json(result);

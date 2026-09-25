@@ -37,7 +37,7 @@
   .spacer { flex: 1; }
   a { color: var(--dim); }
 
-  main { flex: 1; min-height: 0; display: grid; gap: 10px; padding: 10px; grid-template-columns: 1fr 300px; }
+  main { flex: 1; min-height: 0; display: grid; gap: 10px; padding: 10px; grid-template-columns: 1fr 360px; }
   .card {
     background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
     display: flex; flex-direction: column; min-height: 0; overflow: hidden;
@@ -73,6 +73,23 @@
     padding: 0 4px; font: 11px ui-monospace, Menlo, monospace; color: var(--dim);
   }
   #help p { margin: 4px 0; color: var(--dim); font-size: 12px; }
+
+  /* Beacons, doors and clips for the selected zone and its room. */
+  #details { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  #details h3 { font-size: 12px; margin: 10px 0 6px; }
+  #details h3:first-child { margin-top: 0; }
+  .field { display: grid; grid-template-columns: 88px 1fr auto; gap: 6px; align-items: center; margin: 4px 0; }
+  .field > span { color: var(--dim); font-size: 11px; }
+  input[type=text], input[type=number] {
+    background: #1d2027; color: var(--ink); border: 1px solid var(--line); border-radius: 5px;
+    padding: 4px 7px; font: inherit; min-width: 0; width: 100%;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .field select { min-width: 0; width: 100%; }
+  .door { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin: 6px 0; background: #111318; }
+  .door .doorHead { display: flex; gap: 6px; align-items: center; }
+  .play { min-width: 26px; }
+  .note { color: var(--faint); font-size: 11px; margin: 2px 0 6px; }
 </style>
 </head>
 <body>
@@ -107,6 +124,7 @@
   <div class="card">
     <div class="cardHead"><h2>Rooms</h2></div>
     <div class="cardBody">
+      <div id="details"></div>
       <div id="roomList"></div>
       <div id="zoneActions" style="margin-top:10px; display:none">
         <button class="tiny" id="addZoneBtn">+ zone to this room</button>
@@ -117,9 +135,10 @@
       <div id="help">
         <h2 style="margin-top:14px">Notes</h2>
         <p>Edits land in the show file on Save — a running show keeps its loaded
-           copy until it is reloaded. Save writes <em>zones only</em>: the rest
-           of the show is merged from disk, so this tab can never overwrite a
-           change made elsewhere while it sat open.</p>
+           copy until it is reloaded. Save writes only what this page edits —
+           zones and their beacons, and the doors and clips of rooms you
+           changed here: the rest of the show is merged from disk, so this tab
+           can never overwrite a change made elsewhere while it sat open.</p>
         <p>Coordinates are floorplan pixels, saved as integers. A polygon keeps
            at least three points. Rooms may share a wall; they may not share
            ground — overlaps turn red and are listed here, and the same check
@@ -157,7 +176,11 @@ function pushUndo(coalesceMs = 0) {
   lastUndoAt = now;
   const snap = {};
   for (const [roomId, room] of Object.entries(def.rooms)) {
-    snap[roomId] = JSON.stringify(room.zones ?? {});
+    snap[roomId] = JSON.stringify({
+      zones: room.zones ?? {},
+      thresholds: room.thresholds ?? null,
+      stems: def.museum?.roomStems?.[roomId] ?? null,
+    });
   }
   undoStack.push(snap);
   if (undoStack.length > 100) undoStack.shift();
@@ -167,8 +190,16 @@ function pushUndo(coalesceMs = 0) {
 function undo() {
   const snap = undoStack.pop();
   if (!snap) return;
-  for (const [roomId, zones] of Object.entries(snap)) {
-    if (def.rooms[roomId]) def.rooms[roomId].zones = JSON.parse(zones);
+  for (const [roomId, json] of Object.entries(snap)) {
+    const room = def.rooms[roomId];
+    if (!room) continue;
+    const was = JSON.parse(json);
+    room.zones = was.zones;
+    if (was.thresholds) room.thresholds = was.thresholds; else delete room.thresholds;
+    if (def.museum) {
+      def.museum.roomStems ??= {};
+      if (was.stems) def.museum.roomStems[roomId] = was.stems; else delete def.museum.roomStems[roomId];
+    }
   }
   selVertex = null;
   render();
@@ -368,6 +399,7 @@ function render() {
 }
 
 function renderSidebar() {
+  renderDetails();
   const { pairs } = clashKeys();
   $('clashes').innerHTML = pairs.length
     ? pairs.map((p) => `<div class="clashText">✗ ${p}</div>`).join('')
@@ -399,6 +431,209 @@ function renderSidebar() {
   $('zoneActions').style.display = selection ? '' : 'none';
   $('delZoneBtn').disabled = !selection?.zoneId;
 }
+
+// ---------------------------------------------------------------- beacons, doors, clips
+
+/** Every sound under /assets, for the clip pickers. */
+let audioFiles = [];
+/** Rooms whose doors or clips were edited here — only those are saved. */
+const touched = new Set();
+
+/**
+ * The museum stems a room may have its own take on (server/spatial/museum.js
+ * ROOM_STEMS), with what triggers each — `complete` is easy to forget exists.
+ */
+const ROOM_STEMS = [
+  ['entrance', 'Entrance', 'spoken as they walk in and the room starts'],
+  ['inRoom', 'In room', 'the bed, from the end of the entrance'],
+  ['complete', 'Complete', 'when the room goes back to idle with them inside'],
+  ['returnVisited', 'Return', 'walking back into a room they have been in'],
+  ['inRoomDisabled', 'Out of rooms', 'first time in, after their rooms are spent'],
+  ['returnDisabled', 'Out, return', 'back again, rooms still spent'],
+];
+
+const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const beaconList = (text) => String(text).split(/[\s,]+/).filter(Boolean);
+const rssiValue = (text) => (String(text).trim() === '' ? null : Number(text));
+
+function clipOptions(current, emptyLabel) {
+  const known = new Set(audioFiles);
+  const extra = current && !known.has(current) ? [current] : []; // keep a name we cannot list
+  return `<option value="">${esc(emptyLabel)}</option>`
+    + [...extra, ...audioFiles].map((f) => `<option value="${esc(f)}"${f === current ? ' selected' : ''}>${esc(f)}${known.has(f) ? '' : ' (missing)'}</option>`).join('');
+}
+
+/** `fallback` is what plays when nothing is picked — the shared clip — so it can be previewed too. */
+function clipField(label, attrs, current, emptyLabel, note, fallback = null) {
+  const plays = current || fallback;
+  return `
+    <div class="field"><span>${esc(label)}</span>
+      <select ${attrs}>${clipOptions(current, emptyLabel)}</select>
+      <button class="tiny play" data-play="${esc(plays ?? '')}" ${plays ? '' : 'disabled'} title="Preview${current ? '' : ' the shared clip'}">▶</button>
+    </div>${note ? `<div class="note">${esc(note)}</div>` : ''}`;
+}
+
+function renderDetails() {
+  const box = $('details');
+  // Typing in a field is not an invitation to rebuild it under the cursor.
+  if (box.contains(document.activeElement)) return;
+  if (!def || !selection) {
+    box.innerHTML = '<p class="muted" style="margin:0">Select a zone to edit its beacons, and its room’s doors and clips.</p>';
+    return;
+  }
+  const { roomId, zoneId } = selection;
+  const room = def.rooms[roomId];
+  const zone = zoneId ? room.zones?.[zoneId] : null;
+  const ble = zone?.ble ?? {};
+  const doors = Object.entries(room.thresholds ?? {});
+  const museumRoom = def.museum?.rooms?.includes(roomId);
+  const own = def.museum?.roomStems?.[roomId] ?? {};
+  const shared = def.museum?.stems ?? {};
+
+  box.innerHTML = `
+    ${zone ? `
+      <h3>Zone <span class="mono">${esc(zoneId)}</span></h3>
+      <div class="field"><span>Beacons</span>
+        <input type="text" data-zone-ble="beacons" value="${esc((ble.beacons ?? []).join(', '))}" placeholder="b-14, b-15"><span></span></div>
+      <div class="field"><span>Enter RSSI</span>
+        <input type="number" data-zone-ble="rssiEnter" value="${esc(ble.rssiEnter)}" placeholder="-62"><span></span></div>
+      <div class="field"><span>Exit RSSI</span>
+        <input type="number" data-zone-ble="rssiExit" value="${esc(ble.rssiExit)}" placeholder="-70"><span></span></div>
+      <div class="note">Exit must be weaker (more negative) than enter.</div>` : ''}
+
+    <h3>Doors into ${esc(room.name ?? roomId)}</h3>
+    ${doors.length ? '' : '<div class="note">None. A door plays its clips while a guest stands at it — it never enters the room.</div>'}
+    ${doors.map(([doorId, door]) => `
+      <div class="door" data-door="${esc(doorId)}">
+        <div class="doorHead">
+          <input type="text" data-door-field="id" value="${esc(doorId)}" class="mono" title="Door id — unique in the show">
+          <button class="tiny" data-door-delete title="Delete this door">✕</button>
+        </div>
+        <div class="field"><span>Beacons</span>
+          <input type="text" data-door-field="beacons" value="${esc((door.beacons ?? []).join(', '))}" placeholder="b-31"><span></span></div>
+        <div class="field"><span>Trigger RSSI</span>
+          <input type="number" data-door-field="rssi" value="${esc(door.rssi)}" placeholder="-60"><span></span></div>
+        ${clipField('Guidance', 'data-door-field="guidance"', door.cues?.guidance?.audio, 'none')}
+        ${clipField('Room bed', 'data-door-field="room"', door.cues?.room?.audio, 'none')}
+        <div class="field"><span></span>
+          <label class="muted"><input type="checkbox" data-door-field="roomLoop"${door.cues?.room?.loop ? ' checked' : ''}> loop the bed</label><span></span></div>
+      </div>`).join('')}
+    <button class="tiny" data-door-add>+ door</button>
+
+    ${museumRoom ? `
+      <h3>Clips for ${esc(room.name ?? roomId)}</h3>
+      <div class="note">Blank uses the shared museum clip.</div>
+      ${ROOM_STEMS.map(([stem, label, note]) => clipField(label, `data-stem="${stem}"`, own[stem],
+        shared[stem] ? `shared: ${shared[stem]}` : 'shared (none set)', note, shared[stem])).join('')}` : ''}`;
+}
+
+/** Record an edit to a room's doors or clips: undoable, dirty, and saved. */
+function editRoom(roomId, mutate) {
+  document.activeElement?.blur?.(); // a focused button would hold the panel frozen
+  pushUndo();
+  mutate();
+  touched.add(roomId);
+  render();
+}
+
+$('details').addEventListener('change', (e) => {
+  const el = e.target;
+  const { roomId, zoneId } = selection ?? {};
+  if (!roomId) return;
+  const room = def.rooms[roomId];
+
+  if (el.dataset.zoneBle && zoneId) {
+    pushUndo();
+    const zone = room.zones[zoneId];
+    const ble = { ...(zone.ble ?? {}) };
+    const key = el.dataset.zoneBle;
+    const value = key === 'beacons' ? beaconList(el.value) : rssiValue(el.value);
+    if (value == null || (Array.isArray(value) && !value.length)) delete ble[key];
+    else ble[key] = value;
+    if (Object.keys(ble).length) zone.ble = ble; else delete zone.ble;
+    el.blur();
+    render();
+    return;
+  }
+
+  const doorEl = el.closest('[data-door]');
+  if (doorEl && el.dataset.doorField) {
+    const doorId = doorEl.dataset.door;
+    const field = el.dataset.doorField;
+    el.blur();
+    editRoom(roomId, () => {
+      const doors = room.thresholds;
+      const door = doors[doorId];
+      if (field === 'id') {
+        const next = el.value.trim();
+        const taken = new Set(Object.values(def.rooms).flatMap((r) => Object.keys(r.thresholds ?? {})));
+        if (!next || (next !== doorId && taken.has(next))) { setStatus(`door id "${next}" is empty or taken`); return; }
+        // Rebuild so the door keeps its place in the list.
+        room.thresholds = Object.fromEntries(Object.entries(doors).map(([k, v]) => [k === doorId ? next : k, v]));
+      } else if (field === 'beacons') {
+        const list = beaconList(el.value);
+        if (list.length) door.beacons = list; else delete door.beacons;
+      } else if (field === 'rssi') {
+        const v = rssiValue(el.value);
+        if (v == null) delete door.rssi; else door.rssi = v;
+      } else if (field === 'guidance' || field === 'room') {
+        door.cues ??= {};
+        if (el.value) door.cues[field] = { ...(door.cues[field] ?? {}), audio: el.value };
+        else delete door.cues[field];
+        if (!Object.keys(door.cues).length) delete door.cues;
+      } else if (field === 'roomLoop') {
+        if (door.cues?.room) {
+          if (el.checked) door.cues.room.loop = true; else delete door.cues.room.loop;
+        }
+      }
+    });
+    return;
+  }
+
+  if (el.dataset.stem && def.museum) {
+    el.blur();
+    editRoom(roomId, () => {
+      def.museum.roomStems ??= {};
+      const own = { ...(def.museum.roomStems[roomId] ?? {}) };
+      if (el.value) own[el.dataset.stem] = el.value; else delete own[el.dataset.stem];
+      if (Object.keys(own).length) def.museum.roomStems[roomId] = own;
+      else delete def.museum.roomStems[roomId];
+    });
+  }
+});
+
+let previewing = null;
+$('details').addEventListener('click', (e) => {
+  const { roomId } = selection ?? {};
+  const play = e.target.closest('[data-play]');
+  if (play) {
+    const was = previewing?.src;
+    previewing?.pause();
+    previewing = null;
+    const src = `/assets/${play.dataset.play}`;
+    if (was && was.endsWith(encodeURI(src))) return; // second press stops it
+    previewing = new Audio(src);
+    previewing.play().catch(() => setStatus(`could not play ${play.dataset.play}`));
+    return;
+  }
+  if (e.target.closest('[data-door-add]') && roomId) {
+    editRoom(roomId, () => {
+      const taken = new Set(Object.values(def.rooms).flatMap((r) => Object.keys(r.thresholds ?? {})));
+      let doorId = `${roomId}-door`;
+      for (let n = 2; taken.has(doorId); n++) doorId = `${roomId}-door${n}`;
+      def.rooms[roomId].thresholds = { ...(def.rooms[roomId].thresholds ?? {}), [doorId]: {} };
+    });
+    return;
+  }
+  const del = e.target.closest('[data-door-delete]');
+  if (del && roomId) {
+    const doorId = del.closest('[data-door]').dataset.door;
+    editRoom(roomId, () => {
+      delete def.rooms[roomId].thresholds[doorId];
+      if (!Object.keys(def.rooms[roomId].thresholds).length) delete def.rooms[roomId].thresholds;
+    });
+  }
+});
 
 function select(roomId, zoneId) {
   selection = { roomId, zoneId };
@@ -454,6 +689,9 @@ $('delZoneBtn').onclick = () => {
 };
 
 document.addEventListener('keydown', (e) => {
+  // Typing a beacon id is not editing the polygon: Backspace and the arrows
+  // belong to the field, and ⌘Z to the browser's own undo.
+  if (e.target.closest?.('input, select, textarea')) return;
   if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); undo(); return; }
   if (e.key === 'Escape') { selection = null; selVertex = null; render(); return; }
   const polygon = selectedPolygon();
@@ -561,6 +799,7 @@ async function loadShow(f) {
   selVertex = null;
   view = null;
   undoStack.length = 0;
+  touched.clear();
   dirty = false;
   $('dirtyPill').style.display = 'none';
   setStatus(`${Object.keys(def.rooms ?? {}).length} rooms`);
@@ -582,10 +821,18 @@ async function save() {
   for (const [roomId, room] of Object.entries(def.rooms ?? {})) {
     if (room.zones) zones[roomId] = room.zones;
   }
+  // Doors and clips only for rooms touched here, so a stale tab cannot erase
+  // ones somebody added to another room while it sat open.
+  const thresholds = {};
+  const roomStems = {};
+  for (const roomId of touched) {
+    thresholds[roomId] = def.rooms[roomId]?.thresholds ?? null;
+    if (def.museum?.rooms?.includes(roomId)) roomStems[roomId] = def.museum.roomStems?.[roomId] ?? null;
+  }
   const res = await fetch(`/api/shows/${encodeURIComponent(file)}/zones`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ zones }),
+    body: JSON.stringify({ zones, thresholds, roomStems }),
   });
   const result = await res.json();
   if (!res.ok) {
@@ -593,6 +840,7 @@ async function save() {
     return false;
   }
   dirty = false;
+  touched.clear();
   $('dirtyPill').style.display = 'none';
   const warned = (result.warnings ?? []).filter((w) => /overlap/.test(w));
   setStatus(warned.length ? `saved, with warnings: ${warned.join(' · ')}` : 'saved');
@@ -619,6 +867,7 @@ $('saveReloadBtn').onclick = async () => {
 };
 
 async function init() {
+  audioFiles = await (await fetch('/api/assets/audio')).json().catch(() => []);
   const shows = await (await fetch('/api/shows')).json();
   $('showFile').innerHTML = shows.map((f) => `<option>${f}</option>`).join('');
   const asked = new URLSearchParams(location.search).get('file');
