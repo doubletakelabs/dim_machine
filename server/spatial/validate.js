@@ -176,6 +176,41 @@ function checkRssi(value, at, errors) {
 }
 
 /**
+ * Beacons on the floor plan (plan: "Beacons instead of zones"). Each is inside
+ * one room — several in one room act as a group — or marks one of a room's
+ * doors (a threshold). Placed in the zone editor while the beacons go up.
+ */
+const BEACON_KEYS = ['at', 'room', 'door', 'rssi', 'txPower'];
+function checkBeacons(def, errors, warnings) {
+  const beacons = def.beacons;
+  if (beacons == null) return;
+  if (!isObject(beacons)) {
+    errors.push('beacons must be an object keyed by beacon id');
+    return;
+  }
+  const doors = new Set(Object.values(def.rooms ?? {}).flatMap((r) => Object.keys(r?.thresholds ?? {})));
+  for (const [id, b] of Object.entries(beacons)) {
+    const at = `beacons.${id}`;
+    if (!isObject(b)) {
+      errors.push(`${at} must be an object`);
+      continue;
+    }
+    for (const key of Object.keys(b)) {
+      if (!BEACON_KEYS.includes(key)) warnings.push(`${at}.${key} is not a beacon setting (${BEACON_KEYS.join(', ')})`);
+    }
+    if (!Array.isArray(b.at) || b.at.length !== 2 || !b.at.every((n) => typeof n === 'number' && Number.isFinite(n))) {
+      errors.push(`${at}.at must be [x, y] on the floor plan`);
+    }
+    if (b.room != null && b.door != null) errors.push(`${at} is inside a room or at a door, not both`);
+    else if (b.room != null && !def.rooms?.[b.room]) errors.push(`${at}.room names "${b.room}", which the show does not have`);
+    else if (b.door != null && !doors.has(b.door)) errors.push(`${at}.door names "${b.door}", which no room's thresholds declare`);
+    else if (b.room == null && b.door == null) warnings.push(`${at} belongs to no room or door yet`);
+    checkRssi(b.rssi, `${at}.rssi`, errors);
+    checkRssi(b.txPower, `${at}.txPower`, errors);
+  }
+}
+
+/**
  * Thresholds (§4.2c): a room's doorways. A guest at one hears its clips, and
  * that is all it does — it never enters the room, so it cannot activate it or
  * spend one of the guest's rooms. Checked after every zone, because a
@@ -987,6 +1022,7 @@ export function validateShowDefinition(raw) {
   }
 
   checkZoneOverlaps(def.rooms ?? {}, warnings);
+  checkBeacons(def, errors, warnings);
 
   if (def.zones != null) {
     errors.push('top-level "zones" was removed — declare zones inside each room (rooms.<id>.zones)');

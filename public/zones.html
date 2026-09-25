@@ -90,6 +90,15 @@
   .door .doorHead { display: flex; gap: 6px; align-items: center; }
   .play { min-width: 26px; }
   .note { color: var(--faint); font-size: 11px; margin: 2px 0 6px; }
+
+  /* Beacons: inside a room (blue), at a door (amber), not yet assigned (grey). */
+  .beacon { fill: #6ea8fe; stroke: #0b0c10; cursor: move; }
+  .beacon.door { fill: #e0a758; }
+  .beacon.loose { fill: #8a93a4; }
+  .beacon.sel { stroke: #fff; }
+  .beaconLabel { fill: #eef1f7; font-weight: 600; pointer-events: none; paint-order: stroke; stroke: #0b0c10; stroke-linejoin: round; }
+  button.on { background: #1f3a63; border-color: var(--accent); }
+  #plan.placing { cursor: crosshair; }
 </style>
 </head>
 <body>
@@ -101,6 +110,7 @@
   <span class="spacer"></span>
   <span class="pill mono" id="cursorPos">—</span>
   <span class="pill" id="dirtyPill" style="display:none">unsaved edits</span>
+  <button class="tiny" id="beaconModeBtn" title="Click on the plan to drop a beacon; inside a room it joins that room">◉ Place beacons</button>
   <button class="tiny" id="fitBtn">⤢ Fit</button>
   <button class="go" id="saveBtn">Save</button>
   <button id="saveReloadBtn" title="Saves, then reloads the show on the server — which stops it and clears every guest.">Save + reload show</button>
@@ -159,6 +169,10 @@ let file = null;
 let selection = null;      // { roomId, zoneId }
 let selVertex = null;      // index into the selected zone's polygon
 let dirty = false;
+let beaconMode = false;    // clicks on the plan drop beacons
+let selBeacon = null;      // id of the selected beacon
+let beaconDrag = null;     // { id, pointerId, handle, label }
+let beaconsTouched = false;
 
 // ---------------------------------------------------------------- undo
 
@@ -182,6 +196,7 @@ function pushUndo(coalesceMs = 0) {
       stems: def.museum?.roomStems?.[roomId] ?? null,
     });
   }
+  snap['\u0000beacons'] = JSON.stringify(def.beacons ?? null);
   undoStack.push(snap);
   if (undoStack.length > 100) undoStack.shift();
   markDirty();
@@ -190,7 +205,11 @@ function pushUndo(coalesceMs = 0) {
 function undo() {
   const snap = undoStack.pop();
   if (!snap) return;
+  const beaconsWere = JSON.parse(snap['\u0000beacons'] ?? 'null');
+  if (beaconsWere) def.beacons = beaconsWere; else delete def.beacons;
+  if (selBeacon && !def.beacons?.[selBeacon]) selBeacon = null;
   for (const [roomId, json] of Object.entries(snap)) {
+    if (roomId === '\u0000beacons') continue;
     const room = def.rooms[roomId];
     if (!room) continue;
     const was = JSON.parse(json);
@@ -341,8 +360,9 @@ function render() {
     const poly = document.createElementNS(SVG_NS, 'polygon');
     poly.setAttribute('points', z.polygon.map((p) => p.join(',')).join(' '));
     poly.setAttribute('class', `zone${isSel ? ' sel' : ''}${clashing.has(key) ? ' clash' : ''}`);
-    poly.onclick = () => {
+    poly.onclick = (evt) => {
       if (panMoved > 4) return;
+      if (beaconMode) { addBeacon(planPoint(evt), z.roomId); return; }
       select(z.roomId, z.zoneId);
     };
     svg.appendChild(poly);
@@ -393,6 +413,29 @@ function render() {
       });
       svg.appendChild(h);
     });
+  }
+
+  // Beacons on top of everything: blue inside a room, amber at a door.
+  for (const [id, b] of Object.entries(def.beacons ?? {})) {
+    if (!Array.isArray(b?.at)) continue;
+    const c = document.createElementNS(SVG_NS, 'circle');
+    c.setAttribute('cx', b.at[0]); c.setAttribute('cy', b.at[1]);
+    c.setAttribute('r', 6 * upp);
+    c.setAttribute('stroke-width', 2 * upp);
+    c.setAttribute('class', `beacon${b.door ? ' door' : b.room ? '' : ' loose'}${selBeacon === id ? ' sel' : ''}`);
+    const label = text(b.at[0], b.at[1] - 9 * upp, id, 'beaconLabel', 10 * upp);
+    c.addEventListener('pointerdown', (evt) => {
+      evt.stopPropagation(); // a beacon grab is not a pan
+      if (evt.button !== 0) return;
+      selectBeacon(id);
+      pushUndo();
+      beaconsTouched = true;
+      beaconDrag = { id, pointerId: evt.pointerId };
+      svg.setPointerCapture(evt.pointerId);
+    });
+    c.addEventListener('click', (evt) => evt.stopPropagation());
+    svg.appendChild(c);
+    svg.appendChild(label);
   }
 
   renderSidebar();
@@ -469,12 +512,114 @@ function clipField(label, attrs, current, emptyLabel, note, fallback = null) {
     </div>${note ? `<div class="note">${esc(note)}</div>` : ''}`;
 }
 
+// ---------------------------------------------------------------- beacons
+
+/** beacon id → 'room' | 'door' chosen in the panel before a room/door is. */
+const pickedKind = new Map();
+
+function nextBeaconId() {
+  const taken = new Set(Object.keys(def.beacons ?? {}));
+  let n = 1;
+  for (const id of taken) { const m = /^b-(\d+)$/.exec(id); if (m) n = Math.max(n, +m[1] + 1); }
+  while (taken.has(`b-${n}`)) n++;
+  return `b-${n}`;
+}
+
+function addBeacon(pt, roomId) {
+  pushUndo();
+  def.beacons ??= {};
+  const id = nextBeaconId();
+  def.beacons[id] = { at: [Math.round(pt.x), Math.round(pt.y)], ...(roomId ? { room: roomId } : {}), rssi: -70 };
+  beaconsTouched = true;
+  selectBeacon(id);
+  setStatus(`${id} placed${roomId ? ` in ${def.rooms[roomId]?.name ?? roomId}` : ''} — set its real id in the panel`);
+}
+
+function deleteBeacon(id) {
+  pushUndo();
+  delete def.beacons[id];
+  if (!Object.keys(def.beacons).length) delete def.beacons;
+  beaconsTouched = true;
+  selBeacon = null;
+  render();
+}
+
+function selectBeacon(id) {
+  selBeacon = id;
+  selection = null;
+  selVertex = null;
+  render();
+}
+
+function beaconForm(id) {
+  const b = def.beacons[id];
+  const kind = b.door ? 'door' : b.room ? 'room' : (pickedKind.get(id) ?? 'room');
+  const rooms = Object.entries(def.rooms ?? {});
+  const doors = rooms.flatMap(([roomId, r]) => Object.keys(r.thresholds ?? {}).map((d) => [d, r.name ?? roomId]));
+  return `
+    <h3>Beacon</h3>
+    <div class="field"><span>Id</span>
+      <input type="text" class="mono" data-beacon="id" value="${esc(id)}" placeholder="b-14"><span></span></div>
+    <div class="field"><span>Kind</span>
+      <select data-beacon="kind">
+        <option value="room"${kind === 'room' ? ' selected' : ''}>inside a room</option>
+        <option value="door"${kind === 'door' ? ' selected' : ''}>at a door</option>
+      </select><span></span></div>
+    ${kind === 'room' ? `
+    <div class="field"><span>Room</span>
+      <select data-beacon="room"><option value="">— choose —</option>
+        ${rooms.map(([r, room]) => `<option value="${esc(r)}"${r === b.room ? ' selected' : ''}>${esc(room.name ?? r)}</option>`).join('')}
+      </select><span></span></div>` : `
+    <div class="field"><span>Door</span>
+      <select data-beacon="door"><option value="">— choose —</option>
+        ${doors.map(([d, name]) => `<option value="${esc(d)}"${d === b.door ? ' selected' : ''}>${esc(name)} — ${esc(d)}</option>`).join('')}
+      </select><span></span></div>
+    ${doors.length ? '' : '<div class="note">No doors yet — select a zone and add one under “Doors into …”.</div>'}`}
+    <div class="field"><span>RSSI</span>
+      <input type="number" data-beacon="rssi" value="${esc(b.rssi)}" placeholder="-70"><span></span></div>
+    <div class="field"><span>txPower</span>
+      <input type="number" data-beacon="txPower" value="${esc(b.txPower)}" placeholder="at 1 m, e.g. -59"><span></span></div>
+    <div class="field"><span>Position</span><span class="mono">${b.at.join(', ')}</span><span></span></div>
+    <div class="note">Drag the dot to move it. ⌫ deletes the selected beacon.</div>
+    <button class="tiny" data-beacon-delete>delete beacon</button>`;
+}
+
+function editBeacon(el) {
+  const id = selBeacon;
+  const b = def.beacons?.[id];
+  if (!b) return;
+  const field = el.dataset.beacon;
+  document.activeElement?.blur?.();
+  pushUndo();
+  beaconsTouched = true;
+  if (field === 'id') {
+    const next = el.value.trim();
+    if (!next || (next !== id && def.beacons[next])) { setStatus(`beacon id "${next}" is empty or taken`); render(); return; }
+    def.beacons = Object.fromEntries(Object.entries(def.beacons).map(([k, v]) => [k === id ? next : k, v]));
+    if (pickedKind.has(id)) { pickedKind.set(next, pickedKind.get(id)); pickedKind.delete(id); }
+    selBeacon = next;
+  } else if (field === 'kind') {
+    // Remembered here, not in the show, until a room or door is picked.
+    pickedKind.set(id, el.value);
+    if (el.value === 'door') delete b.room; else delete b.door;
+  } else if (field === 'room') {
+    if (el.value) b.room = el.value; else delete b.room;
+  } else if (field === 'door') {
+    if (el.value) { b.door = el.value; delete b.room; } else delete b.door;
+  } else if (field === 'rssi' || field === 'txPower') {
+    const v = rssiValue(el.value);
+    if (v == null) delete b[field]; else b[field] = v;
+  }
+  render();
+}
+
 function renderDetails() {
   const box = $('details');
   // Typing in a field is not an invitation to rebuild it under the cursor.
   if (box.contains(document.activeElement)) return;
+  if (def && selBeacon && def.beacons?.[selBeacon]) { box.innerHTML = beaconForm(selBeacon); return; }
   if (!def || !selection) {
-    box.innerHTML = '<p class="muted" style="margin:0">Select a zone to edit its beacons, and its room’s doors and clips.</p>';
+    box.innerHTML = '<p class="muted" style="margin:0">Select a zone to edit its room’s doors and clips, or a beacon to edit it. <b>◉ Place beacons</b>, then click inside a room to drop one there.</p>';
     return;
   }
   const { roomId, zoneId } = selection;
@@ -534,6 +679,7 @@ function editRoom(roomId, mutate) {
 
 $('details').addEventListener('change', (e) => {
   const el = e.target;
+  if (el.dataset.beacon) { editBeacon(el); return; }
   const { roomId, zoneId } = selection ?? {};
   if (!roomId) return;
   const room = def.rooms[roomId];
@@ -600,6 +746,7 @@ $('details').addEventListener('change', (e) => {
 
 let previewing = null;
 $('details').addEventListener('click', (e) => {
+  if (e.target.closest('[data-beacon-delete]') && selBeacon) { deleteBeacon(selBeacon); return; }
   const { roomId } = selection ?? {};
   const play = e.target.closest('[data-play]');
   if (play) {
@@ -632,6 +779,7 @@ $('details').addEventListener('click', (e) => {
 });
 
 function select(roomId, zoneId) {
+  selBeacon = null;
   selection = { roomId, zoneId };
   selVertex = null;
   render();
@@ -689,7 +837,8 @@ document.addEventListener('keydown', (e) => {
   // belong to the field, and ⌘Z to the browser's own undo.
   if (e.target.closest?.('input, select, textarea')) return;
   if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); undo(); return; }
-  if (e.key === 'Escape') { selection = null; selVertex = null; render(); return; }
+  if (e.key === 'Escape') { selection = null; selVertex = null; selBeacon = null; render(); return; }
+  if (selBeacon && (e.key === 'Backspace' || e.key === 'Delete')) { e.preventDefault(); deleteBeacon(selBeacon); return; }
   const polygon = selectedPolygon();
   if (!polygon || selVertex == null) return;
   if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); removeVertex(selVertex); return; }
@@ -706,7 +855,7 @@ document.addEventListener('keydown', (e) => {
 // ---------------------------------------------------------------- pointers
 
 $('plan').addEventListener('pointerdown', (evt) => {
-  if (vertexDrag) return;
+  if (vertexDrag || beaconDrag) return;
   panning = { pointerId: evt.pointerId, client: { x: evt.clientX, y: evt.clientY }, box: currentBox(), captured: false };
   panMoved = 0;
 });
@@ -717,6 +866,14 @@ $('plan').addEventListener('pointermove', (evt) => {
     return `${Math.round(pt.x)}, ${Math.round(pt.y)}`;
   })();
 
+  if (beaconDrag && evt.pointerId === beaconDrag.pointerId) {
+    const b = def.beacons?.[beaconDrag.id];
+    if (!b) return;
+    const pt = planPoint(evt);
+    b.at = [Math.round(pt.x), Math.round(pt.y)];
+    render();
+    return;
+  }
   if (vertexDrag && evt.pointerId === vertexDrag.pointerId) {
     const polygon = selectedPolygon();
     if (!polygon) return;
@@ -746,6 +903,11 @@ $('plan').addEventListener('pointermove', (evt) => {
 });
 
 const endGesture = (evt) => {
+  if (beaconDrag?.pointerId === evt.pointerId) {
+    $('plan').releasePointerCapture(evt.pointerId);
+    beaconDrag = null;
+    render();
+  }
   if (vertexDrag?.pointerId === evt.pointerId) {
     $('plan').releasePointerCapture(evt.pointerId);
     vertexDrag = null;
@@ -782,6 +944,18 @@ $('plan').addEventListener('dblclick', (evt) => {
   render();
 });
 $('fitBtn').onclick = () => { view = null; render(); };
+$('beaconModeBtn').onclick = () => {
+  beaconMode = !beaconMode;
+  $('beaconModeBtn').classList.toggle('on', beaconMode);
+  $('plan').classList.toggle('placing', beaconMode);
+  setStatus(beaconMode ? 'placing beacons — click inside a room to drop one' : '');
+};
+// A click on bare plan (outside every room) drops an unassigned beacon.
+$('plan').addEventListener('click', (evt) => {
+  if (!beaconMode || panMoved > 4) return;
+  if (evt.target.tagName !== 'svg' && evt.target.tagName !== 'image') return;
+  addBeacon(planPoint(evt), null);
+});
 window.addEventListener('resize', render);
 
 // ---------------------------------------------------------------- load/save
@@ -796,6 +970,8 @@ async function loadShow(f) {
   view = null;
   undoStack.length = 0;
   touched.clear();
+  beaconsTouched = false;
+  selBeacon = null;
   dirty = false;
   $('dirtyPill').style.display = 'none';
   setStatus(`${Object.keys(def.rooms ?? {}).length} rooms`);
@@ -825,10 +1001,12 @@ async function save() {
     thresholds[roomId] = def.rooms[roomId]?.thresholds ?? null;
     if (def.museum?.rooms?.includes(roomId)) roomStems[roomId] = def.museum.roomStems?.[roomId] ?? null;
   }
+  const body = { zones, thresholds, roomStems };
+  if (beaconsTouched) body.beacons = def.beacons ?? null;
   const res = await fetch(`/api/shows/${encodeURIComponent(file)}/zones`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ zones, thresholds, roomStems }),
+    body: JSON.stringify(body),
   });
   const result = await res.json();
   if (!res.ok) {
@@ -837,6 +1015,7 @@ async function save() {
   }
   dirty = false;
   touched.clear();
+  beaconsTouched = false;
   $('dirtyPill').style.display = 'none';
   const warned = (result.warnings ?? []).filter((w) => /overlap/.test(w));
   setStatus(warned.length ? `saved, with warnings: ${warned.join(' · ')}` : 'saved');

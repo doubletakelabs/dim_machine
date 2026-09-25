@@ -148,10 +148,12 @@ app.post('/api/shows/:file/zones', (req, res) => {
   const file = basename(req.params.file);
   if (!file.endsWith('.json')) return res.status(400).json({ error: 'invalid file name' });
   const zones = req.body?.zones;
+  const hasBeacons = req.body != null && Object.prototype.hasOwnProperty.call(req.body, 'beacons');
+  const beacons = req.body?.beacons ?? null;
   const thresholds = req.body?.thresholds ?? {};
   const roomStems = req.body?.roomStems ?? {};
   const isMap = (v) => v && typeof v === 'object' && !Array.isArray(v);
-  if (!isMap(zones) || !isMap(thresholds) || !isMap(roomStems)) {
+  if (!isMap(zones) || !isMap(thresholds) || !isMap(roomStems) || (beacons != null && !isMap(beacons))) {
     return res.status(400).json({
       error: 'body must be { zones: { roomId: { zoneId: { polygon, ble? } } }, thresholds?: { roomId: {…} }, roomStems?: { roomId: {…} } }',
     });
@@ -173,6 +175,11 @@ app.post('/api/shows/:file/zones', (req, res) => {
     def.rooms[roomId].zones = roomZones;
   }
   const empty = (v) => v == null || (isMap(v) && !Object.keys(v).length);
+  // Beacons are the editor's whole map when it sends them at all.
+  if (hasBeacons) {
+    if (empty(beacons)) delete def.beacons;
+    else def.beacons = beacons;
+  }
   for (const [roomId, doors] of Object.entries(thresholds)) {
     if (empty(doors)) delete def.rooms[roomId].thresholds;
     else def.rooms[roomId].thresholds = doors;
