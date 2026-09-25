@@ -514,15 +514,16 @@ function clipField(label, attrs, current, emptyLabel, note, fallback = null) {
 
 // ---------------------------------------------------------------- beacons
 
-/** beacon id → 'room' | 'door' chosen in the panel before a room/door is. */
+/** beacon (major) → 'room' | 'door' chosen in the panel before a room/door is. */
 const pickedKind = new Map();
 
+/** Beacons are keyed by their iBeacon major number: the next one up, as a placeholder. */
 function nextBeaconId() {
   const taken = new Set(Object.keys(def.beacons ?? {}));
   let n = 1;
-  for (const id of taken) { const m = /^b-(\d+)$/.exec(id); if (m) n = Math.max(n, +m[1] + 1); }
-  while (taken.has(`b-${n}`)) n++;
-  return `b-${n}`;
+  for (const id of taken) if (/^\d+$/.test(id)) n = Math.max(n, +id + 1);
+  while (taken.has(String(n))) n++;
+  return String(n);
 }
 
 function addBeacon(pt, roomId) {
@@ -532,7 +533,7 @@ function addBeacon(pt, roomId) {
   def.beacons[id] = { at: [Math.round(pt.x), Math.round(pt.y)], ...(roomId ? { room: roomId } : {}), rssi: -70 };
   beaconsTouched = true;
   selectBeacon(id);
-  setStatus(`${id} placed${roomId ? ` in ${def.rooms[roomId]?.name ?? roomId}` : ''} — set its real id in the panel`);
+  setStatus(`beacon ${id} placed${roomId ? ` in ${def.rooms[roomId]?.name ?? roomId}` : ''} — set its real major number in the panel`);
 }
 
 function deleteBeacon(id) {
@@ -558,8 +559,8 @@ function beaconForm(id) {
   const doors = rooms.flatMap(([roomId, r]) => Object.keys(r.thresholds ?? {}).map((d) => [d, r.name ?? roomId]));
   return `
     <h3>Beacon</h3>
-    <div class="field"><span>Id</span>
-      <input type="text" class="mono" data-beacon="id" value="${esc(id)}" placeholder="b-14"><span></span></div>
+    <div class="field"><span>Major</span>
+      <input type="number" class="mono" data-beacon="id" value="${esc(id)}" min="0" max="65535" step="1" placeholder="14"><span></span></div>
     <div class="field"><span>Kind</span>
       <select data-beacon="kind">
         <option value="room"${kind === 'room' ? ' selected' : ''}>inside a room</option>
@@ -594,7 +595,9 @@ function editBeacon(el) {
   beaconsTouched = true;
   if (field === 'id') {
     const next = el.value.trim();
-    if (!next || (next !== id && def.beacons[next])) { setStatus(`beacon id "${next}" is empty or taken`); render(); return; }
+    if (!/^\d+$/.test(next) || +next > 65535 || (next !== id && def.beacons[next])) {
+      setStatus(`major "${next}" must be a whole number 0–65535, not already used`); render(); return;
+    }
     def.beacons = Object.fromEntries(Object.entries(def.beacons).map(([k, v]) => [k === id ? next : k, v]));
     if (pickedKind.has(id)) { pickedKind.set(next, pickedKind.get(id)); pickedKind.delete(id); }
     selBeacon = next;
@@ -635,7 +638,7 @@ function renderDetails() {
     ${zone ? `
       <h3>Zone <span class="mono">${esc(zoneId)}</span></h3>
       <div class="field"><span>Beacons</span>
-        <input type="text" data-zone-ble="beacons" value="${esc((ble.beacons ?? []).join(', '))}" placeholder="b-14, b-15"><span></span></div>
+        <input type="text" data-zone-ble="beacons" value="${esc((ble.beacons ?? []).join(', '))}" placeholder="14, 15"><span></span></div>
       <div class="field"><span>Enter RSSI</span>
         <input type="number" data-zone-ble="rssiEnter" value="${esc(ble.rssiEnter)}" placeholder="-62"><span></span></div>
       <div class="field"><span>Exit RSSI</span>

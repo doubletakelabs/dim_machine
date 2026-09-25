@@ -176,9 +176,10 @@ function checkRssi(value, at, errors) {
 }
 
 /**
- * Beacons on the floor plan (plan: "Beacons instead of zones"). Each is inside
- * one room — several in one room act as a group — or marks one of a room's
- * doors (a threshold). Placed in the zone editor while the beacons go up.
+ * Beacons on the floor plan (plan: "Beacons instead of zones"), keyed by their
+ * iBeacon major number. Each is inside one room — several in one room act as
+ * a group — or marks one of a room's doors (a threshold). Placed in the zone
+ * editor while the beacons go up.
  */
 const BEACON_KEYS = ['at', 'room', 'door', 'rssi', 'txPower'];
 function checkBeacons(def, errors, warnings) {
@@ -191,6 +192,9 @@ function checkBeacons(def, errors, warnings) {
   const doors = new Set(Object.values(def.rooms ?? {}).flatMap((r) => Object.keys(r?.thresholds ?? {})));
   for (const [id, b] of Object.entries(beacons)) {
     const at = `beacons.${id}`;
+    if (!/^\d+$/.test(id) || Number(id) > 65535) {
+      errors.push(`${at}: a beacon is keyed by its major number, a whole number 0–65535`);
+    }
     if (!isObject(b)) {
       errors.push(`${at} must be an object`);
       continue;
