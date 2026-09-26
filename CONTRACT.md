@@ -31,6 +31,10 @@ Decided on site at MAD, in one day; each is written into its section.
 - **"Shared" is about who runs a room, not about audio.** A `shared` room has no
   holder and costs no slot (§2, Kinds); what each guest hears in it is still
   their own timeline unless the room says `together`.
+- **A room's piece can move its room on (§8.1).** `{ "t": "event", "name" }`
+  on the experience link goes to the room's statechart; a new state is a new
+  clip for everyone inside. Slop sends `BACKGROUND_1`–`4` (dim_rooms
+  `08_slop/ROOM-NOTES.md`); its address is in `installations/mad.json`.
 - **Placeholder sounds are gone from MAD-DIM.** No room plays `whisper.wav` or
   `ambient.wav`, and the museum stems are blank until new clips are cut.
 
@@ -784,6 +788,16 @@ starts again from the top once the room empties and someone walks in. Decided
 2026-09-26: `own` everywhere except the Slop room. `perGuest` and
 `masterTimeline`, the names before that, still load as `own` and `together`
 with a warning.
+
+**What changes a room's state** — and so its clips: guests walking in and out,
+the operator panel's room events, and the room's own piece. A piece sends
+`{ "t": "event", "name": "BACKGROUND_2" }` on its experience link (dim_rooms
+ROOM-EXPERIENCE §3); the name goes to the room's statechart as an event. If the
+current state handles it the room moves — a nested state such as
+`active.background2` can carry its own cue, falling back to its parent's — and
+each guest inside gets the new clip from its top (or the room's shared moment,
+if `together`). An unhandled or malformed name changes nothing, and an idle
+room ignores its piece. Logged as `room.experienceEvent`.
 
 A fourth slot, `screen`, holds an image rather than a sound — a phone has one
 screen, so the sources compete for it instead of mixing. Guidance takes it first,

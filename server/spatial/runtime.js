@@ -192,6 +192,7 @@ export class SpatialRuntime {
         clock: this.clock,
         openSocket: this.openExperienceSocket,
         onChange: () => this.io.onStateChange?.(),
+        onEvent: (id, name) => this.roomEventFromExperience(id, name),
       }));
     }
     this.guestMachineConfig = buildGuestMachine(this.def);
@@ -506,6 +507,24 @@ export class SpatialRuntime {
     if (ok) this.append({ type: 'room.operatorEvent', roomId, event: String(event) });
     this.notifyChange();
     return ok;
+  }
+
+  /**
+   * A room's piece says something happened in the room (§8.1): the event goes
+   * to the room's statechart, and a new state is new clips for everyone inside
+   * — each from its top, or together in a `together` room. Only events the
+   * room's current state handles move it; anything else is logged and dropped.
+   */
+  roomEventFromExperience(roomId, name) {
+    const room = this.rooms.get(roomId);
+    if (!room || !this.running) return false;
+    const from = room.state;
+    room.send(name);
+    const moved = room.state !== from;
+    this.append({ type: 'room.experienceEvent', roomId, event: name, from, to: room.state, moved });
+    this.io.log?.(moved ? `${roomId} ← ${name} (from its piece): ${from} → ${room.state}` : `${roomId} ← ${name} (from its piece): no change in ${from}`);
+    if (moved) this.notifyChange();
+    return moved;
   }
 
   /** Operator placement — bypasses floor-plan geometry, not hysteresis. */

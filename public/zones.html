@@ -663,7 +663,11 @@ function renderDetails() {
  */
 function roomAudio(roomId, room) {
   const hallway = room.kind === 'hallway';
-  const states = hallway ? ['idle'] : Object.keys(room.machine?.states ?? { idle: {}, active: {} });
+  // Nested states too (`active.background2`): a room's piece can move it
+  // between them, and each can have its own clip; the parent's covers the rest.
+  const paths = (states, prefix = '') => Object.entries(states ?? {}).flatMap(([name, def]) =>
+    [prefix + name, ...paths(def?.states, `${prefix}${name}.`)]);
+  const states = hallway ? ['idle'] : paths(room.machine?.states ?? { idle: {}, active: {} });
   const when = {
     idle: hallway ? 'while they are in it' : 'inside, while the room is not running (before it starts, or not for them)',
     active: room.kind === 'shared' ? 'while someone is in it' : 'while it is running for them',

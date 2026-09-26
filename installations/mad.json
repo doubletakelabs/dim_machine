@@ -1,0 +1,7 @@
+{
+  "installation": "MAD — Dead Internet Museum",
+  "note": "The room machines on the show network (192.168.3.x). Start the show server with --installation installations/mad.json (or INSTALLATION=installations/mad.json). A room with an experience but no address here runs as an ordinary room.",
+  "experiences": {
+    "slop": "ws://192.168.3.7:8080"
+  }
+}

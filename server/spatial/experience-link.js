@@ -33,6 +33,9 @@
 
 import { EXPERIENCE_LIFECYCLE, EXPERIENCE_EVENTS } from './contract.js';
 
+/** A room event's name, as a statechart spells them: ACTIVATE, BACKGROUND_2. */
+const EVENT_NAME = /^[A-Z][A-Z0-9_]{0,63}$/;
+
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
 
@@ -44,6 +47,8 @@ export class ExperienceLink {
    * @param {object} [opts.clock]
    * @param {(url: string) => object} [opts.openSocket] — injected for tests
    * @param {(roomId: string) => void} [opts.onChange]
+   * @param {(roomId: string, name: string) => void} [opts.onEvent] — the piece
+   *   moved its room on (`{ t: "event", name }`)
    */
   constructor(opts) {
     this.roomId = opts.roomId;
@@ -51,6 +56,7 @@ export class ExperienceLink {
     this.clock = opts.clock ?? { now: () => Date.now(), setTimeout, clearTimeout };
     this.openSocket = opts.openSocket ?? null;
     this.onChange = opts.onChange ?? (() => {});
+    this.onEvent = opts.onEvent ?? (() => {});
 
     this.socket = null;
     this.state = 'idle';           // idle | connecting | ready | unreachable
@@ -193,6 +199,14 @@ export class ExperienceLink {
         maxDrivers: message.maxDrivers ?? null,
       };
       this.onChange(this.roomId);
+      return;
+    }
+    // Something happened in the room that its audio should follow — a new
+    // background, a new phase (2026-09-26). The name is an event on the room's
+    // own statechart; a name the room's current state does not handle changes
+    // nothing, which is what keeps this from being a way to push a room about.
+    if (message.t === 'event') {
+      if (typeof message.name === 'string' && EVENT_NAME.test(message.name)) this.onEvent(this.roomId, message.name);
       return;
     }
     // A voluntary health report, for the operator panel. Optional, so absence

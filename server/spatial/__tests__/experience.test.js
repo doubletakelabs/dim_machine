@@ -359,3 +359,52 @@ describe('handing a phone to an experience', () => {
     assert.deepEqual(experienceCues(cues), []);
   });
 });
+
+describe('a room piece moving its room on (event)', () => {
+  // 2026-09-26: the room's own computer knows when something happened — Slop
+  // changing background — and the phones' clips follow the room's state.
+  const phases = (show) => {
+    show.rooms.influence.machine.states.active = {
+      initial: 'main',
+      on: { RELEASE: 'settling', PHASE_2: '.phase2' },
+      states: { main: {}, phase2: {} },
+    };
+    show.rooms.influence.cues = {
+      active: { audio: 'audio/test/influence-main.mp3' },
+      'active.phase2': { audio: 'audio/test/influence-phase2.mp3' },
+    };
+  };
+
+  it('an event the room handles moves it, and each guest inside gets the new clip from its top', () => {
+    const { rt, server } = makeRuntime({ mutate: phases });
+    const g = driverIn(rt);
+    assert.equal(rt.rooms.get('influence').state, 'active.main');
+    assert.equal(rt.desiredCues(g.guestId).get('room')?.assetId, 'audio/test/influence-main.mp3');
+
+    rt.testAdvanceTime(4000);
+    server.latest().reply({ t: 'event', name: 'PHASE_2' });
+    assert.equal(rt.rooms.get('influence').state, 'active.phase2');
+    const cue = rt.desiredCues(g.guestId).get('room');
+    assert.equal(cue.assetId, 'audio/test/influence-phase2.mp3');
+    assert.equal(cue.startAt, rt.now(), 'from the top, now');
+    assert.ok(rt.eventLog.some((e) => e.type === 'room.experienceEvent' && e.event === 'PHASE_2' && e.moved));
+  });
+
+  it('an event the room does not handle, or a malformed one, changes nothing', () => {
+    const { rt, server } = makeRuntime({ mutate: phases });
+    driverIn(rt);
+    for (const message of [
+      { t: 'event', name: 'NO_SUCH_EVENT' },
+      { t: 'event', name: 'phase_2' },
+      { t: 'event', name: 42 },
+      { t: 'event' },
+    ]) server.latest().reply(message);
+    assert.equal(rt.rooms.get('influence').state, 'active.main');
+  });
+
+  it('an idle room is not started by its piece', () => {
+    const { rt, server } = makeRuntime({ mutate: phases });
+    server.latest().reply({ t: 'event', name: 'PHASE_2' });
+    assert.equal(rt.rooms.get('influence').state, 'idle');
+  });
+});

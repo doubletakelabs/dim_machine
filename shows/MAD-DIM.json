@@ -728,8 +728,19 @@
             }
           },
           "active": {
+            "initial": "background1",
             "on": {
-              "RELEASE": "idle"
+              "RELEASE": "idle",
+              "BACKGROUND_1": ".background1",
+              "BACKGROUND_2": ".background2",
+              "BACKGROUND_3": ".background3",
+              "BACKGROUND_4": ".background4"
+            },
+            "states": {
+              "background1": {},
+              "background2": {},
+              "background3": {},
+              "background4": {}
             }
           }
         }
@@ -751,6 +762,18 @@
       },
       "audio": {
         "timing": "together"
+      },
+      "experience": {
+        "experienceId": "slop-library",
+        "inputMode": "stream",
+        "inputs": [
+          "drag",
+          "release",
+          "tap",
+          "hold",
+          "swipe"
+        ],
+        "maxDrivers": 1
       }
     },
     "kin": {
