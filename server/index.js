@@ -517,6 +517,7 @@ function sendRoster() {
       token,
       guestId: u.guestId,
       label: u.label,
+      device: u.device ?? null,
       connected: !!u.ws,
       disconnectedForMs: offlineMs,
       telemetry: u.telemetry ?? null,
@@ -547,6 +548,43 @@ setInterval(sendRoster, 2000);
 
 function label(token) {
   return users.get(token)?.label ?? '?';
+}
+
+/**
+ * A show handset's number (Headwind's device number, sent by the Android app in
+ * `hello`). It becomes the guest's label — "#23" is the phone with 23 on its case.
+ */
+function cleanDevice(value) {
+  const s = value == null ? '' : String(value).trim();
+  return /^[A-Za-z0-9-]{1,16}$/.test(s) ? s : null;
+}
+
+function applyDevice(token, device) {
+  const u = users.get(token);
+  if (!u || !device) return;
+  u.device = device;
+  u.label = `#${device}`;
+  const guest = runtime.guests.get(u.guestId);
+  if (guest) guest.label = u.label;
+}
+
+/**
+ * What the Android app says about the handset, riding the page's telemetry:
+ * battery, Wi-Fi, beacons heard, the content it holds. Only known fields, and
+ * only of the right type — it is shown on the operator panel as-is.
+ */
+function cleanPhoneStatus(p) {
+  if (!p || typeof p !== 'object') return null;
+  const out = {};
+  const num = (k, lo, hi) => { if (typeof p[k] === 'number' && Number.isFinite(p[k]) && p[k] >= lo && p[k] <= hi) out[k] = p[k]; };
+  const str = (k, max) => { if (typeof p[k] === 'string' && p[k].length <= max) out[k] = p[k]; };
+  const bool = (k) => { if (typeof p[k] === 'boolean') out[k] = p[k]; };
+  num('battery', 0, 100); bool('charging'); num('wifiRssi', -127, 0); num('blePerSec', 0, 10000);
+  str('content', 32); num('contentSyncedAt', 0, 1e14); bool('syncing'); str('syncError', 160);
+  str('map', 16); num('mapSize', 0, 100000);
+  str('room', 64); num('roomMajor', 0, 65535); bool('estimated'); str('door', 64);
+  str('app', 32);
+  return out;
 }
 
 /**
@@ -749,6 +787,9 @@ wss.on('connection', (ws) => {
           u.ws = ws;
         }
 
+        // The Android app names the handset; a browser sends no device.
+        applyDevice(token, cleanDevice(msg.device));
+
         send(ws, {
           type: 'welcome',
           token,
@@ -847,6 +888,7 @@ wss.on('connection', (ws) => {
             offset: msg.offset,
             rtt: msg.rtt,
             jitter: msg.jitter,
+            phone: cleanPhoneStatus(msg.phone),
             at: Date.now(),
           };
         }

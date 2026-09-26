@@ -276,6 +276,8 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 let ws = null;
 let snap = null;          // latest spatial snapshot
 let showMeta = null;
+/** guestId → the handset's roster entry (device number, telemetry), for the inspector. */
+let phones = new Map();
 let selection = null;     // { kind: 'room' | 'guest', id }
 let clockAt = { server: null, received: 0 };
 /** guestId → { target, drawn, node } — the tween state for each dot. */
@@ -376,6 +378,7 @@ function describeAllIntents() {
 
 function onRoster(msg) {
   snap = msg.spatial;
+  phones = new Map((msg.users ?? []).map((u) => [u.guestId, u]));
   showMeta = msg.show;
   clockAt = { server: snap?.clock ?? null, received: Date.now() };
   // The roster carries pending confirmations under the coordinator; fold them
@@ -959,6 +962,33 @@ function describeCues(cues) {
     .join('<br>');
 }
 
+/**
+ * What the Android app reports about a handset (battery, Wi-Fi, beacons, the
+ * content it holds). Nothing for a browser phone or a simulated guest.
+ */
+function phoneRows(user) {
+  const p = user?.telemetry?.phone;
+  if (!user?.device && !p) return '';
+  const ago = user.telemetry?.at ? Math.round((Date.now() - user.telemetry.at) / 1000) : null;
+  const stale = ago != null && ago > 15;
+  const battery = p?.battery != null
+    ? `<span style="color:${p.battery < 20 && !p.charging ? 'var(--bad, #e0685f)' : 'inherit'}">${p.battery}%</span>${p.charging ? ' ⚡' : ''}`
+    : '—';
+  const synced = p?.contentSyncedAt ? new Date(p.contentSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+  const content = p?.syncing ? 'syncing…'
+    : p?.content ? `${p.content.slice(0, 8)}${synced ? ` <span class="muted">· ${synced}</span>` : ''}`
+    : '<span style="color:#e0b050">none — put it on charge</span>';
+  return `
+      <dt>Phone</dt><dd>${user.device ? `#${user.device}` : '—'}${p?.app ? ` <span class="muted">· app ${p.app}</span>` : ''}${
+        ago != null ? ` <span class="${stale ? '' : 'muted'}" style="${stale ? 'color:#e0b050' : ''}">· ${ago}s ago</span>` : ''}</dd>
+      ${p ? `
+      <dt>Battery</dt><dd>${battery}</dd>
+      <dt>Signal</dt><dd>Wi-Fi ${p.wifiRssi != null ? `${p.wifiRssi} dBm` : '—'} · BLE ${p.blePerSec != null ? `${Math.round(p.blePerSec)}/s` : '—'}</dd>
+      <dt>Beacons</dt><dd>${p.room ? `${p.room}${p.roomMajor != null ? ` (${p.roomMajor})` : ''}${p.estimated ? ' <span class="muted">~est</span>' : ''}` : '—'}${
+        p.door ? ` · door ${p.door}` : ''} <span class="muted">· map ${p.map ?? '—'} ${p.mapSize ?? ''}</span></dd>
+      <dt>Content</dt><dd>${content}${p.syncError ? `<br><span style="color:#e0b050">⚠ ${p.syncError}</span>` : ''}</dd>` : ''}`;
+}
+
 function renderGuests() {
   const rows = (snap?.guests ?? []).map((g) => `
     <tr class="${selection?.kind === 'guest' && selection.id === g.guestId ? 'sel' : ''}"
@@ -1073,6 +1103,7 @@ function renderInspector() {
     <dl>
       <dt>Guest</dt><dd><span style="color:${standingColour(guest.currentRoom)}">●</span> ${guest.label}</dd>
       <dt>ID</dt><dd class="mono" style="font-size:11px">${guest.guestId}</dd>
+      ${phoneRows(phones.get(guest.guestId))}
       <dt>Journey</dt><dd>${guest.regions?.guidance ?? '—'}</dd>
       <dt>Museum</dt><dd>${guest.museum
         ? `${guest.museum.seen}/${guest.museum.limit} entered${

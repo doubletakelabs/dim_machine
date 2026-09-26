@@ -116,6 +116,10 @@ window.DIM.native = {
   },
 };
 
+function nativeStatus() {
+  try { return JSON.parse(nativeApp.status()); } catch { return undefined; }
+}
+
 function tellNative(method, ...args) {
   try { nativeApp?.[method]?.(...args); } catch (e) { console.warn('native bridge', method, e); }
 }
@@ -786,7 +790,10 @@ function connect() {
   ws.onopen = () => {
     reconnectDelay = 500;
     setConn(true);
-    sendMsg({ type: 'hello', token: getToken() });
+    // In the Android app, the handset's number (Headwind), so the panel says
+    // "#23" — the phone with 23 on its case.
+    const device = nativeApp?.deviceId?.();
+    sendMsg({ type: 'hello', token: getToken(), ...(device && device !== '—' ? { device } : {}) });
     // A reconnect, not a first connect: the server has been reconciling against
     // what this phone was last told, so it will send nothing — and what we were
     // told is long dead. Ask for the whole picture again.
@@ -836,7 +843,14 @@ function connect() {
         clock.addSample(msg.t0, msg.server, Date.now());
         $('offset').textContent = `${clock.offset.toFixed(1)}ms`;
         $('rtt').textContent = `${clock.rtt.toFixed(0)}ms`;
-        sendMsg({ type: 'telemetry', offset: Math.round(clock.offset * 10) / 10, rtt: Math.round(clock.rtt), jitter: Math.round(clock.jitter * 10) / 10 });
+        sendMsg({
+          type: 'telemetry',
+          offset: Math.round(clock.offset * 10) / 10,
+          rtt: Math.round(clock.rtt),
+          jitter: Math.round(clock.jitter * 10) / 10,
+          // The app's view of the handset: battery, Wi-Fi, beacons, content.
+          ...(nativeApp?.status ? { phone: nativeStatus() } : {}),
+        });
         break;
       case 'state': {
         lastState = msg.state;

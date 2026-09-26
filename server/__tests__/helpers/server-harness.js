@@ -222,11 +222,11 @@ export async function openOperator(server) {
 /**
  * A connected phone. Passing a token resumes that guest; passing none has the
  * server issue one, which is what a handset opening the page for the first time
- * does.
+ * does. `hello` adds fields to the hello, as the Android app's `device` does.
  */
-export async function openPhone(server, token) {
+export async function openPhone(server, token, hello = {}) {
   const phone = await connect(server).open();
-  phone.send({ type: 'hello', ...(token ? { token } : {}) });
+  phone.send({ type: 'hello', ...(token ? { token } : {}), ...hello });
   phone.welcome = await phone.waitFor('welcome');
   return phone;
 }

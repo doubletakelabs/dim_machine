@@ -417,6 +417,38 @@ describe('the Android app locating a phone', () => {
     op.close();
   });
 
+  it('names the guest after the handset, and shows what the app reports', async () => {
+    const op = await openOperator(server);
+    await runShow(op);
+    const phone = await openPhone(server, undefined, { device: '23' });
+    assert.equal(phone.welcome.label, '#23', 'the phone with 23 on its case');
+    const since = op.mark();
+    phone.send({ type: 'telemetry', offset: 1, rtt: 20, jitter: 2, phone: {
+      battery: 84, charging: false, wifiRssi: -58, blePerSec: 41.5, content: '2b86ab0ee9a07e7f',
+      map: 'server', mapSize: 60, room: 'kin', roomMajor: 14, estimated: false,
+      app: '0.1.0', injected: '<script>', battery2: 'x',
+    } });
+    // Telemetry does not push a roster; the next regular one (every 2 s) carries it.
+    const withPhone = await op.waitFor((m) => m.type === 'roster'
+      && m.users.some((u) => u.guestId === phone.welcome.guestId && u.telemetry?.phone), {
+      since, describe: 'a roster carrying the phone status',
+    });
+    const user = withPhone.users.find((u) => u.guestId === phone.welcome.guestId);
+    assert.equal(user.device, '23');
+    assert.equal(user.label, '#23');
+    assert.equal(user.telemetry.phone.battery, 84);
+    assert.equal(user.telemetry.phone.room, 'kin');
+    assert.equal(user.telemetry.phone.injected, undefined, 'unknown fields dropped');
+    const guest = withPhone.spatial.guests.find((g) => g.guestId === phone.welcome.guestId);
+    assert.equal(guest.label, '#23', 'the panel\'s guest list says #23 too');
+
+    const odd = await openPhone(server, undefined, { device: '../../x' });
+    assert.notEqual(odd.welcome.label, '#../../x', 'a device number is a plain id or nothing');
+    odd.close();
+    phone.close();
+    op.close();
+  });
+
   it('preloads door clips and a room\'s own clips', async () => {
     const op = await openOperator(server);
     await runShow(op);
