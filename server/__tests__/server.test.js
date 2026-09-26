@@ -670,8 +670,11 @@ describe('saving zones', () => {
     assert.deepEqual(after.museum.stems, before.museum.stems, 'the shared clips are untouched');
     assert.deepEqual(after.rooms.influence.zones, before.rooms.influence.zones, 'and so is the geometry');
 
-    // A room the save does not name keeps what it has; null removes.
-    res = await post({ thresholds: { influence: null }, roomStems: { influence: null } });
+    // A room the save does not name keeps what it has; null removes. The
+    // door's beacons go with it, or they would name a door no room declares.
+    const beacons = Object.fromEntries(Object.entries(after.beacons ?? {})
+      .map(([major, { door: d, ...b }]) => [major, d === 'influence-door' ? b : { ...b, ...(d && { door: d }) }]));
+    res = await post({ thresholds: { influence: null }, roomStems: { influence: null }, beacons });
     assert.equal(res.status, 200);
     after = await onDisk();
     assert.equal(after.rooms.influence.thresholds, undefined);
