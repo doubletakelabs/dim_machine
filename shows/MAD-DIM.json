@@ -1119,7 +1119,9 @@
         "museumHallway",
         "warehouse",
         "adminOffice",
-        "controlRoom"
+        "controlRoom",
+        "westHallway",
+        "griefbot"
       ],
       "zones": {
         "southCorridor": {
@@ -1467,7 +1469,8 @@
       "name": "Library",
       "kind": "shared",
       "adjacent": [
-        "controlRoom"
+        "controlRoom",
+        "westHallway"
       ],
       "zones": {
         "library": {
@@ -1555,6 +1558,55 @@
             "gain": 0.25
           }
         ]
+      }
+    },
+    "westHallway": {
+      "name": "West Hallway",
+      "kind": "hallway",
+      "adjacent": [
+        "southCorridor",
+        "library"
+      ],
+      "cues": {
+        "idle": {
+          "audio": "ambient.wav",
+          "loop": true,
+          "gain": 0.3
+        }
+      }
+    },
+    "griefbot": {
+      "name": "Griefbot",
+      "kind": "shared",
+      "adjacent": [
+        "southCorridor"
+      ],
+      "machine": {
+        "id": "griefbot",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "idle"
+            },
+            "states": {
+              "main": {}
+            }
+          }
+        }
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
       }
     }
   },
