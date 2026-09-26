@@ -160,6 +160,11 @@
       },
       "thresholds": {
         "entranceHallway-door": {}
+      },
+      "cues": {
+        "idle": {
+          "audio": "audio/0201-announcement.mp3"
+        }
       }
     },
     "maskRoom": {
@@ -305,6 +310,11 @@
       },
       "thresholds": {
         "hallOfHeroes-door": {}
+      },
+      "cues": {
+        "active": {
+          "audio": "audio/0401-hallofheroes.mp3"
+        }
       }
     },
     "cyclorama": {
@@ -377,6 +387,11 @@
       },
       "thresholds": {
         "cyclorama-door": {}
+      },
+      "cues": {
+        "active": {
+          "audio": "audio/0501-cyc.mp3"
+        }
       }
     },
     "museumHallway": {
@@ -1735,7 +1750,18 @@
       "consumption2",
       "consumption3"
     ],
-    "stems": {}
+    "stems": {},
+    "roomStems": {
+      "saas": {
+        "inRoom": "audio/1001-saas.mp3"
+      },
+      "slop": {
+        "inRoom": "audio/0901-slop.mp3"
+      },
+      "influence": {
+        "inRoom": "audio/1201-Influence.mp3"
+      }
+    }
   },
   "beacons": {
     "24065": {
