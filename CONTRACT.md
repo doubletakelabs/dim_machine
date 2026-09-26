@@ -35,6 +35,14 @@ Decided on site at MAD, in one day; each is written into its section.
   on the experience link goes to the room's statechart; a new state is a new
   clip for everyone inside. Slop sends `BACKGROUND_1`–`4` (dim_rooms
   `08_slop/ROOM-NOTES.md`); its address is in `installations/mad.json`.
+- **A way through the building (§4.2d).** A room's `stage` is its place in
+  the order guests walk; rooms they move between freely share one. A reading
+  of a room behind the furthest stage a guest has reached is ignored, so no
+  room they have left plays to them again, and a reading more than one room
+  away is ignored rather than held. Stepping into a new stage holds
+  `location.nextStageMs` (3000); one room skipped, for a dead spot, holds
+  `location.skipAheadMs` (5000). An operator's placement starts the way on
+  again from where they put the guest.
 - **Placeholder sounds are gone from MAD-DIM.** No room plays `whisper.wav` or
   `ambient.wav`, and the museum stems are blank until new clips are cut.
 
@@ -111,6 +119,7 @@ is allowed in — that keeps them portable across shows (spec §3.1).
 | `revisit.whenSeen` / `whenCompleted` | declaring one makes the runtime send `ACTIVATE_SEEN` / `ACTIVATE_COMPLETED` instead of `ACTIVATE`; `idle` must handle it (validated) | **live** |
 | `zones` | one or more polygons; occupancy is reported for the **room**, not the zone | **live** |
 | `zones.<id>.ble` | `beacons`, `rssiEnter`, `rssiExit` for that zone (§4.2) | declared |
+| `stage` | the room's place in the way through the building: a whole number from 1, shared by rooms guests move between freely (§4.2d) | **live** |
 | `thresholds` | the room's doorways, each `{}` — heard for `location.doorDwellMs` it enters the room; doors play nothing (§4.2c) | **live** |
 | `location` | per-room `entryConfirmMs` / `exitConfirmMs` overrides | **live** |
 
@@ -444,14 +453,33 @@ own socket, only when something changes:
 - `{ "type": "door", "major": 31 }` / `{ "type": "door", "major": null }` — at
   a door beacon / away from it; three seconds there enters its room (§4.2c).
 
-**Unlikely jumps.** The phone is the sensor; the server decides. A report is
-weighed by how far it jumps along the rooms' `adjacent` connections from where
-the guest is: the same room or next door moves them at once; one space skipped
-waits `location.jumpTwoStepsMs` (1500); further, or not connected, waits
-`location.jumpFartherMs` (5000) and is logged. Any other report in the meantime
-cancels the wait, so a flicker the phone takes back never lands; the same far
-room said again keeps its wait. Never a refusal — a phone out of contact can
-genuinely reappear anywhere — and a guest with no room yet moves at once.
+**The way through (rooms with a `stage`).** The phone is the sensor; the
+server decides. A report is weighed against the room the guest is in — or, out
+of contact, the last room they were in — along the rooms' `adjacent`
+connections, and against the furthest `stage` they have reached:
+
+| The reported room is… | Then |
+|---|---|
+| at an earlier stage than the furthest reached | ignored (`behind`) — no room they have left plays to them again |
+| more than one room away | ignored (`too far`) |
+| the same room, or next door within the stages reached | moves them at once |
+| next door, into a new stage | waits `location.nextStageMs` (3000) |
+| one room skipped (a dead spot), into a new stage | waits `location.skipAheadMs` (5000) |
+| one room skipped, within the stages reached | waits `location.jumpTwoStepsMs` (1500) |
+
+Any other report in the meantime cancels a wait, so a flicker the phone takes
+back never lands — which matters, because a stage once reached cannot be left
+backwards. An ignored report cancels nothing and is logged once
+(`guest.readingRefused`). A door is judged the same way: its dwell stands in
+for any wait, but a door behind the guest or rooms away never enters. A guest
+with no room yet moves at once, wherever they are; a new guest (the phone back
+on its charger, or reset) starts again. An operator placing a guest is
+authoritative: the furthest stage becomes that room's, so they can be sent back.
+
+**Unlikely jumps (rooms without a `stage`).** A show with no stages, or a room
+left out of them, keeps the older rule: the same room or next door moves them at
+once; one space skipped waits `location.jumpTwoStepsMs` (1500); further, or not
+connected, waits `location.jumpFartherMs` (5000) and is logged. Never a refusal.
 
 `welcome` and `assets` carry `beacons`, so a phone has the current list. The
 phone's pings keep contact: a phone the app locates keeps its room while it is

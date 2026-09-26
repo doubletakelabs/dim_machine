@@ -102,6 +102,15 @@ export class SpatialRuntime {
      * walks between reports: { roomId, zoneId, fromRoomId, steps, dueAt }.
      */
     this.beaconHolds = new Map();
+    /**
+     * guestId → the furthest `stage` they have reached, and the last room they
+     * were inside — where a phone that lost contact is still judged from. The
+     * way through the building (`rooms.*.stage`): no going back, no jumping on.
+     */
+    this.furthestStage = new Map();
+    this.lastRoom = new Map();
+    /** guestId → the room last refused, so a flicker is logged once. */
+    this.lastRefused = new Map();
     /** Injected so tests drive a link without a socket; see experience-link.js. */
     this.openExperienceSocket = io.openExperienceSocket ?? null;
     /** Show-clock instant the show started, for elapsed-time display. */
@@ -135,6 +144,9 @@ export class SpatialRuntime {
     this.eventLog = [];
     this.atThreshold.clear();
     this.lastRoomBeacon.clear();
+    this.furthestStage.clear();
+    this.lastRoom.clear();
+    this.lastRefused.clear();
 
     this.coordinator = new OccupancyCoordinator({
       rooms: this.def.rooms,
@@ -260,6 +272,9 @@ export class SpatialRuntime {
     this.walkthrough?.stop();
     this.atThreshold.clear();
     this.lastRoomBeacon.clear();
+    this.furthestStage.clear();
+    this.lastRoom.clear();
+    this.lastRefused.clear();
     this.beaconHolds.clear();
     for (const link of this.experiences.values()) link.stop();
     for (const actor of this.guestActors.values()) actor.stop();
@@ -366,6 +381,9 @@ export class SpatialRuntime {
     this.atThreshold.delete(guestId);
     this.lastRoomBeacon.delete(guestId);
     this.beaconHolds.delete(guestId);
+    this.furthestStage.delete(guestId);
+    this.lastRoom.delete(guestId);
+    this.lastRefused.delete(guestId);
     this.director.dropGuest(guestId);
     this.append({ type: 'guest.left', guestId, roomId: occupied });
     this.notifyChange();
@@ -534,6 +552,7 @@ export class SpatialRuntime {
     if (roomId && !this.rooms.has(roomId)) return false;
     if (!OCCUPANCY_STATES.includes(occupancy)) return false;
     this.virtualLocation.setOccupancy(guestId, roomId, occupancy);
+    if (roomId && occupancy === 'inside') this.placedAt(guestId, roomId);
     return true;
   }
 
@@ -576,6 +595,13 @@ export class SpatialRuntime {
     if (!this.running || !this.coordinator) return;
     for (const [guestId, at] of this.atThreshold) {
       if (at.entered || now - at.since < this.doorDwellMs()) continue;
+      // The dwell stands in for any hold, but not for the way through: a door
+      // behind them, or rooms away, is not a way in.
+      const move = this.judgeMove(guestId, at.roomId);
+      if (move.refused) {
+        this.refuseReading(guestId, at.roomId, move);
+        continue;
+      }
       at.entered = true;
       // The dwell is the confirmation; a jump held for this guest is moot.
       this.beaconHolds.delete(guestId);
@@ -618,16 +644,21 @@ export class SpatialRuntime {
     }
     const zoneId = Object.keys(this.def.rooms[beacon.room]?.zones ?? {})[0] ?? null;
 
+    // Behind them, or too far on: ignored, and any hold already running for a
+    // real move keeps running.
+    const move = this.judgeMove(guestId, beacon.room);
+    if (move.refused) {
+      this.refuseReading(guestId, beacon.room, move);
+      return { ok: false, reason: move.refused, roomId: this.guests.get(guestId)?.roomId ?? null };
+    }
+
     // The same far room said again (the app re-sends on every reconnect)
     // keeps its hold running; anything else replaces it — so a flicker to a
     // far room that the phone takes back before the hold runs out never lands.
     const held = this.beaconHolds.get(guestId);
     if (held?.roomId === beacon.room) return { ok: true, roomId: beacon.room, heldMs: held.dueAt - this.now() };
     this.beaconHolds.delete(guestId);
-    const here = this.coordinator.getOccupancy(guestId);
-    const from = here?.occupancy === 'inside' ? here.roomId : null;
-    const steps = from ? this.stepsBetween(from, beacon.room) : 0;
-    const holdMs = this.jumpHoldMs(steps);
+    const { from, steps, holdMs } = move;
     if (holdMs > 0) {
       this.beaconHolds.set(guestId, { roomId: beacon.room, zoneId, fromRoomId: from, steps, dueAt: this.now() + holdMs });
       const label = this.guests.get(guestId)?.label ?? guestId;
@@ -638,6 +669,60 @@ export class SpatialRuntime {
     }
     this.coordinator.ingestImmediate(guestId, beacon.room, 'inside', 'ble', zoneId);
     return { ok: true, roomId: beacon.room };
+  }
+
+  /**
+   * Whether a reading of `toRoomId` may move this guest, and after how long.
+   *
+   * Judged from the room they are in, or — out of contact — the last room they
+   * were in, by the rooms' `adjacent` connections. In a show whose rooms have a
+   * `stage` (the order a guest walks the building in):
+   *
+   * - a room at an earlier stage than the furthest they have reached is
+   *   behind them: refused, so no room they have left plays to them again;
+   * - more than one room away is refused — nobody crosses two rooms unseen;
+   * - next door within the stages they have reached moves them at once;
+   *   next door into a new stage holds `location.nextStageMs` (3000), as long
+   *   as a door takes, because once there they cannot come back;
+   * - one room skipped (a dead spot) holds `location.skipAheadMs` (5000) into
+   *   a new stage, `location.jumpTwoStepsMs` (1500) within them.
+   *
+   * A room with no stage, or a show with none, keeps the older rule: holds by
+   * distance (`jumpHoldMs`), never a refusal. A guest with no room yet moves at
+   * once, wherever they are.
+   *
+   * @returns {{ refused?: 'behind' | 'too far', from: string|null, steps: number, holdMs: number }}
+   */
+  judgeMove(guestId, toRoomId) {
+    const here = this.coordinator.getOccupancy(guestId);
+    const from = here?.occupancy === 'inside' ? here.roomId : (this.lastRoom.get(guestId) ?? null);
+    const steps = from ? this.stepsBetween(from, toRoomId) : 0;
+    const toStage = this.stageOf(toRoomId);
+    if (toStage == null) return { from, steps, holdMs: this.jumpHoldMs(steps) };
+    const furthest = this.furthestStage.get(guestId) ?? 0;
+    if (toStage < furthest) return { refused: 'behind', from, steps, holdMs: 0 };
+    if (steps > 2) return { refused: 'too far', from, steps, holdMs: 0 };
+    const onward = toStage > furthest;
+    const cfg = this.def?.location ?? {};
+    let holdMs = 0;
+    if (steps === 1 && onward) holdMs = cfg.nextStageMs ?? 3000;
+    if (steps === 2) holdMs = onward ? (cfg.skipAheadMs ?? 5000) : (cfg.jumpTwoStepsMs ?? 1500);
+    return { from, steps, holdMs };
+  }
+
+  /** A room's place in the way through the building, or null. */
+  stageOf(roomId) {
+    const stage = this.def?.rooms?.[roomId]?.stage;
+    return Number.isInteger(stage) ? stage : null;
+  }
+
+  /** A reading the way through rules out: logged once until it changes. */
+  refuseReading(guestId, roomId, move) {
+    if (this.lastRefused.get(guestId) === roomId) return;
+    this.lastRefused.set(guestId, roomId);
+    const label = this.guests.get(guestId)?.label ?? guestId;
+    this.append({ type: 'guest.readingRefused', guestId, fromRoomId: move.from, roomId, reason: move.refused });
+    this.io.log?.(`${label}: ${roomId} ignored — ${move.refused === 'behind' ? 'behind them' : `${move.steps} rooms from ${move.from}`}`);
   }
 
   /**
@@ -783,6 +868,14 @@ export class SpatialRuntime {
   /** @param {import('./coordinator.js').ZoneOccupancyEvent} event */
   handleOccupancyCommitted(event) {
     this.append(event);
+    if (event.occupancy === 'inside' && event.roomId) {
+      this.lastRoom.set(event.guestId, event.roomId);
+      this.lastRefused.delete(event.guestId);
+      const stage = this.stageOf(event.roomId);
+      if (stage != null && stage > (this.furthestStage.get(event.guestId) ?? 0)) {
+        this.furthestStage.set(event.guestId, stage);
+      }
+    }
     this.guests.get(event.guestId)?.applyOccupancy(event);
     // Rooms react first — a departure has to settle the room they left before
     // the guest actor decides anything about the room they entered.
@@ -1194,7 +1287,19 @@ export class SpatialRuntime {
     if (roomId == null) return this.setVirtualOccupancy(guestId, null, 'outside');
     const spot = this.standingSpot(roomId, guestId);
     if (!spot) return false;
-    return this.setVirtualPosition(guestId, spot[0], spot[1]);
+    // Somebody decided: back is allowed, and the way on starts from here.
+    if (!this.setVirtualPosition(guestId, spot[0], spot[1])) return false;
+    this.placedAt(guestId, roomId);
+    return true;
+  }
+
+  /** An operator's placement resets how far along the guest is. */
+  placedAt(guestId, roomId) {
+    const stage = this.stageOf(roomId);
+    if (stage != null) this.furthestStage.set(guestId, stage);
+    this.lastRoom.set(guestId, roomId);
+    this.beaconHolds.delete(guestId);
+    return true;
   }
 
   /**

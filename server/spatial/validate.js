@@ -977,7 +977,8 @@ export function validateShowDefinition(raw) {
   checkBeacons(def, errors, warnings);
   // How long a beacon report that jumps between unconnected spaces is held,
   // and how long a guest stands at a door before they have entered its room.
-  for (const key of ['jumpTwoStepsMs', 'jumpFartherMs', 'doorDwellMs']) {
+  checkStages(def.rooms ?? {}, errors, warnings);
+  for (const key of ['jumpTwoStepsMs', 'jumpFartherMs', 'doorDwellMs', 'nextStageMs', 'skipAheadMs']) {
     const v = def.location?.[key];
     if (v != null && (typeof v !== 'number' || !Number.isFinite(v) || v < 0)) {
       errors.push(`location.${key} must be a non-negative number of milliseconds`);
@@ -1004,4 +1005,32 @@ export function validateShowDefinition(raw) {
   checkAdherence(def.adherence, errors, warnings);
 
   return { errors, warnings };
+}
+
+/**
+ * `rooms.*.stage` — the order a guest walks the building in (§4.2d). A whole
+ * number from 1; rooms a guest can move between freely share one. Once any
+ * room has a stage, a room without one is not part of the way through.
+ */
+function checkStages(rooms, errors, warnings) {
+  const ids = Object.keys(rooms).filter((id) => isObject(rooms[id]));
+  const staged = ids.filter((id) => rooms[id].stage != null);
+  for (const id of staged) {
+    const v = rooms[id].stage;
+    if (!Number.isInteger(v) || v < 1) errors.push(`rooms.${id}.stage must be a whole number from 1`);
+  }
+  if (!staged.length) return;
+  for (const id of ids) {
+    if (rooms[id].stage == null) {
+      warnings.push(`rooms.${id} has no stage while other rooms do — it is outside the way through: no going back or jumping on is ruled out there`);
+    }
+  }
+  for (const id of staged) {
+    for (const other of rooms[id].adjacent ?? []) {
+      const a = rooms[id].stage, b = rooms[other]?.stage;
+      if (Number.isInteger(a) && Number.isInteger(b) && Math.abs(a - b) > 1) {
+        warnings.push(`rooms.${id} (stage ${a}) connects to ${other} (stage ${b}) — a stage is skipped`);
+      }
+    }
+  }
 }

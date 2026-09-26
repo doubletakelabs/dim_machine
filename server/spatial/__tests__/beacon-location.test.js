@@ -13,9 +13,13 @@ import { ManualClock } from '../clock.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 
-/** MAD-DIM with a known beacon list, whatever the install currently says. */
-function show() {
+/**
+ * MAD-DIM with a known beacon list, whatever the install currently says.
+ * `staged: false` takes out the way through, for the older rule it falls back to.
+ */
+function show({ staged = true } = {}) {
   const def = JSON.parse(readFileSync(join(root, 'shows/MAD-DIM.json'), 'utf8'));
+  if (!staged) for (const room of Object.values(def.rooms)) delete room.stage;
   def.rooms.influence.thresholds = {
     'influence-front': {},
   };
@@ -25,15 +29,20 @@ function show() {
     903: { at: [30, 30], room: 'kin', rssi: -70 },
     904: { at: [60, 60], room: 'hallOfHeroes', rssi: -70 },
     905: { at: [70, 70], room: 'cyclorama', rssi: -70 },
+    906: { at: [80, 80], room: 'entranceHallway', rssi: -70 },
+    907: { at: [90, 90], room: 'maskRoom', rssi: -70 },
+    908: { at: [95, 95], room: 'maskMirror', rssi: -70 },
+    909: { at: [99, 99], room: 'saas', rssi: -70 },
     931: { at: [40, 40], door: 'influence-front', rssi: -70 },
+    932: { at: [85, 85], door: 'entranceHallway-door', rssi: -70 },
     999: { at: [50, 50], rssi: -70 },
   };
   return def;
 }
 
-function running() {
+function running(opts) {
   const rt = new SpatialRuntime({ enableTick: false, clock: new ManualClock(), assetSeconds: () => 3 });
-  assert.deepEqual(rt.load(show()).errors, []);
+  assert.deepEqual(rt.load(show(opts)).errors, []);
   rt.start();
   const g = rt.spawnGuest();
   return { rt, guestId: g.guestId };
@@ -93,17 +102,17 @@ describe('locating a phone by beacon', () => {
   });
 });
 
-describe('unlikely jumps between beacons', () => {
+describe('unlikely jumps between beacons, in a show without stages', () => {
   // MAD-DIM's connections: Hall of Heroes – Cyclorama – Museum Hallway – Kin.
   it('next door moves at once', () => {
-    const { rt, guestId } = running();
+    const { rt, guestId } = running({ staged: false });
     rt.setGuestBeacon(guestId, 904);
     assert.equal(rt.setGuestBeacon(guestId, 905).heldMs, undefined);
     assert.equal(roomOf(rt, guestId), 'cyclorama');
   });
 
   it('one space skipped is held briefly, then believed', () => {
-    const { rt, guestId } = running();
+    const { rt, guestId } = running({ staged: false });
     rt.setGuestBeacon(guestId, 904);
     assert.equal(rt.setGuestBeacon(guestId, 901).heldMs, 1500, 'hall of heroes → museum hallway skips cyclorama');
     assert.equal(roomOf(rt, guestId), 'hallOfHeroes');
@@ -112,7 +121,7 @@ describe('unlikely jumps between beacons', () => {
   });
 
   it('further is held longer, and a flicker the phone takes back never lands', () => {
-    const { rt, guestId } = running();
+    const { rt, guestId } = running({ staged: false });
     rt.setGuestBeacon(guestId, 904);
     assert.equal(rt.setGuestBeacon(guestId, 902).heldMs, 5000, 'hall of heroes → kin, three steps');
     rt.testAdvanceTime(2000);
@@ -126,7 +135,7 @@ describe('unlikely jumps between beacons', () => {
   });
 
   it('a real far move lands after the hold; saying it again does not restart it', () => {
-    const { rt, guestId } = running();
+    const { rt, guestId } = running({ staged: false });
     rt.setGuestBeacon(guestId, 904);
     rt.setGuestBeacon(guestId, 902);
     rt.testAdvanceTime(3000);
@@ -136,14 +145,14 @@ describe('unlikely jumps between beacons', () => {
   });
 
   it('coming back from nowhere is believed at once', () => {
-    const { rt, guestId } = running();
+    const { rt, guestId } = running({ staged: false });
     assert.equal(rt.setGuestBeacon(guestId, 902).heldMs, undefined, 'first fix');
     assert.equal(roomOf(rt, guestId), 'kin');
   });
 
   it('the holds are show settings', () => {
     const rt = new SpatialRuntime({ enableTick: false, clock: new ManualClock(), assetSeconds: () => 3 });
-    const def = show();
+    const def = show({ staged: false });
     def.location = { ...(def.location ?? {}), jumpTwoStepsMs: 0, jumpFartherMs: 800 };
     assert.deepEqual(rt.load(def).errors, []);
     rt.start();
@@ -152,8 +161,111 @@ describe('unlikely jumps between beacons', () => {
     assert.equal(rt.setGuestBeacon(g.guestId, 901).heldMs, undefined, 'two steps: no hold');
     assert.equal(rt.setGuestBeacon(g.guestId, 904).heldMs, undefined, 'and back, two steps');
     assert.equal(rt.setGuestBeacon(g.guestId, 902).heldMs, 800);
-    const bad = show();
+    const bad = show({ staged: false });
     bad.location = { jumpFartherMs: -1 };
     assert.match(rt.load(bad).errors.join('\n'), /location\.jumpFartherMs must be a non-negative number/);
+  });
+});
+
+describe('the way through the building (rooms.*.stage)', () => {
+  // MAD-DIM: Entrance Hallway (2) – Mask Room / Mask Mirror (3) – Hall of
+  // Heroes (4) – Cyclorama (5) – Museum Hallway and its rooms (6).
+  /** Time passing with the phone connected: its pings keep contact. */
+  function wait(rt, guestId, ms) {
+    for (let t = 0; t < ms; t += 2000) {
+      rt.testAdvanceTime(Math.min(2000, ms - t));
+      rt.coordinator.touchLocation(guestId);
+    }
+  }
+  function inMaskRoom() {
+    const r = running();
+    r.rt.setGuestBeacon(r.guestId, 906);
+    assert.equal(r.rt.setGuestBeacon(r.guestId, 907).heldMs, 3000, 'a new stage holds as long as a door');
+    r.rt.testAdvanceTime(3100);
+    assert.equal(roomOf(r.rt, r.guestId), 'maskRoom');
+    return r;
+  }
+
+  it('a room behind them is ignored: the entrance never plays again', () => {
+    const { rt, guestId } = inMaskRoom();
+    assert.deepEqual(rt.setGuestBeacon(guestId, 906), { ok: false, reason: 'behind', roomId: 'maskRoom' });
+    rt.setGuestBeacon(guestId, 906);
+    wait(rt, guestId, 10000);
+    assert.equal(roomOf(rt, guestId), 'maskRoom');
+    assert.equal(rt.rooms.get('entranceHallway').state, 'idle');
+    assert.equal(rt.eventLog.filter((e) => e.type === 'guest.readingRefused').length, 1, 'logged once');
+  });
+
+  it('rooms at one stage are free to move between, both ways', () => {
+    const { rt, guestId } = inMaskRoom();
+    assert.deepEqual(rt.setGuestBeacon(guestId, 908), { ok: true, roomId: 'maskMirror' });
+    assert.deepEqual(rt.setGuestBeacon(guestId, 907), { ok: true, roomId: 'maskRoom' });
+    rt.setGuestBeacon(guestId, 901);
+  });
+
+  it('a flicker into the next stage never lands, so it cannot shut them out', () => {
+    const { rt, guestId } = inMaskRoom();
+    assert.equal(rt.setGuestBeacon(guestId, 904).heldMs, 3000);
+    rt.testAdvanceTime(1000);
+    rt.setGuestBeacon(guestId, 907);
+    rt.testAdvanceTime(4000);
+    assert.equal(roomOf(rt, guestId), 'maskRoom');
+    assert.equal(rt.furthestStage.get(guestId), 3, 'still free to come back to the mask room');
+  });
+
+  it('rooms away is refused, not held: Hall of Heroes never jumps to SaaS', () => {
+    const { rt, guestId } = inMaskRoom();
+    rt.setGuestBeacon(guestId, 904);
+    rt.testAdvanceTime(3100);
+    assert.equal(roomOf(rt, guestId), 'hallOfHeroes');
+    assert.equal(rt.setGuestBeacon(guestId, 909).reason, 'too far');
+    wait(rt, guestId, 10000);
+    assert.equal(roomOf(rt, guestId), 'hallOfHeroes');
+    assert.equal(rt.rooms.get('saas').state, 'idle');
+  });
+
+  it('one room skipped (a dead spot) lands after the longer hold, and shuts what it skipped', () => {
+    const { rt, guestId } = inMaskRoom();
+    assert.equal(rt.setGuestBeacon(guestId, 905).heldMs, 5000, 'mask room → cyclorama skips the hall of heroes');
+    rt.testAdvanceTime(3000);
+    rt.coordinator.touchLocation(guestId);
+    assert.equal(roomOf(rt, guestId), 'maskRoom');
+    rt.testAdvanceTime(2100);
+    assert.equal(roomOf(rt, guestId), 'cyclorama');
+    assert.equal(rt.setGuestBeacon(guestId, 904).reason, 'behind');
+  });
+
+  it('out of contact, they are judged from the last room they were in', () => {
+    const { rt, guestId } = inMaskRoom();
+    rt.testAdvanceTime(6000); // silence past contactLossMs
+    assert.equal(roomOf(rt, guestId), null);
+    assert.equal(rt.setGuestBeacon(guestId, 906).reason, 'behind');
+    assert.equal(rt.setGuestBeacon(guestId, 909).reason, 'too far');
+    assert.deepEqual(rt.setGuestBeacon(guestId, 907), { ok: true, roomId: 'maskRoom' }, 'back where they were, at once');
+  });
+
+  it('a door behind them never lets them in', () => {
+    const { rt, guestId } = inMaskRoom();
+    rt.setGuestDoorBeacon(guestId, 932);
+    rt.testAdvanceTime(4000);
+    assert.equal(roomOf(rt, guestId), 'maskRoom');
+    assert.equal(rt.atThreshold.get(guestId).entered, false);
+  });
+
+  it('an operator can send them back, and the way on starts again from there', () => {
+    const { rt, guestId } = inMaskRoom();
+    assert.equal(rt.sendGuestToRoom(guestId, 'entranceHallway'), true);
+    assert.equal(rt.furthestStage.get(guestId), 2);
+    assert.equal(rt.judgeMove(guestId, 'maskRoom').refused, undefined);
+  });
+
+  it('a stage is a whole number from 1', () => {
+    const rt = new SpatialRuntime({ enableTick: false, clock: new ManualClock(), assetSeconds: () => 3 });
+    const bad = show();
+    bad.rooms.kin.stage = 0;
+    assert.match(rt.load(bad).errors.join('\n'), /rooms\.kin\.stage must be a whole number from 1/);
+    const partial = show();
+    delete partial.rooms.kin.stage;
+    assert.match(rt.load(partial).warnings.join('\n'), /rooms\.kin has no stage/);
   });
 });

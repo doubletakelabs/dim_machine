@@ -14,6 +14,7 @@
       "adjacent": [
         "calibration"
       ],
+      "stage": 1,
       "zones": {
         "frontDesk": {
           "polygon": [
@@ -71,6 +72,7 @@
         "frontDesk",
         "entranceHallway"
       ],
+      "stage": 1,
       "zones": {
         "calibration": {
           "polygon": [
@@ -128,6 +130,7 @@
         "calibration",
         "maskRoom"
       ],
+      "stage": 2,
       "zones": {
         "entranceHallway": {
           "polygon": [
@@ -175,6 +178,7 @@
         "hallOfHeroes",
         "maskMirror"
       ],
+      "stage": 3,
       "zones": {
         "maskRoom": {
           "polygon": [
@@ -255,6 +259,7 @@
       "adjacent": [
         "maskRoom"
       ],
+      "stage": 3,
       "machine": {
         "id": "maskMirror",
         "initial": "idle",
@@ -317,6 +322,7 @@
         "maskRoom",
         "cyclorama"
       ],
+      "stage": 4,
       "zones": {
         "hallOfHeroes": {
           "polygon": [
@@ -402,6 +408,7 @@
         "hallOfHeroes",
         "museumHallway"
       ],
+      "stage": 5,
       "zones": {
         "cyclorama": {
           "polygon": [
@@ -499,6 +506,7 @@
         "consumption3",
         "southCorridor"
       ],
+      "stage": 6,
       "zones": {
         "museumHallway": {
           "polygon": [
@@ -599,6 +607,7 @@
       "adjacent": [
         "museumHallway"
       ],
+      "stage": 6,
       "zones": {
         "automation": {
           "polygon": [
@@ -660,6 +669,7 @@
       "adjacent": [
         "museumHallway"
       ],
+      "stage": 6,
       "zones": {
         "saas": {
           "polygon": [
@@ -720,6 +730,7 @@
       "adjacent": [
         "museumHallway"
       ],
+      "stage": 6,
       "zones": {
         "influence": {
           "polygon": [
@@ -799,6 +810,7 @@
       "adjacent": [
         "museumHallway"
       ],
+      "stage": 6,
       "zones": {
         "slop": {
           "polygon": [
@@ -885,6 +897,7 @@
       "adjacent": [
         "museumHallway"
       ],
+      "stage": 6,
       "zones": {
         "kin": {
           "polygon": [
@@ -942,6 +955,7 @@
       "adjacent": [
         "museumHallway"
       ],
+      "stage": 6,
       "zones": {
         "faerie": {
           "polygon": [
@@ -1014,6 +1028,7 @@
       "adjacent": [
         "museumHallway"
       ],
+      "stage": 6,
       "zones": {
         "superintelligence": {
           "polygon": [
@@ -1067,6 +1082,7 @@
       "adjacent": [
         "museumHallway"
       ],
+      "stage": 6,
       "zones": {
         "consumption1": {
           "polygon": [
@@ -1127,6 +1143,7 @@
       "adjacent": [
         "museumHallway"
       ],
+      "stage": 6,
       "zones": {
         "consumption2": {
           "polygon": [
@@ -1198,6 +1215,7 @@
       "adjacent": [
         "museumHallway"
       ],
+      "stage": 6,
       "zones": {
         "consumption3": {
           "polygon": [
@@ -1267,6 +1285,7 @@
         "westHallway",
         "griefbot"
       ],
+      "stage": 7,
       "zones": {
         "southCorridor": {
           "polygon": [
@@ -1320,6 +1339,7 @@
         "southCorridor",
         "adminOffice"
       ],
+      "stage": 7,
       "zones": {
         "warehouse": {
           "polygon": [
@@ -1389,6 +1409,7 @@
         "warehouse",
         "dataCenter"
       ],
+      "stage": 7,
       "zones": {
         "adminOffice": {
           "polygon": [
@@ -1448,6 +1469,7 @@
       "adjacent": [
         "adminOffice"
       ],
+      "stage": 7,
       "zones": {
         "dataCenter": {
           "polygon": [
@@ -1508,6 +1530,7 @@
         "southCorridor",
         "library"
       ],
+      "stage": 7,
       "zones": {
         "controlRoom": {
           "polygon": [
@@ -1568,6 +1591,7 @@
         "controlRoom",
         "westHallway"
       ],
+      "stage": 8,
       "zones": {
         "library": {
           "polygon": [
@@ -1652,6 +1676,7 @@
         "southCorridor",
         "library"
       ],
+      "stage": 7,
       "zones": {
         "westHallway": {
           "polygon": [
@@ -1684,6 +1709,7 @@
       "adjacent": [
         "southCorridor"
       ],
+      "stage": 7,
       "machine": {
         "id": "griefbot",
         "initial": "idle",
@@ -1827,7 +1853,9 @@
     "entryConfirmMs": 1500,
     "exitConfirmMs": 800,
     "contactLossMs": 5000,
-    "doorDwellMs": 3000
+    "doorDwellMs": 3000,
+    "nextStageMs": 3000,
+    "skipAheadMs": 5000
   },
   "inputBindings": {
     "tap": "TAP",
