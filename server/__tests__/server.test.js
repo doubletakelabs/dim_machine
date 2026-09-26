@@ -395,6 +395,7 @@ describe('the Android app locating a phone', () => {
     await runShow(op);
     const phone = await openPhone(server);
     assert.deepEqual(Object.keys(phone.welcome.beacons ?? {}).sort(), ['801', '831'], 'welcome carries the beacon list');
+    assert.deepEqual(phone.welcome.input, { mirrorX: true }, 'and how the handset is worn');
 
     phone.send({ type: 'location', major: 801 });
     await phone.waitFor((m) => m.type === 'state' && /^library · /.test(m.state), {

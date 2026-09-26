@@ -502,6 +502,15 @@ function runCue(cue, opts = {}) {
 // terminal `swipe left`, and something fires twice.
 // ---------------------------------------------------------------------------
 let inputMode = 'gestures';
+/**
+ * The show's `guest.input.mirrorX`: the handset hangs upside down on a lanyard,
+ * facing out, so the glass's left is the guest's right. Each touch is mirrored
+ * as it arrives, before anything reads it — swipe directions, drag and release
+ * all come out in the guest's own left and right, and no room has to know how
+ * the phone is worn. Up and down are unchanged.
+ */
+let mirrorX = false;
+const touchX = (x) => (mirrorX ? innerWidth - x : x);
 let experience = null;   // { ws, endpoint, driverId, hue, accepts }
 
 const repeatGuard = createRepeatGuard();
@@ -550,17 +559,17 @@ function enableGestures() {
   document.addEventListener('touchstart', (e) => {
     if (control(e)) return;
     const t = e.changedTouches[0];
-    begin(t.clientX, t.clientY);
+    begin(touchX(t.clientX), t.clientY);
   }, { passive: true });
   document.addEventListener('touchmove', (e) => {
     const t = e.changedTouches[0];
-    move(t.clientX, t.clientY);
+    move(touchX(t.clientX), t.clientY);
   }, { passive: true });
   document.addEventListener('touchend', (e) => {
     lastTouchAt = Date.now();
     if (control(e)) return;
     const t = e.changedTouches[0];
-    end(t.clientX, t.clientY);
+    end(touchX(t.clientX), t.clientY);
   }, { passive: true });
   // The OS taking the touch away — an incoming call, a notification pulled down
   // — never fires `touchend`. Without this the room holds a hold forever.
@@ -575,15 +584,15 @@ function enableGestures() {
   const afterTouch = () => Date.now() - lastTouchAt < 700;
   document.addEventListener('mousedown', (e) => {
     if (afterTouch() || control(e)) return;
-    begin(e.clientX, e.clientY);
+    begin(touchX(e.clientX), e.clientY);
   });
   document.addEventListener('mousemove', (e) => {
     if (afterTouch() || !touch.touching) return;
-    move(e.clientX, e.clientY);
+    move(touchX(e.clientX), e.clientY);
   });
   document.addEventListener('mouseup', (e) => {
     if (afterTouch() || control(e)) return;
-    end(e.clientX, e.clientY);
+    end(touchX(e.clientX), e.clientY);
   });
 }
 
@@ -872,6 +881,7 @@ function connect() {
         fillRoomPicker(msg.rooms ?? []);
         assetList = msg.assets ?? [];
         mixer = mixerConfig(msg.audioLayers);
+        mirrorX = msg.input?.mirrorX === true;
         applySnapshot(msg.snapshot);
         // The app re-sends location on this; beacons is forwarded if the server
         // provides the show's map (not yet — the app falls back to its own copy).
@@ -888,6 +898,7 @@ function connect() {
         assetList = msg.assets ?? [];
         // A show reload may retune the mixer along with the asset list.
         mixer = mixerConfig(msg.audioLayers);
+        mirrorX = msg.input?.mirrorX === true;
         if ('beacons' in msg) tellNative('onBeacons', JSON.stringify(msg.beacons ?? null));
         applyDuck();
         if (joined) await preload(assetList);

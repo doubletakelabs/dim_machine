@@ -43,6 +43,9 @@ Decided on site at MAD, in one day; each is written into its section.
   `location.nextStageMs` (3000); one room skipped, for a dead spot, holds
   `location.skipAheadMs` (5000). An operator's placement starts the way on
   again from where they put the guest.
+- **Left and right are the guest's (§8.1, Input).** The phone hangs upside
+  down on a lanyard; `guest.input.mirrorX` mirrors touches as they arrive, so
+  swipes, drags and releases report the guest's left and right.
 - **Placeholder sounds are gone from MAD-DIM.** No room plays `whisper.wav` or
   `ambient.wav`, and the museum stems are blank until new clips are cut.
 
@@ -942,6 +945,19 @@ guest-machine event:
 
 ```jsonc
 "inputBindings": { "tap": "TAP", "swipe": "SWIPE" }
+```
+
+**How the handset is worn** (live, 2026-09-26). `guest.input.mirrorX: true`
+says the phone hangs upside down on a lanyard, facing out, so the glass's left
+is the guest's right. The phone page mirrors each touch left-to-right as it
+arrives; up and down are unchanged. Everything it reports — a swipe's
+`direction`, a drag's `dx`, a release's `vx`, to the show and to a room's piece
+alike — is in the **guest's** left and right, never the screen's, so a room
+never needs to know how the phone is worn. MAD-DIM sets it. dim_rooms'
+`tools/experience-harness.mjs` mirrors the same way by default.
+
+```jsonc
+"guest": { "input": { "mirrorX": true } }
 ```
 
 That single indirection keeps the client ignorant of the narrative and the

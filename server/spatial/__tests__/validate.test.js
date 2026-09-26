@@ -325,6 +325,30 @@ describe('guest.audioLayers', () => {
   });
 });
 
+describe('guest.input', () => {
+  const withInput = (input) => {
+    const def = minimal();
+    def.guest.input = input;
+    return validateShowDefinition(def);
+  };
+
+  it('accepts a handset worn mirrored, or not', () => {
+    assert.deepEqual(withInput({ mirrorX: true }).errors, []);
+    assert.deepEqual(withInput({ mirrorX: false }).errors, []);
+  });
+
+  it('refuses anything but true or false', () => {
+    assert.match(withInput({ mirrorX: 'yes' }).errors.join('\n'), /guest\.input\.mirrorX must be true or false/);
+    assert.match(withInput('mirrored').errors.join('\n'), /guest\.input must be an object/);
+  });
+
+  it('warns about a setting it does not have', () => {
+    const result = withInput({ mirrorY: true });
+    assert.deepEqual(result.errors, []);
+    assert.match(result.warnings.join('\n'), /guest\.input\.mirrorY/);
+  });
+});
+
 describe('a resume promise with nowhere to resume from', () => {
   it('warns when resumeIfReturned is declared on a machine without settling', () => {
     const def = minimal();

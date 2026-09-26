@@ -1777,6 +1777,9 @@
       "crossfadeMs": 10000,
       "loopCrossfadeMs": 10000
     },
+    "input": {
+      "mirrorX": true
+    },
     "timers": {
       "museumTime": {
         "sinceEntering": "guidance.museum",

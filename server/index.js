@@ -472,6 +472,7 @@ function loadShow(file) {
     type: 'assets',
     assets: currentAssets(),
     audioLayers: runtime.def?.guest?.audioLayers ?? null,
+    input: runtime.def?.guest?.input ?? null,
     beacons: runtime.def?.beacons ?? null,
   }, 'phones');
   sendRoster();
@@ -816,6 +817,8 @@ wss.on('connection', (ws) => {
           assets: currentAssets(),
           // How this show mixes: duck depth and crossfade length (CONTRACT §8.1).
           audioLayers: runtime.def?.guest?.audioLayers ?? null,
+          // How the handset is worn: mirrorX flips left and right (§8.1).
+          input: runtime.def?.guest?.input ?? null,
           // For the handset's own room picker; see `setRoom`.
           rooms: runtime.roomChoices(),
           // What each beacon means, for the Android app's locator (keyed by major).
