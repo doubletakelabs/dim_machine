@@ -63,7 +63,8 @@
       "seen": {
         "dwellMs": 8000,
         "accumulate": true
-      }
+      },
+      "bg": "audio/bg/0101_PRECALIBRATION.mp3"
     },
     "calibration": {
       "name": "Calibration",
@@ -166,9 +167,10 @@
       },
       "cues": {
         "idle": {
-          "audio": "audio/0201-announcement.mp3"
+          "audio": "audio/guidance/0201-announcement.mp3"
         }
-      }
+      },
+      "bg": "audio/bg/0301-02_MASK_SEQUENCE_5MIN.mp3"
     },
     "maskRoom": {
       "name": "Mask Room",
@@ -246,12 +248,13 @@
       },
       "cues": {
         "active": {
-          "audio": "audio/0303-boardroom_visexercise.mp3"
+          "audio": "audio/guidance/0303-boardroom_visexercise.mp3"
         }
       },
       "thresholds": {
         "maskRoom-door": {}
-      }
+      },
+      "bg": "audio/bg/0301-02_MASK_SEQUENCE_5MIN.mp3"
     },
     "maskMirror": {
       "name": "Mask Mirror",
@@ -311,7 +314,7 @@
       },
       "cues": {
         "active": {
-          "audio": "audio/0304-boardroom_mirror.mp3"
+          "audio": "audio/guidance/0304-boardroom_mirror.mp3"
         }
       }
     },
@@ -397,9 +400,10 @@
       },
       "cues": {
         "active": {
-          "audio": "audio/0401-hallofheroes.mp3"
+          "audio": "audio/guidance/0401-hallofheroes.mp3"
         }
-      }
+      },
+      "bg": "audio/bg/0401_HALL_OF_HEROS.mp3"
     },
     "cyclorama": {
       "name": "Cyclorama",
@@ -485,7 +489,7 @@
       },
       "cues": {
         "active": {
-          "audio": "audio/0501-cyc.mp3"
+          "audio": "audio/guidance/0501-cyc.mp3"
         }
       }
     },
@@ -1770,7 +1774,8 @@
     "audioLayers": {
       "duckTo": 0.25,
       "duckMs": 300,
-      "crossfadeMs": 1000
+      "crossfadeMs": 10000,
+      "loopCrossfadeMs": 10000
     },
     "timers": {
       "museumTime": {
@@ -1800,20 +1805,24 @@
                 },
                 "sequence": [
                   {
-                    "audio": "audio/0102-calibration1.mp3",
-                    "advance": "tap"
+                    "audio": "audio/guidance/0102-calibration1.mp3",
+                    "advance": "tap",
+                    "bg": "audio/bg/0102_CALIBRATION1.mp3"
                   },
                   {
-                    "audio": "audio/0103-calibration2.mp3",
-                    "advance": "swipe"
+                    "audio": "audio/guidance/0103-calibration2.mp3",
+                    "advance": "swipe",
+                    "bg": "audio/bg/0103_CALIBRATION2.mp3"
                   },
                   {
-                    "audio": "audio/0104-calibration3.mp3",
-                    "advance": "drag"
+                    "audio": "audio/guidance/0104-calibration3.mp3",
+                    "advance": "drag",
+                    "bg": "audio/bg/0104_CALIBRATION3.mp3"
                   },
                   {
-                    "audio": "audio/0105-calibration4.mp3",
-                    "advance": "none"
+                    "audio": "audio/guidance/0105-calibration4.mp3",
+                    "advance": "none",
+                    "bg": "audio/bg/0105_CALIBRATION4.mp3"
                   }
                 ]
               },
@@ -1847,6 +1856,10 @@
       "guidance.ending": {
         "audio": "chime.wav"
       }
+    },
+    "bed": {
+      "audio": "audio/bg/DEAD_BATH_5MIN.mp3",
+      "from": "calibration"
     }
   },
   "location": {
@@ -1880,13 +1893,13 @@
     "stems": {},
     "roomStems": {
       "saas": {
-        "inRoom": "audio/1001-saas.mp3"
+        "inRoom": "audio/guidance/1001-saas.mp3"
       },
       "slop": {
-        "inRoom": "audio/0901-slop.mp3"
+        "inRoom": "audio/guidance/0901-slop.mp3"
       },
       "influence": {
-        "inRoom": "audio/1201-Influence.mp3"
+        "inRoom": "audio/guidance/1201-Influence.mp3"
       }
     }
   },

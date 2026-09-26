@@ -185,6 +185,39 @@ function checkBeacons(def, errors, warnings) {
 }
 
 /**
+ * The layers under the voices: a room's `bg` or a guest state's, and the
+ * show's `guest.bed` with the room it begins in. Each may be a file name or
+ * `{ audio, gain }`.
+ */
+function checkLayers(def, errors) {
+  const layer = (value, at) => {
+    if (typeof value === 'string' && value) return true;
+    if (isObject(value) && typeof value.audio === 'string' && value.audio) {
+      if (value.gain != null && !(typeof value.gain === 'number' && value.gain >= 0)) {
+        errors.push(`${at}.gain must be a non-negative number`);
+      }
+      return true;
+    }
+    errors.push(`${at} must be an audio file name or { "audio": ..., "gain": ... }`);
+    return false;
+  };
+  for (const [roomId, room] of Object.entries(def.rooms ?? {})) {
+    if (room?.bg != null) layer(room.bg, `rooms.${roomId}.bg`);
+  }
+  for (const [key, cue] of Object.entries(isObject(def.guest?.cues) ? def.guest.cues : {})) {
+    if (cue?.bg != null) layer(cue.bg, `guest.cues["${key}"].bg`);
+  }
+  const bed = def.guest?.bed;
+  if (bed == null) return;
+  if (!layer(bed, 'guest.bed')) return;
+  if (!isObject(bed) || !bed.from) {
+    errors.push('guest.bed needs "from": the room it begins in');
+  } else if (!def.rooms?.[bed.from]) {
+    errors.push(`guest.bed.from names "${bed.from}", which is not a room`);
+  }
+}
+
+/**
  * Thresholds (§4.2c): a room's doorways. A guest held at one for
  * `location.doorDwellMs` has entered its room, and stays in it while the door
  * is still heard. Doors play nothing of their own (2026-09-26); the room they
@@ -667,16 +700,16 @@ function checkGuest(guest, rooms, errors, warnings) {
     if (!isObject(guest.audioLayers)) {
       errors.push('guest.audioLayers must be an object');
     } else {
-      const { duckTo, duckMs, crossfadeMs } = guest.audioLayers;
+      const { duckTo, duckMs, crossfadeMs, loopCrossfadeMs } = guest.audioLayers;
       if (duckTo !== undefined && !(typeof duckTo === 'number' && duckTo >= 0 && duckTo <= 1)) {
         errors.push('guest.audioLayers.duckTo must be a number between 0 and 1 (1 turns ducking off)');
       }
-      for (const [key, value] of Object.entries({ duckMs, crossfadeMs })) {
+      for (const [key, value] of Object.entries({ duckMs, crossfadeMs, loopCrossfadeMs })) {
         if (value !== undefined && !(typeof value === 'number' && value >= 0)) {
           errors.push(`guest.audioLayers.${key} must be a non-negative number of milliseconds`);
         }
       }
-      const known = ['duckTo', 'duckMs', 'crossfadeMs'];
+      const known = ['duckTo', 'duckMs', 'crossfadeMs', 'loopCrossfadeMs'];
       for (const key of Object.keys(guest.audioLayers)) {
         if (!known.includes(key)) {
           warnings.push(`guest.audioLayers.${key} is not a mixer setting (known: ${known.join(', ')})`);
@@ -975,6 +1008,7 @@ export function validateShowDefinition(raw) {
 
   checkZoneOverlaps(def.rooms ?? {}, warnings);
   checkBeacons(def, errors, warnings);
+  checkLayers(def, errors);
   // How long a beacon report that jumps between unconnected spaces is held,
   // and how long a guest stands at a door before they have entered its room.
   checkStages(def.rooms ?? {}, errors, warnings);

@@ -95,7 +95,7 @@ for (const seq of chosen) {
     const secs = duration(step.audio);
     console.log(
       `  ${String(i + 1).padStart(2)}. ${describe(advance).padEnd(14)}`
-      + `${(step.image ?? '—').padEnd(34)}${(step.audio ?? '—').padEnd(34)}${secs}`,
+      + `${(step.image ?? '—').padEnd(34)}${(step.audio ?? '—').padEnd(44)}${secs}`,
     );
 
     // A delay shorter than its own narration cuts the voice off mid-sentence.

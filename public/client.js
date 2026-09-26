@@ -6,7 +6,9 @@
 import { createGestureRecogniser, createRepeatGuard } from './gestures.js';
 import { createClock } from './clock-sync.js';
 import { planAudio } from './cue-plan.js';
-import { mixerConfig, duckDecision, voiceEndsAt } from './mixer.js';
+import {
+  mixerConfig, duckDecision, voiceEndsAt, crossfadeLoop, VOICE_SLOTS as VOICES, LAYER_SLOTS as LAYERS,
+} from './mixer.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -153,53 +155,54 @@ let ctx = null;
 const audioBuffers = new Map();
 const videoBlobs = new Map();
 const imageUrls = new Map();
-const playing = new Map(); // assetId → { source, gainNode, timer? }
+const playing = new Map(); // assetId → { sources, gainNode, timer?, loopTimer? }
 const stopping = new Map(); // assetId → same, while fading out
 
 // ---------------------------------------------------------------------------
 // The mixer. Decisions live in mixer.js, where they have tests; this block
-// owns only the gain nodes the decisions are carried out with. The room bed
-// routes through one shared bus so a spoken line in `guidance`/`adherence`
-// can duck it without touching the bed's own cue gain, and release it to
-// exactly where it was.
+// owns only the gain nodes the decisions are carried out with. The layers —
+// `bg` and `bed` — route through one shared bus so a voice can duck them
+// without touching either's own cue gain, and release them to exactly where
+// they were.
 // ---------------------------------------------------------------------------
 let mixer = mixerConfig(null); // retuned by the show on welcome
-let roomBus = null;            // GainNode the `room` slot plays through
+let layerBus = null;           // GainNode the `bg` and `bed` slots play through
 const voices = new Map();      // assetId → endsAt (server ms, null = loop)
 let duckTimer = null;
-const VOICE_SLOTS = new Set(['guidance', 'adherence']);
+const VOICE_SLOTS = new Set(VOICES);
+const LAYER_SLOTS = new Set(LAYERS);
 
 /** Debug readout for the harness and a person with a console. */
 window.DIM.mixerState = () => ({
-  bus: roomBus ? Math.round(roomBus.gain.value * 1000) / 1000 : null,
+  bus: layerBus ? Math.round(layerBus.gain.value * 1000) / 1000 : null,
   voices: voices.size,
   playing: [...playing.keys()],
   config: mixer,
 });
 
 function busFor(slot) {
-  if (slot !== 'room' || !ctx) return ctx?.destination ?? null;
-  if (!roomBus) {
-    roomBus = ctx.createGain();
-    roomBus.connect(ctx.destination);
+  if (!LAYER_SLOTS.has(slot) || !ctx) return ctx?.destination ?? null;
+  if (!layerBus) {
+    layerBus = ctx.createGain();
+    layerBus.connect(ctx.destination);
   }
-  return roomBus;
+  return layerBus;
 }
 
-/** Bring the room bus in line with who is speaking. Safe to call anytime. */
+/** Bring the layer bus in line with who is speaking. Safe to call anytime. */
 function applyDuck() {
   clearTimeout(duckTimer);
   duckTimer = null;
   const now = clock.serverNow();
   for (const [id, endsAt] of voices) if (endsAt != null && endsAt <= now) voices.delete(id);
   const { ducked, nextCheckAt } = duckDecision([...voices.values()].map((endsAt) => ({ endsAt })), now);
-  if (roomBus && ctx) {
+  if (layerBus && ctx) {
     const target = ducked ? mixer.duckTo : 1;
-    roomBus.gain.cancelScheduledValues(ctx.currentTime);
-    roomBus.gain.setValueAtTime(roomBus.gain.value, ctx.currentTime);
+    layerBus.gain.cancelScheduledValues(ctx.currentTime);
+    layerBus.gain.setValueAtTime(layerBus.gain.value, ctx.currentTime);
     // setTargetAtTime reaches ~95% of the way in 3 time-constants, so /3000
     // makes duckMs the audible length of the move — same idiom as the fades.
-    roomBus.gain.setTargetAtTime(target, ctx.currentTime, Math.max(0.001, mixer.duckMs / 3000));
+    layerBus.gain.setTargetAtTime(target, ctx.currentTime, Math.max(0.001, mixer.duckMs / 3000));
   }
   if (nextCheckAt != null) {
     duckTimer = setTimeout(applyDuck, Math.max(50, clock.toLocal(nextCheckAt) - Date.now()));
@@ -255,47 +258,93 @@ function playAudio(cue, { seekIntoLoop = false } = {}) {
   if (plan.action === 'skip') return;
 
   stopAudio(cue.assetId, 0);
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-  source.loop = !!cue.loop;
-  if (plan.loopStart != null) {
-    source.loopStart = plan.loopStart;
-    source.loopEnd = plan.loopEnd;
-  }
   const gainNode = ctx.createGain();
   gainNode.gain.value = cue.gain ?? 1;
-  source.connect(gainNode).connect(busFor(cue.slot));
-
-  const start = (when) => (plan.startDuration != null
-    ? source.start(when, plan.startOffset, plan.startDuration)
-    : source.start(when, plan.startOffset));
+  gainNode.connect(busFor(cue.slot));
 
   let beginsAt = ctx.currentTime;
   if (plan.action === 'schedule') {
     const when = ctxTimeFor(plan.at);
     beginsAt = Math.max(when, ctx.currentTime);
-    start(beginsAt);
     reportCueAt(cue, when);
-  } else {
-    start(beginsAt);
   }
 
-  // A room bed fades in over the crossfade window — walking into a room is a
+  const entry = { sources: new Set(), gainNode };
+  // A layer that loops overlaps each pass with the next, rather than jumping
+  // from its last sample to its first. Whole files only: a slice has its own
+  // edges, and is looped plainly.
+  const overlap = LAYER_SLOTS.has(cue.slot) && cue.loop && cue.offset == null && cue.duration == null
+    ? crossfadeLoop(0, buffer.duration, mixer.loopCrossfadeMs / 1000)
+    : null;
+  if (overlap) {
+    const elapsed = plan.action === 'start' ? Math.max(0, (clock.serverNow() - cue.startAt) / 1000) : 0;
+    loopPass(entry, buffer, beginsAt, crossfadeLoop(elapsed, buffer.duration, mixer.loopCrossfadeMs / 1000).into);
+  } else {
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = !!cue.loop;
+    if (plan.loopStart != null) {
+      source.loopStart = plan.loopStart;
+      source.loopEnd = plan.loopEnd;
+    }
+    source.connect(gainNode);
+    if (plan.startDuration != null) source.start(beginsAt, plan.startOffset, plan.startDuration);
+    else source.start(beginsAt, plan.startOffset);
+    entry.sources.add(source);
+  }
+
+  // A layer fades in over the crossfade window — walking into a room is a
   // doorway, not a channel change. Paired with the director's fade-out on the
   // slot it vacated, the handover is a crossfade without either end knowing.
-  if (cue.slot === 'room' && mixer.crossfadeMs > 0) {
+  if (LAYER_SLOTS.has(cue.slot) && mixer.crossfadeMs > 0) {
     const target = cue.gain ?? 1;
     gainNode.gain.setValueAtTime(0.001, beginsAt);
     gainNode.gain.linearRampToValueAtTime(target, beginsAt + mixer.crossfadeMs / 1000);
   }
 
-  // A spoken line ducks the bed under it for exactly as long as it sounds.
+  // A spoken line ducks the layers under it for exactly as long as it sounds.
   if (VOICE_SLOTS.has(cue.slot)) {
     voices.set(cue.assetId, voiceEndsAt(cue, plan, clock.serverNow()));
     applyDuck();
   }
 
-  playing.set(cue.assetId, { source, gainNode });
+  playing.set(cue.assetId, entry);
+}
+
+/** An equal-power curve, so two passes blending never dip in the middle. */
+const FADE_STEPS = 64;
+const fadeInCurve = Float32Array.from({ length: FADE_STEPS }, (_, i) => Math.sin((i / (FADE_STEPS - 1)) * Math.PI / 2));
+const fadeOutCurve = Float32Array.from(fadeInCurve).reverse();
+
+/**
+ * One pass of a crossfaded loop, starting `into` seconds through the file at
+ * ctx time `when`, and the next pass booked to begin as this one starts to
+ * fade. Only the first pass of a loop can start partway through — a phone
+ * joining late — and it gets no fade in of its own: the layer's handover fade
+ * already covers it.
+ */
+function loopPass(entry, buffer, when, into) {
+  const xfade = mixer.loopCrossfadeMs / 1000;
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  const pass = ctx.createGain();
+  source.connect(pass).connect(entry.gainNode);
+  if (into === 0 && entry.sources.size) pass.gain.setValueCurveAtTime(fadeInCurve, when, xfade);
+  const endsAt = when + buffer.duration - into;
+  const fadeFrom = endsAt - xfade;
+  pass.gain.setValueCurveAtTime(fadeOutCurve, Math.max(when, fadeFrom), Math.min(xfade, endsAt - when));
+  source.start(when, into);
+  source.onended = () => {
+    entry.sources.delete(source);
+    try { pass.disconnect(); } catch {}
+  };
+  entry.sources.add(source);
+  // Booked a little ahead, so a busy main thread cannot make the next pass late.
+  const leadMs = 1500;
+  entry.loopTimer = setTimeout(
+    () => loopPass(entry, buffer, fadeFrom, 0),
+    Math.max(0, (fadeFrom - ctx.currentTime) * 1000 - leadMs),
+  );
 }
 
 function stopAudio(assetId, fadeMs = 0) {
@@ -311,9 +360,13 @@ function stopOneAudio(id, fadeMs) {
   if (!p) return;
   playing.delete(id);
   if (p.timer) clearTimeout(p.timer);
+  // A crossfaded loop books its next pass ahead; a stopped one books no more.
+  clearTimeout(p.loopTimer);
   const finish = () => {
-    try { p.source.stop(); } catch {}
-    try { p.source.disconnect(); } catch {}
+    for (const source of p.sources) {
+      try { source.stop(); } catch {}
+      try { source.disconnect(); } catch {}
+    }
     try { p.gainNode.disconnect(); } catch {}
     stopping.delete(id);
   };

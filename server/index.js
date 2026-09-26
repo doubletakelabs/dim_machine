@@ -361,9 +361,16 @@ function currentAssets() {
     }
   };
   collect(runtime.def?.guest?.cues);
+  for (const cue of Object.values(runtime.def?.guest?.cues ?? {})) {
+    collect({ bg: typeof cue?.bg === 'string' ? { audio: cue.bg } : cue?.bg });
+  }
   for (const room of Object.values(runtime.def?.rooms ?? {})) {
     collect(room.cues);
+    // A room's bg and the show's bed are layers rather than cues, but a phone
+    // plays them all the same.
+    collect({ bg: typeof room.bg === 'string' ? { audio: room.bg } : room.bg });
   }
+  collect({ bed: runtime.def?.guest?.bed });
   // The museum's stems are cues by another road, and a phone that has not
   // preloaded one plays silence at the exact moment it mattered.
   for (const value of Object.values(runtime.def?.museum?.stems ?? {})) {

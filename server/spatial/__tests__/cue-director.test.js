@@ -216,16 +216,108 @@ describe('audio timing — whose clock a room\'s cues run on', () => {
 });
 
 describe('the mixer numbers reach the wire', () => {
-  it('a vacated room bed fades over the show-authored crossfade', () => {
+  it('a vacated bg fades over the show-authored crossfade', () => {
+    const { rt, cues } = makeRuntime((show) => {
+      show.guest = { ...show.guest, audioLayers: { crossfadeMs: 2000 } };
+      show.rooms.hallway.bg = 'bg/rain.mp3';
+    });
+    const g = rt.spawnGuest();
+    walk(rt, g.guestId, AT.hallway);
+    walk(rt, g.guestId, AT.cellar);
+    const stop = forGuest(cues, g.guestId).filter((c) => c.kind === 'stopAudio' && c.assetId === 'bg/rain.mp3');
+    assert.equal(stop.length, 1, 'a room with no bg vacates it');
+    assert.equal(stop[0].fadeMs, 2000, 'the fade is the authored crossfade, not the hard default');
+  });
+
+  it('a room clip is a voice: leaving it keeps the short tail', () => {
     const { rt, cues } = makeRuntime((show) => {
       show.guest = { ...show.guest, audioLayers: { crossfadeMs: 2000 } };
     });
     const g = rt.spawnGuest();
     walk(rt, g.guestId, AT.hallway);
-    assert.ok(rt.desiredCues(g.guestId).get('room'), 'the bed is playing');
+    assert.ok(rt.desiredCues(g.guestId).get('room'), 'the hallway clip is playing');
     walk(rt, g.guestId, AT.out);
     const stop = forGuest(cues, g.guestId).filter((c) => c.kind === 'stopAudio').at(-1);
-    assert.ok(stop, 'leaving vacates the slot');
-    assert.equal(stop.fadeMs, 2000, 'the fade is the authored crossfade, not the hard default');
+    assert.equal(stop.fadeMs, 400);
+  });
+});
+
+describe('the layers under the voices', () => {
+  const layerCues = (cues, guestId, slot) => forGuest(cues, guestId).filter((c) => c.slot === slot);
+  const stopsOf = (cues, guestId, assetId) => forGuest(cues, guestId)
+    .filter((c) => c.kind === 'stopAudio' && c.assetId === assetId);
+
+  it('a room\'s bg loops', () => {
+    const { rt, cues } = makeRuntime((show) => { show.rooms.hallway.bg = 'bg/rain.mp3'; });
+    const g = rt.spawnGuest();
+    walk(rt, g.guestId, AT.hallway);
+    const [bg] = layerCues(cues, g.guestId, 'bg');
+    assert.equal(bg.assetId, 'bg/rain.mp3');
+    assert.equal(bg.loop, true);
+  });
+
+  it('carries the same bg on unbroken into the next room', () => {
+    const { rt, cues } = makeRuntime((show) => {
+      show.rooms.hallway.bg = 'bg/rain.mp3';
+      show.rooms.cellar.bg = { audio: 'bg/rain.mp3', gain: 0.5 };
+    });
+    const g = rt.spawnGuest();
+    walk(rt, g.guestId, AT.hallway);
+    walk(rt, g.guestId, AT.cellar);
+    walk(rt, g.guestId, AT.hallway);
+    assert.equal(layerCues(cues, g.guestId, 'bg').length, 1, 'sent once, never restarted');
+    assert.equal(stopsOf(cues, g.guestId, 'bg/rain.mp3').length, 0);
+  });
+
+  it('hands a different bg over, the old one fading as the new one starts', () => {
+    const { rt, cues } = makeRuntime((show) => {
+      show.rooms.hallway.bg = 'bg/rain.mp3';
+      show.rooms.cellar.bg = 'bg/wind.mp3';
+    });
+    const g = rt.spawnGuest();
+    walk(rt, g.guestId, AT.hallway);
+    walk(rt, g.guestId, AT.cellar);
+    assert.deepEqual(layerCues(cues, g.guestId, 'bg').map((c) => c.assetId), ['bg/rain.mp3', 'bg/wind.mp3']);
+    assert.equal(stopsOf(cues, g.guestId, 'bg/rain.mp3').length, 1);
+  });
+
+  it('keeps the bg through a gap in the sensing — no room is not a room without one', () => {
+    const { rt, cues } = makeRuntime((show) => { show.rooms.hallway.bg = 'bg/rain.mp3'; });
+    const g = rt.spawnGuest();
+    walk(rt, g.guestId, AT.hallway);
+    walk(rt, g.guestId, AT.out);
+    assert.equal(rt.desiredCues(g.guestId).get('bg')?.assetId, 'bg/rain.mp3');
+    assert.equal(stopsOf(cues, g.guestId, 'bg/rain.mp3').length, 0);
+  });
+
+  it('starts the bed in its room, and keeps it under everything after', () => {
+    const { rt, cues } = makeRuntime((show) => {
+      show.guest = { ...show.guest, bed: { audio: 'bed/drone.mp3', from: 'cellar' } };
+    });
+    const g = rt.spawnGuest();
+    walk(rt, g.guestId, AT.hallway);
+    assert.equal(rt.desiredCues(g.guestId).get('bed'), null, 'not before its room');
+
+    walk(rt, g.guestId, AT.cellar);
+    const bed = rt.desiredCues(g.guestId).get('bed');
+    assert.equal(bed.assetId, 'bed/drone.mp3');
+    assert.equal(bed.loop, true);
+
+    walk(rt, g.guestId, AT.hallway);
+    walk(rt, g.guestId, AT.out);
+    assert.equal(rt.desiredCues(g.guestId).get('bed').key, bed.key, 'the same bed, never restarted');
+    assert.equal(layerCues(cues, g.guestId, 'bed').length, 1);
+  });
+
+  it('gives each guest their own bed, from their own arrival', () => {
+    const { rt } = makeRuntime((show) => {
+      show.guest = { ...show.guest, bed: { audio: 'bed/drone.mp3', from: 'hallway' } };
+    });
+    const a = rt.spawnGuest();
+    walk(rt, a.guestId, AT.hallway);
+    rt.testAdvanceTime(5000);
+    const b = rt.spawnGuest();
+    walk(rt, b.guestId, AT.hallway);
+    assert.ok(rt.desiredCues(b.guestId).get('bed').startAt > rt.desiredCues(a.guestId).get('bed').startAt);
   });
 });

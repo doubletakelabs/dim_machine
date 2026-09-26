@@ -31,7 +31,7 @@ import {
 // The phone's own mixer module, imported here so the fade the server sends
 // and the fade-in the client runs come from one set of numbers — the same
 // one-source rule as zone-math.js, in the other direction.
-import { mixerConfig } from '../../public/mixer.js';
+import { mixerConfig, LAYER_SLOTS } from '../../public/mixer.js';
 
 export class CueDirector {
   /**
@@ -108,9 +108,9 @@ export class CueDirector {
             cueId: `cue-${++this._seq}`,
             kind: 'stopAudio',
             assetId: have.assetId,
-            // A vacated room bed fades over the crossfade window, meeting the
-            // incoming bed's fade-in halfway; voices keep the short tail.
-            fadeMs: have.fadeMs ?? (slot === 'room' ? (this.mixer?.crossfadeMs ?? 400) : 400),
+            // A vacated layer fades over the crossfade window, meeting the
+            // incoming one's fade-in halfway; voices keep the short tail.
+            fadeMs: have.fadeMs ?? (LAYER_SLOTS.includes(slot) ? (this.mixer?.crossfadeMs ?? 400) : 400),
           });
       }
       if (!want) {
@@ -222,6 +222,22 @@ export function audioPart(cue) {
 export function screenPart(cue) {
   if (!cue?.image) return null;
   return { assetId: cue.image, startAt: cue.startAt, key: `${cue.key}:i:${cue.image}` };
+}
+
+/**
+ * The bg a guest's own state asks for, if any — a calibration step changing
+ * the background under its clip. Guidance first, as it is for the screen; a
+ * state that names none leaves the room's bg to decide.
+ *
+ * @returns {string|object|undefined}
+ */
+export function guestBgFor(show, regions) {
+  for (const region of ['guidance', 'adherence']) {
+    if (!regions?.[region]) continue;
+    const declared = pickDeclared(show?.guest?.cues, `${region}.${regions[region]}`);
+    if (declared?.bg != null) return declared.bg;
+  }
+  return undefined;
 }
 
 /**

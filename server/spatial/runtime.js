@@ -4,7 +4,7 @@ import { OccupancyCoordinator } from './coordinator.js';
 import { VirtualLocationAdapter } from './virtual-location.js';
 import { RoomActor } from './room-actor.js';
 import {
-  CueDirector, roomCueFor, guestCueFor, audioPart, screenPart,
+  CueDirector, roomCueFor, guestCueFor, guestBgFor, audioPart, screenPart,
 } from './cue-director.js';
 import { Guest } from './guest.js';
 import { GuestActor } from './guest-actor.js';
@@ -34,6 +34,18 @@ const DRIVING_STANDINGS = ['holder', 'participant', 'present'];
 const TICK_MS = 100;
 const EVENT_LOG_CAP = 500;
 const OUTPUT_LOG_CAP = 200;
+
+/**
+ * A layer as authored: a file name, or `{ audio, gain }`. Null for anything
+ * else, which the validator will already have complained about.
+ */
+function layerDeclaration(value) {
+  if (typeof value === 'string' && value) return { audio: value };
+  if (value && typeof value === 'object' && typeof value.audio === 'string' && value.audio) {
+    return { audio: value.audio, ...(value.gain != null ? { gain: value.gain } : {}) };
+  }
+  return null;
+}
 
 /**
  * Spatial show runtime — v0.3 Phase A.
@@ -111,6 +123,13 @@ export class SpatialRuntime {
     this.lastRoom = new Map();
     /** guestId → the room last refused, so a flicker is logged once. */
     this.lastRefused = new Map();
+    /**
+     * guestId → { bg: { audio, gain, since } | null, bed: since | null } — when
+     * each layer began for them. A layer's startAt has to hold still while it
+     * plays, or the director would restart it: the same bg carried into the
+     * next room is the same cue.
+     */
+    this.layerSince = new Map();
     /** Injected so tests drive a link without a socket; see experience-link.js. */
     this.openExperienceSocket = io.openExperienceSocket ?? null;
     /** Show-clock instant the show started, for elapsed-time display. */
@@ -275,6 +294,7 @@ export class SpatialRuntime {
     this.furthestStage.clear();
     this.lastRoom.clear();
     this.lastRefused.clear();
+    this.layerSince.clear();
     this.beaconHolds.clear();
     for (const link of this.experiences.values()) link.stop();
     for (const actor of this.guestActors.values()) actor.stop();
@@ -384,6 +404,7 @@ export class SpatialRuntime {
     this.furthestStage.delete(guestId);
     this.lastRoom.delete(guestId);
     this.lastRefused.delete(guestId);
+    this.layerSince.delete(guestId);
     this.director.dropGuest(guestId);
     this.append({ type: 'guest.left', guestId, roomId: occupied });
     this.notifyChange();
@@ -1114,6 +1135,10 @@ export class SpatialRuntime {
       if (museum.guidance) desired.set('guidance', audioPart(museum.guidance));
     }
 
+    const layers = this.layersFor(guestId, here?.roomId ?? null, guestBgFor(this.def, regions));
+    desired.set('bg', layers.bg);
+    desired.set('bed', layers.bed);
+
     desired.set(EXPERIENCE_CUE_SLOT, this.experienceCueFor(guestId, here));
 
     // A phone has one screen, so the sources compete for it rather than mixing.
@@ -1126,6 +1151,43 @@ export class SpatialRuntime {
       screenPart(resolved.guidance) ?? screenPart(resolved.adherence) ?? screenPart(resolved.room),
     );
     return desired;
+  }
+
+  /**
+   * The two layers under the voices, for a guest standing in `roomId`.
+   *
+   * bg is the guest's own state's if it names one (a calibration step), else
+   * the room's (`rooms.<id>.bg`). Moving on to the same one carries it on
+   * unbroken; a room with none fades it out. Standing in no room at all —
+   * between zones, or a phone out of contact — keeps whatever was playing,
+   * because that is a gap in the sensing and not a place.
+   *
+   * The bed (`guest.bed`) begins the first time they stand in its `from` room
+   * and runs under everything after.
+   */
+  layersFor(guestId, roomId, stateBg) {
+    const was = this.layerSince.get(guestId) ?? { bg: null, bed: null };
+    const now = this.now();
+    let { bg } = was;
+    if (stateBg != null || roomId != null) {
+      const want = layerDeclaration(stateBg ?? this.def.rooms?.[roomId]?.bg);
+      bg = !want ? null : want.audio === bg?.audio ? bg : { ...want, since: now };
+    }
+    const bedDef = layerDeclaration(this.def.guest?.bed);
+    const bed = was.bed ?? (bedDef && roomId === this.def.guest.bed.from ? now : null);
+    this.layerSince.set(guestId, { bg, bed });
+
+    const cue = (slot, layer, since) => ({
+      assetId: layer.audio,
+      gain: layer.gain,
+      loop: true,
+      startAt: since,
+      key: `${slot}:${layer.audio}:${since}`,
+    });
+    return {
+      bg: bg ? cue('bg', bg, bg.since) : null,
+      bed: bedDef && bed != null ? cue('bed', bedDef, bed) : null,
+    };
   }
 
   /**

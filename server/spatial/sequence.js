@@ -189,7 +189,8 @@ function cueFor(step) {
   const cue = {};
   if (step.audio) cue.audio = step.audio;
   if (step.image) cue.image = step.image;
-  for (const field of ['loop', 'gain', 'fadeMs', 'offset', 'duration']) {
+  // `bg` rides along: a step can change the background under its own clip.
+  for (const field of ['loop', 'gain', 'fadeMs', 'offset', 'duration', 'bg']) {
     if (step[field] != null) cue[field] = step[field];
   }
   return cue;

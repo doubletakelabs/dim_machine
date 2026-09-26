@@ -119,18 +119,20 @@ describe('expanding a sequence into a machine', () => {
     assert.deepEqual(calibration(def).states.step4.after, { 5000: '#guest.guidance.prologue.done' });
   });
 
-  it('generates the cue for each step', () => {
+  it('generates the cue for each step, with the bg under it', () => {
     const { def } = expand();
     assert.deepEqual(def.guest.cues['guidance.prologue.calibration.step1'], {
-      audio: 'audio/0102-calibration1.mp3',
+      audio: 'audio/guidance/0102-calibration1.mp3',
+      bg: 'audio/bg/0102_CALIBRATION1.mp3',
     });
   });
 
   it('pairs a screen with its clip when a step has both', () => {
     const { def } = expand((show) => { sequenceOf(show)[0].image = 'img/calibration_01_ontap.png'; });
     assert.deepEqual(def.guest.cues['guidance.prologue.calibration.step1'], {
-      audio: 'audio/0102-calibration1.mp3',
+      audio: 'audio/guidance/0102-calibration1.mp3',
       image: 'img/calibration_01_ontap.png',
+      bg: 'audio/bg/0102_CALIBRATION1.mp3',
     });
   });
 
@@ -179,7 +181,7 @@ describe('the calibration sequence, running', () => {
 
     walkTo(rt, g.guestId, 'calibration');
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1');
-    assert.deepEqual(heard(cues), ['audio/0102-calibration1.mp3']);
+    assert.deepEqual(heard(cues), ['audio/guidance/0102-calibration1.mp3']);
   });
 
   it('waits on the guest, however long they take', () => {
@@ -192,7 +194,7 @@ describe('the calibration sequence, running', () => {
 
     rt.guestInput(g.guestId, 'tap');
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step2');
-    assert.deepEqual(heard(cues), ['audio/0103-calibration2.mp3']);
+    assert.deepEqual(heard(cues), ['audio/guidance/0103-calibration2.mp3']);
   });
 
   it('wants the gesture each step asked for, and only one of it', () => {
@@ -212,7 +214,7 @@ describe('the calibration sequence, running', () => {
     rt.guestInput(g.guestId, 'drag');
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step4');
     assert.deepEqual(heard(cues), [
-      'audio/0103-calibration2.mp3', 'audio/0104-calibration3.mp3', 'audio/0105-calibration4.mp3',
+      'audio/guidance/0103-calibration2.mp3', 'audio/guidance/0104-calibration3.mp3', 'audio/guidance/0105-calibration4.mp3',
     ]);
   });
 
@@ -229,9 +231,23 @@ describe('the calibration sequence, running', () => {
     walkTo(rt, g.guestId, 'entranceHallway');
     assert.equal(guidance(rt, g.guestId), 'prologue.done');
     assert.ok(
-      cues.some((c) => c.kind === 'stopAudio' && c.assetId === 'audio/0105-calibration4.mp3'),
+      cues.some((c) => c.kind === 'stopAudio' && c.assetId === 'audio/guidance/0105-calibration4.mp3'),
       'and its clip stops rather than following them out',
     );
+  });
+
+  it('changes the bg with each step, and hands it to the room at the hallway', () => {
+    const { rt, cues } = makeRuntime();
+    const g = arrive(rt, cues);
+    const bg = () => rt.desiredCues(g.guestId).get('bg')?.assetId;
+    assert.equal(bg(), 'audio/bg/0102_CALIBRATION1.mp3');
+    rt.guestInput(g.guestId, 'tap');
+    assert.equal(bg(), 'audio/bg/0103_CALIBRATION2.mp3');
+    rt.guestInput(g.guestId, 'swipe');
+    rt.guestInput(g.guestId, 'drag');
+    assert.equal(bg(), 'audio/bg/0105_CALIBRATION4.mp3');
+    walkTo(rt, g.guestId, 'entranceHallway');
+    assert.equal(bg(), museum.rooms.entranceHallway.bg, 'the room\'s own, once calibration is done');
   });
 
   it('ends early for a guest who walks out partway through', () => {
@@ -256,7 +272,7 @@ describe('the calibration sequence, running', () => {
     assert.equal(guidance(rt, b.guestId), 'prologue.calibration.step1');
     // A's gestures must not have moved B. This is the whole reason the sequence
     // lives on the guest and not in the room machine.
-    assert.deepEqual(heard(cues.filter((c) => c.guestId === b.guestId)), ['audio/0102-calibration1.mp3']);
+    assert.deepEqual(heard(cues.filter((c) => c.guestId === b.guestId)), ['audio/guidance/0102-calibration1.mp3']);
   });
 
   it('plays a reconnecting phone the clip it should be on', () => {
@@ -267,7 +283,7 @@ describe('the calibration sequence, running', () => {
     cues.length = 0;
 
     rt.resyncCues(g.guestId);
-    assert.deepEqual(heard(cues), ['audio/0104-calibration3.mp3'], 'a step is a state, not an event');
+    assert.deepEqual(heard(cues), ['audio/guidance/0104-calibration3.mp3'], 'a step is a state, not an event');
   });
 
   it('ignores a gesture the show binds to nothing', () => {

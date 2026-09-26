@@ -7,7 +7,9 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mixerConfig, duckDecision, voiceEndsAt, AUDIO_LAYER_DEFAULTS } from '../mixer.js';
+import {
+  mixerConfig, duckDecision, voiceEndsAt, crossfadeLoop, AUDIO_LAYER_DEFAULTS,
+} from '../mixer.js';
 
 describe('mixerConfig', () => {
   it('an undeclared show gets the defaults', () => {
@@ -18,8 +20,8 @@ describe('mixerConfig', () => {
 
   it('authored numbers win', () => {
     assert.deepEqual(
-      mixerConfig({ duckTo: 0.5, duckMs: 120, crossfadeMs: 2000 }),
-      { duckTo: 0.5, duckMs: 120, crossfadeMs: 2000 },
+      mixerConfig({ duckTo: 0.5, duckMs: 120, crossfadeMs: 2000, loopCrossfadeMs: 10000 }),
+      { duckTo: 0.5, duckMs: 120, crossfadeMs: 2000, loopCrossfadeMs: 10000 },
     );
   });
 
@@ -97,5 +99,28 @@ describe('voiceEndsAt', () => {
   it('a sliced cue measures from its own offset, not the file start', () => {
     // offset 10 in the file, joined at startOffset 12 — 2s into a 6s span.
     assert.equal(voiceEndsAt({ startAt: 0, offset: 10 }, { span: 6, startOffset: 12 }, 1000), 5000);
+  });
+});
+
+describe('crossfadeLoop', () => {
+  // A 60s recording overlapping itself by 10s comes round every 50s.
+  it('a pass comes round every span minus the overlap', () => {
+    assert.deepEqual(crossfadeLoop(0, 60, 10), { period: 50, into: 0, nextIn: 50 });
+    assert.deepEqual(crossfadeLoop(20, 60, 10), { period: 50, into: 20, nextIn: 30 });
+  });
+
+  it('a late joiner lands where the loop is, not where a plain loop would be', () => {
+    // 130s in: two full periods (100s) and 30s into the third pass. Dividing by
+    // the file length instead would put them 10s into it.
+    assert.equal(crossfadeLoop(130, 60, 10).into, 30);
+  });
+
+  it('a recording too short to overlap itself is looped plainly', () => {
+    assert.equal(crossfadeLoop(0, 15, 10), null, 'fade in and fade out would meet');
+    assert.equal(crossfadeLoop(0, 20, 10).period, 10, 'exactly twice the overlap still works');
+  });
+
+  it('no overlap is a plain loop', () => {
+    assert.equal(crossfadeLoop(0, 60, 0), null);
   });
 });

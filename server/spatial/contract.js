@@ -213,12 +213,13 @@ export const ELIGIBILITY_STRATEGIES = [
  * Audio slots a guest hears at once. One cue per slot, replaced when the slot's
  * source state changes.
  *
- * `room` is what the space is doing; `guidance` is the tour talking to them;
- * `adherence` is the show reacting to how they are following it. Three fixed
- * slots is not a mixer — `guest.audioLayers` is still Phase B — but it is enough
- * that guidance can speak over an ambient room without either cutting the other.
+ * Voices: `room` is the room's own clips; `guidance` is the tour talking to
+ * them; `adherence` is the show reacting to how they are following it.
+ * Layers, under the voices: `bg` is the room's background, carried unbroken
+ * between rooms that share one; `bed` runs under the whole show once it has
+ * begun. How they mix is public/mixer.js.
  */
-export const CUE_SLOTS = ['room', 'guidance', 'adherence', 'screen', 'experience'];
+export const CUE_SLOTS = ['room', 'guidance', 'adherence', 'bg', 'bed', 'screen', 'experience'];
 
 /** Slots that carry something other than sound. */
 const NON_AUDIO_SLOTS = ['screen', 'experience'];

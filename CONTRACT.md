@@ -782,28 +782,58 @@ one.
 
 `audience` is an error here — a guest cue has exactly one listener.
 
-**Slots.** A guest hears at most one cue from each of `room`, `guidance`, and
-`adherence` at a time; a new cue in a slot replaces what was there.
+**Slots.** A guest hears at most one cue in each slot at a time; a new cue in
+a slot replaces what was there. Voices: `room` (the room's own clips),
+`guidance` and `adherence`. Layers, under the voices: `bg` and `bed`.
 
-**The mixer** (Phase B, live). The slots relate; `guest.audioLayers` tunes how:
+**Layers** (decided 2026-09-26):
 
 ```jsonc
-"guest": { "audioLayers": { "duckTo": 0.25, "duckMs": 300, "crossfadeMs": 1000 } }
+"rooms": { "maskRoom": { "bg": "audio/bg/0301-02_MASK_SEQUENCE_5MIN.mp3" } },
+"guest": {
+  "bed": { "audio": "audio/bg/DEAD_BATH_5MIN.mp3", "from": "calibration" }
+}
 ```
 
-- **Ducking.** While a spoken line sounds in `guidance` or `adherence`, the
-  `room` bed ducks to `duckTo` (a gain, 0–1; `1` turns ducking off), moving
-  over `duckMs`. The duck holds until the last voice runs out — a looping
-  voice holds it until stopped — then the bed swells back to exactly where it
-  was. Decided 2026-09-13: duck, not pause; the room stays alive under the
-  narration.
-- **Crossfade.** A `room`-slot handover fades the outgoing bed over
-  `crossfadeMs` while the incoming bed fades in over the same window — a
-  doorway, not a channel change. An authored `fadeMs` on the outgoing cue
-  still wins. Voice slots keep a short fixed tail (400ms).
+- **bg** is the room's background: a file name, or `{ "audio", "gain" }`. A
+  guest state may name its own — a sequence step's `bg`, or `bg` on any guest
+  cue — which wins over the room's while the guest is in that state; the
+  calibration steps each change it under their clip. Moving on to the same bg
+  carries it on unbroken; a room with none fades it out. Standing in no room
+  at all keeps what was playing: that is a gap in the sensing, not a place.
+- **bed** runs under the whole show, per guest, from the first time they
+  stand in its `from` room.
+
+Both loop, and both route through one bus that the voices duck.
+
+**The mixer** (live). `guest.audioLayers` tunes how the slots relate:
+
+```jsonc
+"guest": { "audioLayers": { "duckTo": 0.25, "duckMs": 300, "crossfadeMs": 10000, "loopCrossfadeMs": 10000 } }
+```
+
+- **Ducking.** While any voice sounds, the layers duck to `duckTo` (a gain,
+  0–1; `1` turns ducking off), moving over `duckMs`. The duck holds until the
+  last voice runs out — a looping voice holds it until stopped — then the
+  layers swell back to exactly where they were. Duck, not pause; the space
+  stays alive under the narration.
+- **Crossfade.** A layer handover fades the outgoing file over `crossfadeMs`
+  while the incoming one fades in over the same window — a doorway, not a
+  channel change. An authored `fadeMs` on the outgoing cue still wins. Voices
+  keep a short fixed tail (400ms).
+- **Loop crossfade.** A looping layer overlaps each pass with the next by
+  `loopCrossfadeMs`, blended equal-power, rather than jumping from its last
+  sample to its first — so a pass comes round every `length − overlap`. A file
+  shorter than twice the overlap, or a slice (`offset`/`duration`), loops
+  plainly. `0`, the default, is a plain loop.
+
+Every layer is decoded whole on the phone before it plays, so a long one costs
+memory in proportion to its length: about 20MB a minute. Keep layers to a few
+minutes.
 
 The semantics are fixed; a show only tunes the numbers, and every field is
-optional — the values above are the defaults. The decisions live in
+optional — the defaults are `duckTo: 0.25`, `duckMs: 300`, `crossfadeMs: 1000`
+and `loopCrossfadeMs: 0`. The decisions live in
 `public/mixer.js` (tested); the client owns only the gain nodes.
 
 **`audio.timing`** (per room, live): whose clock a room's cues run on.
