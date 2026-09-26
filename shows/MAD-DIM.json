@@ -172,7 +172,8 @@
       "kind": "shared",
       "adjacent": [
         "entranceHallway",
-        "hallOfHeroes"
+        "hallOfHeroes",
+        "maskMirror"
       ],
       "zones": {
         "maskRoom": {
@@ -192,6 +193,22 @@
             [
               272,
               646
+            ],
+            [
+              272,
+              613
+            ],
+            [
+              289,
+              612
+            ],
+            [
+              290,
+              544
+            ],
+            [
+              273,
+              545
             ]
           ]
         }
@@ -230,6 +247,67 @@
       },
       "thresholds": {
         "maskRoom-door": {}
+      }
+    },
+    "maskMirror": {
+      "name": "Mask Mirror",
+      "kind": "shared",
+      "adjacent": [
+        "maskRoom"
+      ],
+      "machine": {
+        "id": "maskMirror",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "idle"
+            },
+            "states": {
+              "main": {}
+            }
+          }
+        }
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "seen": {
+        "dwellMs": 20000,
+        "accumulate": true
+      },
+      "zones": {
+        "maskMirror": {
+          "polygon": [
+            [
+              273,
+              551
+            ],
+            [
+              285,
+              548
+            ],
+            [
+              285,
+              607
+            ],
+            [
+              272,
+              606
+            ]
+          ]
+        }
+      },
+      "cues": {
+        "active": {
+          "audio": "audio/0304-boardroom_mirror.mp3"
+        }
       }
     },
     "hallOfHeroes": {
@@ -2006,8 +2084,8 @@
         274,
         575
       ],
-      "room": "maskRoom",
-      "rssi": -70
+      "rssi": -70,
+      "room": "maskMirror"
     },
     "49920": {
       "at": [
