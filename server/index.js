@@ -3,8 +3,8 @@
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'node:http';
-import { randomUUID } from 'node:crypto';
-import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { randomUUID, createHash } from 'node:crypto';
+import { readdirSync, readFileSync, writeFileSync, existsSync, statSync, createReadStream } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, basename, resolve, sep } from 'node:path';
 import { SpatialRuntime, validateShowDefinition, ScaledClock } from './spatial/index.js';
@@ -125,6 +125,52 @@ app.get('/api/assets/audio', (_req, res) => {
       .filter((f) => AUDIO_EXT.test(f) && !f.split('/').some((part) => part.startsWith('.')))
       .sort();
     res.json(files);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Everything a show handset needs to run without streaming — the content the
+ * Android app (dim_android_app) syncs when it is put on charge, then serves to
+ * the page from its own copy: the phone page's files, every file under
+ * public/assets, and the show's beacons. `version` changes when any of it
+ * does; each file carries its size and sha256 so only what changed is fetched
+ * (from the same URL the page uses) and a download can be checked.
+ */
+const PHONE_PAGE_FILES = ['index.html', 'client.js', 'gestures.js', 'clock-sync.js', 'cue-plan.js', 'mixer.js'];
+/** absolute path → { size, mtimeMs, sha256 }: a hash is recomputed only when the file changed. */
+const hashCache = new Map();
+
+async function contentEntry(rel) {
+  const abs = join(root, 'public', rel);
+  let st;
+  try { st = statSync(abs); } catch { return null; }
+  if (!st.isFile()) return null;
+  const hit = hashCache.get(abs);
+  if (hit && hit.size === st.size && hit.mtimeMs === st.mtimeMs) return { path: rel, size: st.size, sha256: hit.sha256 };
+  const sha256 = await new Promise((resolveHash, reject) => {
+    const hash = createHash('sha256');
+    createReadStream(abs).on('data', (d) => hash.update(d)).on('end', () => resolveHash(hash.digest('hex'))).on('error', reject);
+  });
+  hashCache.set(abs, { size: st.size, mtimeMs: st.mtimeMs, sha256 });
+  return { path: rel, size: st.size, sha256 };
+}
+
+app.get('/api/content', async (_req, res) => {
+  try {
+    const assets = readdirSync(assetsDir, { recursive: true })
+      .map((f) => String(f).split(sep).join('/'))
+      .filter((f) => !f.split('/').some((part) => part.startsWith('.')))
+      .map((f) => `assets/${f}`);
+    const files = (await Promise.all([...PHONE_PAGE_FILES, ...assets].map(contentEntry)))
+      .filter(Boolean)
+      .sort((a, b) => a.path.localeCompare(b.path));
+    const beacons = runtime.def?.beacons ?? null;
+    const version = createHash('sha256')
+      .update(JSON.stringify({ files: files.map((f) => [f.path, f.sha256]), beacons }))
+      .digest('hex').slice(0, 16);
+    res.json({ version, showId: runtime.def?.showId ?? null, beacons, files });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -303,11 +349,19 @@ function currentAssets() {
     }
   };
   collect(runtime.def?.guest?.cues);
-  for (const room of Object.values(runtime.def?.rooms ?? {})) collect(room.cues);
+  for (const room of Object.values(runtime.def?.rooms ?? {})) {
+    collect(room.cues);
+    // A door's clips are cues too (§4.2c): { guidance, room } per threshold.
+    for (const door of Object.values(room.thresholds ?? {})) collect(door.cues);
+  }
   // The museum's stems are cues by another road, and a phone that has not
   // preloaded one plays silence at the exact moment it mattered.
   for (const value of Object.values(runtime.def?.museum?.stems ?? {})) {
     for (const asset of [].concat(value)) if (typeof asset === 'string') found.add(asset);
+  }
+  // …and so are a room's own takes on them (museum.roomStems).
+  for (const own of Object.values(runtime.def?.museum?.roomStems ?? {})) {
+    for (const asset of Object.values(own ?? {})) if (typeof asset === 'string') found.add(asset);
   }
   return [...found];
 }
@@ -397,7 +451,12 @@ function loadShow(file) {
   assetProblems = missingAssets();
   for (const asset of assetProblems) opLog(`✗ missing asset: ${asset}`);
   for (const loop of badLoops(def)) opLog(`⚠ ${loop} — that is a tick, not a texture`);
-  broadcast({ type: 'assets', assets: currentAssets(), audioLayers: runtime.def?.guest?.audioLayers ?? null }, 'phones');
+  broadcast({
+    type: 'assets',
+    assets: currentAssets(),
+    audioLayers: runtime.def?.guest?.audioLayers ?? null,
+    beacons: runtime.def?.beacons ?? null,
+  }, 'phones');
   sendRoster();
 }
 
@@ -701,6 +760,8 @@ wss.on('connection', (ws) => {
           audioLayers: runtime.def?.guest?.audioLayers ?? null,
           // For the handset's own room picker; see `setRoom`.
           rooms: runtime.roomChoices(),
+          // What each beacon means, for the Android app's locator (keyed by major).
+          beacons: runtime.def?.beacons ?? null,
           snapshot: phoneSnapshot(token),
         });
         sendRelaySync(token);
@@ -753,9 +814,31 @@ wss.on('connection', (ws) => {
         return;
       }
 
-      case 'ping':
+      case 'ping': {
         send(ws, { type: 'pong', t0: msg.t0, server: Date.now() });
+        // A phone the app locates reports only when its room changes, so its
+        // pings are what say it is still there (contact loss, CONTRACT §4.3).
+        const pinged = runtime.getGuestByToken(token);
+        if (pinged) runtime.coordinator?.touchLocation(pinged.guestId);
         return;
+      }
+
+      case 'location': {
+        // The Android app's beacon reading, through this page's socket:
+        // { major } of the strongest room group it hears.
+        const guest = runtime.getGuestByToken(token);
+        if (!guest || msg.major == null) return;
+        if (runtime.setGuestBeacon(guest.guestId, msg.major).ok) sendRoster();
+        return;
+      }
+
+      case 'door': {
+        // Arriving at a door beacon ({ major }), or leaving it ({ major: null }).
+        const guest = runtime.getGuestByToken(token);
+        if (!guest) return;
+        if (runtime.setGuestDoorBeacon(guest.guestId, msg.major ?? null)) sendRoster();
+        return;
+      }
 
       case 'telemetry': {
         const u = users.get(token);

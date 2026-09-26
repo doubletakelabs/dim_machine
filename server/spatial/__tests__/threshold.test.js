@@ -15,14 +15,14 @@ function showWithDoor() {
   const def = fixture();
   def.rooms.greenhouse.thresholds = {
     'greenhouse-door': {
-      beacons: ['b-31'],
-      rssi: -60,
       cues: {
         guidance: { audio: 'whisper.wav' },
         room: { audio: 'ambient.wav', loop: true },
       },
     },
   };
+  // The door's beacon lives in the top-level map, keyed by its major.
+  def.beacons = { 31: { at: [440, 205], door: 'greenhouse-door', rssi: -60 } };
   return def;
 }
 
@@ -115,39 +115,34 @@ describe('BLE and threshold validation', () => {
     return validateShowDefinition(def).warnings.join('\n');
   };
 
-  it('accepts a door and zone BLE as authored', () => {
-    const def = showWithDoor();
-    def.rooms.greenhouse.zones.greenhouse.ble = { beacons: ['b-14'], rssiEnter: -62, rssiExit: -70 };
-    assert.deepEqual(validateShowDefinition(def).errors, []);
+  it('accepts a door and its beacon as authored', () => {
+    assert.deepEqual(validateShowDefinition(showWithDoor()).errors, []);
+    assert.deepEqual(validateShowDefinition(showWithDoor()).warnings, []);
   });
 
-  it('puts BLE on zones, not rooms', () => {
+  it('puts BLE on the beacons map, not rooms', () => {
     assert.match(errorsFor((d) => { d.rooms.greenhouse.ble = { beacons: ['b-14'] }; }),
-      /rooms\.greenhouse\.ble — BLE settings go on each zone/);
+      /rooms\.greenhouse\.ble — beacons live in the top-level beacons map/);
   });
 
-  it('needs exit weaker than entry', () => {
-    assert.match(errorsFor((d) => {
-      d.rooms.greenhouse.zones.greenhouse.ble = { beacons: ['b-14'], rssiEnter: -70, rssiExit: -62 };
-    }), /rssiExit \(-62\) must be weaker/);
+  it('says the retired zone and door beacon fields do nothing', () => {
+    const w = warningsFor((d) => {
+      d.rooms.greenhouse.zones.greenhouse.ble = { beacons: ['14'] };
+      d.rooms.greenhouse.thresholds['greenhouse-door'].beacons = ['31'];
+    });
+    assert.match(w, /zones\.greenhouse\.ble is no longer used/);
+    assert.match(w, /greenhouse-door\.beacons is no longer used/);
   });
 
-  it('refuses one entry beacon meaning two places', () => {
-    assert.match(errorsFor((d) => {
-      d.rooms.greenhouse.zones.greenhouse.ble = { beacons: ['b-14'] };
-      d.rooms.cellar.zones.cellar.ble = { beacons: ['b-14'] };
-    }), /"b-14" is already an entry beacon of rooms\.greenhouse/);
+  it('checks beacons: major keys, a real room or door, not both', () => {
+    assert.match(errorsFor((d) => { d.beacons['b-3'] = { at: [1, 1], room: 'cellar' }; }), /keyed by its major number/);
+    assert.match(errorsFor((d) => { d.beacons[40] = { at: [1, 1], room: 'nowhere' }; }), /beacons\.40\.room names "nowhere"/);
+    assert.match(errorsFor((d) => { d.beacons[41] = { at: [1, 1], door: 'no-door' }; }), /beacons\.41\.door names "no-door"/);
+    assert.match(errorsFor((d) => { d.beacons[42] = { at: [1, 1], room: 'cellar', door: 'greenhouse-door' }; }), /not both/);
+    assert.match(errorsFor((d) => { d.beacons[43] = { at: [1, 1], room: 'cellar', rssi: 60 }; }), /rssi must be a negative number/);
   });
 
-  it('refuses a door beacon that is also inside its own room', () => {
-    assert.match(errorsFor((d) => {
-      d.rooms.greenhouse.zones.greenhouse.ble = { beacons: ['b-31'] };
-    }), /"b-31" is also an entry beacon of rooms\.greenhouse/);
-  });
-
-  it('checks rssi, slots, and duplicate ids', () => {
-    assert.match(errorsFor((d) => { d.rooms.greenhouse.thresholds['greenhouse-door'].rssi = 60; }),
-      /rssi must be a negative number/);
+  it('checks slots and duplicate door ids', () => {
     assert.match(errorsFor((d) => {
       d.rooms.greenhouse.thresholds['greenhouse-door'].cues.adherence = { audio: 'click.wav' };
     }), /cues\.adherence: a threshold plays on guidance or room/);
@@ -156,9 +151,9 @@ describe('BLE and threshold validation', () => {
     }), /duplicates a threshold id in rooms\.greenhouse/);
   });
 
-  it('warns about a door nothing can trigger, or that does nothing', () => {
+  it('warns about a door no beacon is at, or that does nothing', () => {
     const w = warningsFor((d) => { d.rooms.cellar.thresholds = { 'cellar-door': {} }; });
-    assert.match(w, /cellar-door has no beacons — only the operator panel/);
+    assert.match(w, /cellar-door: no beacon in beacons is at this door yet/);
     assert.match(w, /cellar-door declares no cues/);
   });
 });

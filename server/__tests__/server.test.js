@@ -362,6 +362,94 @@ describe('nonsense over the socket', () => {
   });
 });
 
+describe('the Android app locating a phone', () => {
+  // dim_android_app sends, through the page's own socket, the major of the
+  // strongest room group it hears and of a door it is at. A scratch SHOWS_DIR
+  // with a known beacon list, so the test does not move with the install.
+  let server;
+  let dir;
+  before(async () => {
+    const { mkdtempSync, readFileSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    dir = mkdtempSync(join(tmpdir(), 'dim-beacons-'));
+    const def = JSON.parse(readFileSync(join(process.cwd(), 'shows/MAD-DIM.json'), 'utf8'));
+    def.rooms.library.thresholds = { 'library-door': { cues: { guidance: { audio: 'whisper.wav' }, room: { audio: 'audio/test/door-bed.wav' } } } };
+    def.museum.roomStems = { kin: { entrance: 'audio/test/kin-entrance.wav' } };
+    def.beacons = {
+      801: { at: [1, 1], room: 'library', rssi: -70 },
+      831: { at: [2, 2], door: 'library-door', rssi: -70 },
+    };
+    writeFileSync(join(dir, 'MAD-DIM.json'), JSON.stringify(def));
+    server = await startServer({ env: { SHOWS_DIR: dir } });
+  });
+  after(async () => {
+    await server?.stop();
+    const { rmSync } = await import('node:fs');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('hands the phone the beacon list, places it by major, and plays a door', async () => {
+    const op = await openOperator(server);
+    await runShow(op);
+    const phone = await openPhone(server);
+    assert.deepEqual(Object.keys(phone.welcome.beacons ?? {}).sort(), ['801', '831'], 'welcome carries the beacon list');
+
+    phone.send({ type: 'location', major: 801 });
+    await phone.waitFor((m) => m.type === 'state' && /^library · /.test(m.state), {
+      describe: 'the phone placed in the library by its beacon',
+    });
+
+    phone.send({ type: 'door', major: 831 });
+    const at = await op.waitFor((m) => m.type === 'roster'
+      && m.spatial?.guests?.some((g) => g.guestId === phone.welcome.guestId && g.threshold === 'library-door'), {
+      describe: 'the door reaching the roster',
+    });
+    assert.ok(at);
+
+    phone.send({ type: 'door', major: null });
+    await op.waitFor((m) => m.type === 'roster'
+      && m.spatial?.guests?.some((g) => g.guestId === phone.welcome.guestId && g.threshold === null), {
+      describe: 'the door left',
+    });
+
+    phone.close();
+    op.close();
+  });
+
+  it('preloads door clips and a room\'s own clips', async () => {
+    const op = await openOperator(server);
+    await runShow(op);
+    const phone = await openPhone(server);
+    assert.ok(phone.welcome.assets.includes('audio/test/door-bed.wav'), 'a door clip');
+    assert.ok(phone.welcome.assets.includes('audio/test/kin-entrance.wav'), 'a room stem');
+    phone.close();
+    op.close();
+  });
+
+  it('serves the content manifest a handset syncs on charge', async () => {
+    const op = await openOperator(server);
+    await runShow(op);
+    const content = await (await fetch(`${server.url}/api/content`)).json();
+    const byPath = Object.fromEntries(content.files.map((f) => [f.path, f]));
+    for (const page of ['index.html', 'client.js', 'mixer.js']) assert.ok(byPath[page], `the page's ${page}`);
+    assert.ok(byPath['assets/whisper.wav'], 'the media');
+    assert.ok(content.files.every((f) => !f.path.split('/').some((p) => p.startsWith('.'))), 'no dotfiles');
+
+    // The checksum is the file's, and a download from the page's own URL matches it.
+    const { createHash } = await import('node:crypto');
+    const body = Buffer.from(await (await fetch(`${server.url}/assets/whisper.wav`)).arrayBuffer());
+    assert.equal(createHash('sha256').update(body).digest('hex'), byPath['assets/whisper.wav'].sha256);
+    assert.equal(body.length, byPath['assets/whisper.wav'].size);
+
+    assert.deepEqual(Object.keys(content.beacons).sort(), ['801', '831'], 'and the beacon list');
+    assert.match(content.version, /^[0-9a-f]{16}$/);
+    const again = await (await fetch(`${server.url}/api/content`)).json();
+    assert.equal(again.version, content.version, 'nothing changed, same version');
+    op.close();
+  });
+});
+
 describe('the HTTP surface', () => {
   let server;
   before(async () => { server = await startServer(); });

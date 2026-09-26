@@ -530,6 +530,50 @@ export class SpatialRuntime {
     return true;
   }
 
+  /**
+   * The phone app's beacon reading (dim_android_app): the major of the
+   * strongest room group it hears. The phone already smooths, holds through
+   * silence and estimates in dead spots (the location rule, 2026-09-25), so
+   * this commits at once — no entry hold. A room beacon places the guest; a
+   * door beacon or an unknown major places nobody.
+   *
+   * @returns {{ ok: boolean, roomId?: string, reason?: string }}
+   */
+  setGuestBeacon(guestIdOrToken, major) {
+    const guestId = this.resolveGuestId(guestIdOrToken);
+    if (!guestId || !this.running || !this.coordinator) return { ok: false, reason: 'not running' };
+    const beacon = this.def?.beacons?.[String(major)];
+    if (!beacon?.room || !this.rooms.has(beacon.room)) {
+      this.warnUnplacedBeacon(major, beacon);
+      return { ok: false, reason: beacon?.door ? 'door beacon' : 'unknown beacon' };
+    }
+    const zoneId = Object.keys(this.def.rooms[beacon.room]?.zones ?? {})[0] ?? null;
+    this.coordinator.ingestImmediate(guestId, beacon.room, 'inside', 'ble', zoneId);
+    return { ok: true, roomId: beacon.room };
+  }
+
+  /** A phone at a door beacon (major), or away from any (null) — §4.2c. */
+  setGuestDoorBeacon(guestIdOrToken, major) {
+    if (major == null) return this.setGuestThreshold(guestIdOrToken, null);
+    const beacon = this.def?.beacons?.[String(major)];
+    if (!beacon?.door) {
+      this.warnUnplacedBeacon(major, beacon);
+      return false;
+    }
+    return this.setGuestThreshold(guestIdOrToken, beacon.door);
+  }
+
+  /** Once per major: a beacon the show cannot place is an install fault to fix. */
+  warnUnplacedBeacon(major, beacon) {
+    this._warnedBeacons ??= new Set();
+    const key = String(major);
+    if (this._warnedBeacons.has(key)) return;
+    this._warnedBeacons.add(key);
+    this.io.log?.(beacon
+      ? `beacon ${key} is reported but is not assigned to a room or door in the show`
+      : `beacon ${key} is reported but is not in the show's beacons`);
+  }
+
   /** A threshold by id, with the room it leads into. */
   findThreshold(thresholdId) {
     for (const [roomId, room] of Object.entries(this.def?.rooms ?? {})) {

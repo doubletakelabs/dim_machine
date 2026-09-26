@@ -492,7 +492,6 @@ const ROOM_STEMS = [
 ];
 
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const beaconList = (text) => String(text).split(/[\s,]+/).filter(Boolean);
 const rssiValue = (text) => (String(text).trim() === '' ? null : Number(text));
 
 function clipOptions(current, emptyLabel) {
@@ -627,24 +626,12 @@ function renderDetails() {
   }
   const { roomId, zoneId } = selection;
   const room = def.rooms[roomId];
-  const zone = zoneId ? room.zones?.[zoneId] : null;
-  const ble = zone?.ble ?? {};
   const doors = Object.entries(room.thresholds ?? {});
   const museumRoom = def.museum?.rooms?.includes(roomId);
   const own = def.museum?.roomStems?.[roomId] ?? {};
   const shared = def.museum?.stems ?? {};
 
   box.innerHTML = `
-    ${zone ? `
-      <h3>Zone <span class="mono">${esc(zoneId)}</span></h3>
-      <div class="field"><span>Beacons</span>
-        <input type="text" data-zone-ble="beacons" value="${esc((ble.beacons ?? []).join(', '))}" placeholder="14, 15"><span></span></div>
-      <div class="field"><span>Enter RSSI</span>
-        <input type="number" data-zone-ble="rssiEnter" value="${esc(ble.rssiEnter)}" placeholder="-62"><span></span></div>
-      <div class="field"><span>Exit RSSI</span>
-        <input type="number" data-zone-ble="rssiExit" value="${esc(ble.rssiExit)}" placeholder="-70"><span></span></div>
-      <div class="note">Exit must be weaker (more negative) than enter.</div>` : ''}
-
     <h3>Doors into ${esc(room.name ?? roomId)}</h3>
     ${doors.length ? '' : '<div class="note">None. A door plays its clips while a guest stands at it — it never enters the room.</div>'}
     ${doors.map(([doorId, door]) => `
@@ -653,10 +640,7 @@ function renderDetails() {
           <input type="text" data-door-field="id" value="${esc(doorId)}" class="mono" title="Door id — unique in the show">
           <button class="tiny" data-door-delete title="Delete this door">✕</button>
         </div>
-        <div class="field"><span>Beacons</span>
-          <input type="text" data-door-field="beacons" value="${esc((door.beacons ?? []).join(', '))}" placeholder="b-31"><span></span></div>
-        <div class="field"><span>Trigger RSSI</span>
-          <input type="number" data-door-field="rssi" value="${esc(door.rssi)}" placeholder="-60"><span></span></div>
+        <div class="note">Beacons at this door: ${esc(Object.entries(def.beacons ?? {}).filter(([, b]) => b.door === doorId).map(([m]) => m).join(', ') || 'none yet — place one with ◉ Place beacons, kind “at a door”')}</div>
         ${clipField('Guidance', 'data-door-field="guidance"', door.cues?.guidance?.audio, 'none')}
         ${clipField('Room bed', 'data-door-field="room"', door.cues?.room?.audio, 'none')}
         <div class="field"><span></span>
@@ -687,20 +671,6 @@ $('details').addEventListener('change', (e) => {
   if (!roomId) return;
   const room = def.rooms[roomId];
 
-  if (el.dataset.zoneBle && zoneId) {
-    pushUndo();
-    const zone = room.zones[zoneId];
-    const ble = { ...(zone.ble ?? {}) };
-    const key = el.dataset.zoneBle;
-    const value = key === 'beacons' ? beaconList(el.value) : rssiValue(el.value);
-    if (value == null || (Array.isArray(value) && !value.length)) delete ble[key];
-    else ble[key] = value;
-    if (Object.keys(ble).length) zone.ble = ble; else delete zone.ble;
-    el.blur();
-    render();
-    return;
-  }
-
   const doorEl = el.closest('[data-door]');
   if (doorEl && el.dataset.doorField) {
     const doorId = doorEl.dataset.door;
@@ -715,12 +685,7 @@ $('details').addEventListener('change', (e) => {
         if (!next || (next !== doorId && taken.has(next))) { setStatus(`door id "${next}" is empty or taken`); return; }
         // Rebuild so the door keeps its place in the list.
         room.thresholds = Object.fromEntries(Object.entries(doors).map(([k, v]) => [k === doorId ? next : k, v]));
-      } else if (field === 'beacons') {
-        const list = beaconList(el.value);
-        if (list.length) door.beacons = list; else delete door.beacons;
-      } else if (field === 'rssi') {
-        const v = rssiValue(el.value);
-        if (v == null) delete door.rssi; else door.rssi = v;
+        for (const b of Object.values(def.beacons ?? {})) if (b.door === doorId) { b.door = next; beaconsTouched = true; }
       } else if (field === 'guidance' || field === 'room') {
         door.cues ??= {};
         if (el.value) door.cues[field] = { ...(door.cues[field] ?? {}), audio: el.value };

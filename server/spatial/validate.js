@@ -104,7 +104,7 @@ function checkRoomMachine(machine, path, errors) {
  * split by a wall, an alcove — and occupancy is reported for the room, not the
  * zone, so moving between them is not an exit.
  */
-function checkZones(roomId, room, errors, warnings, seenZoneIds, beaconOwners) {
+function checkZones(roomId, room, errors, warnings, seenZoneIds) {
   const path = `rooms.${roomId}.zones`;
   if (!isObject(room.zones) || !Object.keys(room.zones).length) {
     warnings.push(`${path} is empty — the room cannot be entered on the floor plan`);
@@ -123,49 +123,18 @@ function checkZones(roomId, room, errors, warnings, seenZoneIds, beaconOwners) {
     if (!Array.isArray(zone.polygon) || zone.polygon.length < 3) {
       errors.push(`${path}.${zoneId}.polygon must have at least 3 points`);
     }
-    checkZoneBle(`${path}.${zoneId}.ble`, zone.ble, roomId, errors, warnings, beaconOwners);
+    checkZoneBle(`${path}.${zoneId}.ble`, zone.ble, roomId, errors, warnings);
   }
 }
 
 /**
- * BLE on a zone (§4.2): the beacons whose reading means "inside this zone".
- * Nothing consumes these yet — the beacon tracking side will — but an
- * installer types them by hand, so what would make a reading ambiguous is
- * caught now rather than on the floor.
+ * `ble` on a zone was the first place beacons were declared (2026-09-25,
+ * morning). The top-level `beacons` map replaced it the same day; the phone
+ * ignores it, so say so rather than let it look like it does something.
  */
-const ZONE_BLE_KEYS = ['beacons', 'rssiEnter', 'rssiExit'];
-function checkZoneBle(at, ble, roomId, errors, warnings, beaconOwners) {
+function checkZoneBle(at, ble, roomId, errors, warnings) {
   if (ble == null) return;
-  if (!isObject(ble)) {
-    errors.push(`${at} must be an object`);
-    return;
-  }
-  for (const key of Object.keys(ble)) {
-    if (!ZONE_BLE_KEYS.includes(key)) warnings.push(`${at}.${key} is not a zone BLE setting (${ZONE_BLE_KEYS.join(', ')})`);
-  }
-  for (const beacon of checkBeaconList(ble.beacons, `${at}.beacons`, errors)) {
-    // One beacon meaning two places is a reading that cannot be placed.
-    const owner = beaconOwners.get(beacon);
-    if (owner) errors.push(`${at}.beacons: "${beacon}" is already an entry beacon of ${owner}`);
-    else beaconOwners.set(beacon, `rooms.${roomId}`);
-  }
-  checkRssi(ble.rssiEnter, `${at}.rssiEnter`, errors);
-  checkRssi(ble.rssiExit, `${at}.rssiExit`, errors);
-  // The gap is the hysteresis: exit must need a weaker signal than entry, or a
-  // guest standing on the edge flickers in and out.
-  if (typeof ble.rssiEnter === 'number' && typeof ble.rssiExit === 'number' && ble.rssiExit >= ble.rssiEnter) {
-    errors.push(`${at}.rssiExit (${ble.rssiExit}) must be weaker — more negative — than rssiEnter (${ble.rssiEnter})`);
-  }
-}
-
-/** Beacon ids as authored, or [] after reporting why they cannot be used. */
-function checkBeaconList(list, at, errors) {
-  if (list == null) return [];
-  if (!Array.isArray(list) || list.some((b) => typeof b !== 'string' || !b)) {
-    errors.push(`${at} must be a list of beacon ids`);
-    return [];
-  }
-  return list;
+  warnings.push(`${at} is no longer used — beacons live in the top-level beacons map`);
 }
 
 function checkRssi(value, at, errors) {
@@ -220,9 +189,9 @@ function checkBeacons(def, errors, warnings) {
  * spend one of the guest's rooms. Checked after every zone, because a
  * threshold's beacons must not also mean "inside this very room".
  */
-const THRESHOLD_KEYS = ['beacons', 'rssi', 'cues'];
+const THRESHOLD_KEYS = ['cues'];
 const THRESHOLD_CUE_SLOTS = ['guidance', 'room'];
-function checkThresholds(roomId, room, errors, warnings, seenThresholdIds, beaconOwners) {
+function checkThresholds(roomId, room, errors, warnings, seenThresholdIds, doorBeacons) {
   if (room.thresholds == null) return;
   const path = `rooms.${roomId}.thresholds`;
   if (!isObject(room.thresholds)) {
@@ -241,20 +210,14 @@ function checkThresholds(roomId, room, errors, warnings, seenThresholdIds, beaco
       seenThresholdIds.set(thresholdId, roomId);
     }
     for (const key of Object.keys(threshold)) {
-      if (!THRESHOLD_KEYS.includes(key)) warnings.push(`${at}.${key} is not a threshold setting (${THRESHOLD_KEYS.join(', ')})`);
-    }
-
-    const beacons = checkBeaconList(threshold.beacons, `${at}.beacons`, errors);
-    for (const beacon of beacons) {
-      if (beaconOwners.get(beacon) === `rooms.${roomId}`) {
-        errors.push(`${at}.beacons: "${beacon}" is also an entry beacon of rooms.${roomId} — `
-          + 'standing at the door would count as being inside');
+      if (key === 'beacons' || key === 'rssi') {
+        warnings.push(`${at}.${key} is no longer used — a door's beacons are entries in the top-level beacons map with "door": "${thresholdId}"`);
+      } else if (!THRESHOLD_KEYS.includes(key)) {
+        warnings.push(`${at}.${key} is not a threshold setting (${THRESHOLD_KEYS.join(', ')})`);
       }
     }
-    if (!beacons.length) warnings.push(`${at} has no beacons — only the operator panel can put a guest there`);
-    checkRssi(threshold.rssi, `${at}.rssi`, errors);
-    if (beacons.length && threshold.rssi == null) {
-      warnings.push(`${at}.rssi is not set — the tracking side has no signal strength to trigger on`);
+    if (!doorBeacons.has(thresholdId)) {
+      warnings.push(`${at}: no beacon in beacons is at this door yet — only the operator panel can put a guest there`);
     }
 
     const cues = threshold.cues;
@@ -1005,23 +968,22 @@ export function validateShowDefinition(raw) {
 
   const roomIds = Object.keys(def.rooms ?? {});
   const seenZoneIds = new Map();
-  /** beacon id → the room whose zone it means "inside". */
-  const beaconOwners = new Map();
   for (const roomId of roomIds) {
     checkRoom(roomId, def.rooms[roomId], errors, warnings);
     if (isObject(def.rooms[roomId])) {
-      checkZones(roomId, def.rooms[roomId], errors, warnings, seenZoneIds, beaconOwners);
+      checkZones(roomId, def.rooms[roomId], errors, warnings, seenZoneIds);
       // An earlier draft (spec v0.3 §5.2) hung BLE on the room. A room may own
       // several zones, and a beacon sits in one of them.
       if (def.rooms[roomId].ble != null) {
-        errors.push(`rooms.${roomId}.ble — BLE settings go on each zone (rooms.${roomId}.zones.<id>.ble)`);
+        errors.push(`rooms.${roomId}.ble — beacons live in the top-level beacons map, keyed by major`);
       }
     }
   }
   const seenThresholdIds = new Map();
+  const doorBeacons = new Set(isObject(def.beacons) ? Object.values(def.beacons).map((b) => b?.door).filter(Boolean) : []);
   for (const roomId of roomIds) {
     if (isObject(def.rooms[roomId])) {
-      checkThresholds(roomId, def.rooms[roomId], errors, warnings, seenThresholdIds, beaconOwners);
+      checkThresholds(roomId, def.rooms[roomId], errors, warnings, seenThresholdIds, doorBeacons);
     }
   }
 

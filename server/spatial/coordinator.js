@@ -131,10 +131,15 @@ export class OccupancyCoordinator {
     this.advance(guestId);
   }
 
-  /** Bypass hysteresis — operator/testing only. */
+  /**
+   * Bypass hysteresis — the operator, tests, and the Android app, which
+   * smooths its own readings. The source is kept, so a phone the app locates
+   * (`ble`) still loses contact when it goes silent.
+   */
   ingestImmediate(guestId, roomId, occupancy, source = 'operator', zoneId = null) {
     const g = this.ensureGuest(guestId);
     g.pending = null;
+    g.source = source;
     g.desired = { roomId, occupancy, zoneId };
     g.lastContactAt = this.now();
     this.commit(guestId, { roomId, occupancy, zoneId }, source);

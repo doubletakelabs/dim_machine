@@ -399,8 +399,37 @@ nothing counted toward the guest's rooms. Entry is still the room's zones.
   entry beacon of its own room — standing at the door would count as inside.
 
 Set by `setGuestThreshold { guestId, thresholdId | null }` over the operator
-socket, or `POST /api/spatial/threshold`. Today the operator panel's **At door**
-picker sends it; the beacon tracking side will send the same message.
+socket, or `POST /api/spatial/threshold` (the operator panel's **At door**
+picker), and by the phone's `door` message below.
+
+### 4.2d Beacons and the phone app — live
+
+The top-level `beacons` map, keyed by iBeacon major, says what each beacon
+means: `{ "at": [x, y], "room": "<roomId>" }` inside a room (several in one
+room act as a group) or `{ "at": [x, y], "door": "<thresholdId>" }` at a door,
+with `rssi` (default −70) and `txPower`. It is the only source; `zones.*.ble`
+and a threshold's own `beacons`/`rssi` are retired and warn at load.
+
+The Android app (dim_android_app) locates the guest and sends, on the page's
+own socket, only when something changes:
+
+- `{ "type": "location", "major": 14 }` — the strongest room group. The phone
+  smooths, holds through silence and estimates in dead spots, so the server
+  commits at once, with no entry hold. A door, unassigned or unknown major
+  places nobody (logged once per major).
+- `{ "type": "door", "major": 31 }` / `{ "type": "door", "major": null }` — at
+  a door beacon / away from it; plays that door's clips (§4.2c).
+
+`welcome` and `assets` carry `beacons`, so a phone has the current list. The
+phone's pings keep contact: a phone the app locates keeps its room while it is
+connected and pinging, and loses it after `contactLossMs` of silence.
+
+**Content for offline phones.** `GET /api/content` returns what a handset
+needs to run without streaming: `{ version, showId, beacons, files }`, where
+`files` is every file the phone page loads — its own files and everything
+under `public/assets` — each `{ path, size, sha256 }`, fetched from the same
+URL the page uses (`/<path>`). `version` changes when any file or the beacons
+change. The app syncs it on charge and serves the page from its own copy.
 
 ### 4.2b Show floor plan — live
 

@@ -65,10 +65,15 @@ describe('validateShowDefinition', () => {
     // The real show and the fixture every other test file is written against.
     // A fixture that stops validating is a suite full of tests passing against
     // a show the server would refuse to load.
+    // MAD-DIM is also where the beacon install is recorded as it happens, so
+    // it may warn about exactly that: beacons not yet assigned, a door not yet
+    // given a beacon or a clip. Anything else is a real problem.
+    const installing = /belongs to no room or door yet|no beacon in beacons is at this door yet|declares no cues/;
     for (const file of ['shows/MAD-DIM.json', 'fixtures/small-show.json']) {
       const { errors, warnings } = validateShowDefinition(load(file));
       assert.deepEqual(errors, [], file);
-      assert.deepEqual(warnings, [], file);
+      const other = file.startsWith('shows/') ? warnings.filter((w) => !installing.test(w)) : warnings;
+      assert.deepEqual(other, [], file);
     }
   });
 
