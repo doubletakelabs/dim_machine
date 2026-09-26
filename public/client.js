@@ -89,6 +89,38 @@ window.DIM = {
 };
 
 // ---------------------------------------------------------------------------
+// The Android app (dim_android_app)
+//
+// On the show handsets this page runs inside a WebView, and the app's beacon
+// scanner has to speak for the same guest this page joined as. It cannot open a
+// socket of its own: a second connection with this token would displace this
+// one, and the two would flap. So the app sends through ours, and this page
+// tells it each time it (re)joins — the app answers by re-sending where it is,
+// because a fresh socket means the server knows nothing.
+//
+// `window.DIMNative` is injected by the app before any script runs; in a
+// browser it is undefined and none of this does anything.
+// ---------------------------------------------------------------------------
+const nativeApp = window.DIMNative ?? null;
+
+/** Message types the app may send on this guest's behalf. */
+const NATIVE_TYPES = new Set(['location', 'door']);
+
+window.DIM.native = {
+  present: !!nativeApp,
+  /** Called by the app with a JSON-serialisable message. */
+  send(msg) {
+    if (!msg || !NATIVE_TYPES.has(msg.type)) return false;
+    sendMsg(msg);
+    return ws?.readyState === 1;
+  },
+};
+
+function tellNative(method, ...args) {
+  try { nativeApp?.[method]?.(...args); } catch (e) { console.warn('native bridge', method, e); }
+}
+
+// ---------------------------------------------------------------------------
 // Session token (spec §7.1)
 // ---------------------------------------------------------------------------
 // `?u=<n>` namespaces the token so multiple tabs on one browser act as
@@ -781,11 +813,22 @@ function connect() {
         assetList = msg.assets ?? [];
         mixer = mixerConfig(msg.audioLayers);
         applySnapshot(msg.snapshot);
+        // The app re-sends location on this; beacons is forwarded if the server
+        // provides the show's map (not yet — the app falls back to its own copy).
+        tellNative('onWelcome', msg.guestId ?? '', msg.label ?? '');
+        if ('beacons' in msg) tellNative('onBeacons', JSON.stringify(msg.beacons ?? null));
+        // Inside the app there is nobody to press Join: a handset on a lanyard
+        // is in the show the moment it is unplugged. The app lets media play
+        // without a gesture, so the AudioContext unlocks on its own. Joined
+        // here, after welcome, so `ready` goes out on an open socket with the
+        // asset list already known — the same moment a person would tap.
+        if (nativeApp && !joined) join();
         break;
       case 'assets':
         assetList = msg.assets ?? [];
         // A show reload may retune the mixer along with the asset list.
         mixer = mixerConfig(msg.audioLayers);
+        if ('beacons' in msg) tellNative('onBeacons', JSON.stringify(msg.beacons ?? null));
         applyDuck();
         if (joined) await preload(assetList);
         break;
@@ -854,12 +897,14 @@ function restoreFromSnapshot(snap) {
 function setConn(ok) {
   $('connDot').className = 'dot' + (ok ? ' ok' : '');
   $('connText').textContent = ok ? 'connected' : 'reconnecting';
+  tellNative('onConnection', ok);
 }
 
 // ---------------------------------------------------------------------------
 // Join: user gesture unlocks audio + motion permission, then preload
 // ---------------------------------------------------------------------------
-$('join').addEventListener('click', async () => {
+async function join() {
+  if (joined || $('join').disabled) return;
   $('join').disabled = true;
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   await ctx.resume();
@@ -882,6 +927,8 @@ $('join').addEventListener('click', async () => {
     pendingSnapshot = null;
     await restoreFromSnapshot(snap);
   }
-});
+}
+
+$('join').addEventListener('click', join);
 
 connect();
