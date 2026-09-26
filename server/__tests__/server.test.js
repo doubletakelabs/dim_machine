@@ -678,6 +678,24 @@ describe('saving zones', () => {
     assert.equal(after.museum.roomStems, undefined);
   });
 
+  it('saves a room\'s own audio for the rooms named, and only those', async () => {
+    const before = await onDisk();
+    const post = (body) => fetch(`${server.url}/api/shows/MAD-DIM.json/zones`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ zones: {}, ...body }),
+    });
+    let res = await post({ cues: { cyclorama: { active: { audio: 'ambient.wav', loop: true } } } });
+    assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+    let after = await onDisk();
+    assert.deepEqual(after.rooms.cyclorama.cues, { active: { audio: 'ambient.wav', loop: true } });
+    assert.deepEqual(after.rooms.maskRoom.cues, before.rooms.maskRoom.cues, 'rooms not named keep theirs');
+    res = await post({ cues: { cyclorama: null } });
+    assert.equal(res.status, 200);
+    after = await onDisk();
+    assert.equal(after.rooms.cyclorama.cues, undefined);
+  });
+
   it('refuses clips for a room that is not a museum room', async () => {
     const res = await fetch(`${server.url}/api/shows/MAD-DIM.json/zones`, {
       method: 'POST',

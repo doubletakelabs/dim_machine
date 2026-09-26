@@ -146,7 +146,7 @@
         <h2 style="margin-top:14px">Notes</h2>
         <p>Edits land in the show file on Save — a running show keeps its loaded
            copy until it is reloaded. Save writes only what this page edits —
-           zones and their beacons, and the doors and clips of rooms you
+           zones, beacons, and the audio, doors and clips of rooms you
            changed here: the rest of the show is merged from disk, so this tab
            can never overwrite a change made elsewhere while it sat open.</p>
         <p>Coordinates are floorplan pixels, saved as integers. A polygon keeps
@@ -194,6 +194,7 @@ function pushUndo(coalesceMs = 0) {
       zones: room.zones ?? {},
       thresholds: room.thresholds ?? null,
       stems: def.museum?.roomStems?.[roomId] ?? null,
+      cues: room.cues ?? null,
     });
   }
   snap['\u0000beacons'] = JSON.stringify(def.beacons ?? null);
@@ -215,6 +216,7 @@ function undo() {
     const was = JSON.parse(json);
     room.zones = was.zones;
     if (was.thresholds) room.thresholds = was.thresholds; else delete room.thresholds;
+    if (was.cues) room.cues = was.cues; else delete room.cues;
     if (def.museum) {
       def.museum.roomStems ??= {};
       if (was.stems) def.museum.roomStems[roomId] = was.stems; else delete def.museum.roomStems[roomId];
@@ -632,6 +634,8 @@ function renderDetails() {
   const shared = def.museum?.stems ?? {};
 
   box.innerHTML = `
+    ${museumRoom ? '' : roomAudio(roomId, room)}
+
     <h3>Doors into ${esc(room.name ?? roomId)}</h3>
     ${doors.length ? '' : '<div class="note">None. A door plays its clips while a guest stands at it — it never enters the room.</div>'}
     ${doors.map(([doorId, door]) => `
@@ -653,6 +657,58 @@ function renderDetails() {
       <div class="note">Blank uses the shared museum clip.</div>
       ${ROOM_STEMS.map(([stem, label, note]) => clipField(label, `data-stem="${stem}"`, own[stem],
         shared[stem] ? `shared: ${shared[stem]}` : 'shared (none set)', note, shared[stem])).join('')}` : ''}`;
+}
+
+/**
+ * What plays while a guest is in a room that is not a museum room (those play
+ * the museum clips): the room's own cues, by the state the room is in. A
+ * hallway is always idle; a shared room is active while someone is in it. A
+ * state with separate clips per audience gets one picker per audience.
+ */
+function roomAudio(roomId, room) {
+  const hallway = room.kind === 'hallway';
+  const states = hallway ? ['idle'] : Object.keys(room.machine?.states ?? { idle: {}, active: {} });
+  const when = {
+    idle: hallway ? 'while they are in it' : 'inside, while the room is not running (before it starts, or not for them)',
+    active: room.kind === 'shared' ? 'while someone is in it' : 'while it is running for them',
+  };
+  const rows = states.flatMap((state) => {
+    const cue = room.cues?.[state];
+    const entries = Array.isArray(cue) ? cue.map((c, i) => [c, i]) : [[cue ?? null, -1]];
+    return entries.map(([c, i]) => `
+      ${clipField(`${state}${i >= 0 ? ` · ${c?.audience ?? 'default'}` : ''}`,
+        `data-cue-state="${esc(state)}" data-cue-index="${i}" data-cue-field="audio"`, c?.audio, 'silence',
+        i >= 0 ? null : when[state] ?? null)}
+      <div class="field"><span></span>
+        <label class="muted"><input type="checkbox" data-cue-state="${esc(state)}" data-cue-index="${i}" data-cue-field="loop"${c?.loop ? ' checked' : ''}${c?.audio ? '' : ' disabled'}> loop</label><span></span></div>`);
+  });
+  return `
+    <h3>Audio in ${esc(room.name ?? roomId)}</h3>
+    <div class="note">Plays on the room channel while a guest is in the room.</div>
+    ${rows.join('')}`;
+}
+
+/** Change one room cue from the panel; volume and audience are kept as authored. */
+function editCue(roomId, el) {
+  const state = el.dataset.cueState;
+  const index = Number(el.dataset.cueIndex);
+  const field = el.dataset.cueField;
+  editRoom(roomId, () => {
+    const room = def.rooms[roomId];
+    room.cues ??= {};
+    if (index >= 0) {
+      const entry = room.cues[state]?.[index];
+      if (!entry) return;
+      if (field === 'audio') entry.audio = el.value || null; // null: this audience hears silence
+      else if (el.checked) entry.loop = true; else delete entry.loop;
+    } else if (field === 'audio') {
+      if (el.value) room.cues[state] = { ...(room.cues[state] ?? {}), audio: el.value };
+      else delete room.cues[state];
+    } else if (room.cues[state]) {
+      if (el.checked) room.cues[state].loop = true; else delete room.cues[state].loop;
+    }
+    if (!Object.keys(room.cues).length) delete room.cues;
+  });
 }
 
 /** Record an edit to a room's doors or clips: undoable, dirty, and saved. */
@@ -699,6 +755,8 @@ $('details').addEventListener('change', (e) => {
     });
     return;
   }
+
+  if (el.dataset.cueState) { el.blur(); editCue(roomId, el); return; }
 
   if (el.dataset.stem && def.museum) {
     el.blur();
@@ -964,12 +1022,14 @@ async function save() {
   // Doors and clips only for rooms touched here, so a stale tab cannot erase
   // ones somebody added to another room while it sat open.
   const thresholds = {};
+  const cues = {};
   const roomStems = {};
   for (const roomId of touched) {
     thresholds[roomId] = def.rooms[roomId]?.thresholds ?? null;
+    cues[roomId] = def.rooms[roomId]?.cues ?? null;
     if (def.museum?.rooms?.includes(roomId)) roomStems[roomId] = def.museum.roomStems?.[roomId] ?? null;
   }
-  const body = { zones, thresholds, roomStems };
+  const body = { zones, thresholds, cues, roomStems };
   if (beaconsTouched) body.beacons = def.beacons ?? null;
   const res = await fetch(`/api/shows/${encodeURIComponent(file)}/zones`, {
     method: 'POST',

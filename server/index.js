@@ -185,8 +185,9 @@ app.get('/api/content', async (_req, res) => {
  * commit (TECH-DEBT §5, 2026-09-13: a tracing pass undid the shared rooms).
  * Now the disk copy is the base truth for everything the editor does not own,
  * and the patch cannot say anything else. The editor owns, per room: `zones`
- * (polygons and their `ble`), `thresholds`, and the room's own museum clips
- * (`museum.roomStems.<roomId>`). Each named block is replaced wholesale — that
+ * (polygons), `cues` (the room's own audio), `thresholds` (its doors) and its
+ * own museum clips (`museum.roomStems.<roomId>`); and the show's `beacons`.
+ * Each named block is replaced wholesale — that
  * is what carries a deletion; `null` or `{}` removes it — and the merged show
  * must validate before anything lands.
  */
@@ -197,9 +198,10 @@ app.post('/api/shows/:file/zones', (req, res) => {
   const hasBeacons = req.body != null && Object.prototype.hasOwnProperty.call(req.body, 'beacons');
   const beacons = req.body?.beacons ?? null;
   const thresholds = req.body?.thresholds ?? {};
+  const cues = req.body?.cues ?? {};
   const roomStems = req.body?.roomStems ?? {};
   const isMap = (v) => v && typeof v === 'object' && !Array.isArray(v);
-  if (!isMap(zones) || !isMap(thresholds) || !isMap(roomStems) || (beacons != null && !isMap(beacons))) {
+  if (!isMap(zones) || !isMap(thresholds) || !isMap(cues) || !isMap(roomStems) || (beacons != null && !isMap(beacons))) {
     return res.status(400).json({
       error: 'body must be { zones: { roomId: { zoneId: { polygon, ble? } } }, thresholds?: { roomId: {…} }, roomStems?: { roomId: {…} } }',
     });
@@ -212,7 +214,7 @@ app.post('/api/shows/:file/zones', (req, res) => {
   }
   // A room the disk copy does not have is a stale editor talking about a world
   // that moved — exactly the situation this route exists to refuse loudly.
-  const named = new Set([...Object.keys(zones), ...Object.keys(thresholds), ...Object.keys(roomStems)]);
+  const named = new Set([...Object.keys(zones), ...Object.keys(thresholds), ...Object.keys(cues), ...Object.keys(roomStems)]);
   const unknown = [...named].filter((roomId) => !def.rooms?.[roomId]);
   if (unknown.length) {
     return res.status(400).json({ error: `rooms not in the show on disk: ${unknown.join(', ')} — reload the editor` });
@@ -229,6 +231,11 @@ app.post('/api/shows/:file/zones', (req, res) => {
   for (const [roomId, doors] of Object.entries(thresholds)) {
     if (empty(doors)) delete def.rooms[roomId].thresholds;
     else def.rooms[roomId].thresholds = doors;
+  }
+  // A room's own audio, by state (§8.1), for the rooms the editor names.
+  for (const [roomId, roomCues] of Object.entries(cues)) {
+    if (empty(roomCues)) delete def.rooms[roomId].cues;
+    else def.rooms[roomId].cues = roomCues;
   }
   if (Object.keys(roomStems).length) {
     if (!isMap(def.museum)) return res.status(400).json({ error: 'this show has no museum block to hold room clips' });
