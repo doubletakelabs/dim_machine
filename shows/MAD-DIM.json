@@ -2045,7 +2045,7 @@
         559,
         833
       ],
-      "rssi": -70,
+      "rssi": -60,
       "door": "southCorridor-door"
     },
     "47360": {
@@ -2141,7 +2141,7 @@
         686,
         304
       ],
-      "rssi": -70,
+      "rssi": -60,
       "door": "museumHallway-door"
     },
     "50432": {
@@ -2293,7 +2293,7 @@
         694,
         335
       ],
-      "rssi": -70,
+      "rssi": -65,
       "door": "museumHallway-door"
     },
     "58112": {
@@ -2331,7 +2331,7 @@
         561,
         457
       ],
-      "rssi": -70,
+      "rssi": -64,
       "room": "automation"
     },
     "59648": {
@@ -2386,7 +2386,7 @@
         433,
         837
       ],
-      "rssi": -70,
+      "rssi": -60,
       "door": "southCorridor-door"
     },
     "61184": {
