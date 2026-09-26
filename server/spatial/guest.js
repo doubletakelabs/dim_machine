@@ -14,12 +14,18 @@
 export class Guest {
   /**
    * @param {{ guestId: string, token: string, label: string, pathId?: string|null,
-   *          kind?: 'phone' | 'simulated' }} init
+   *          kind?: 'phone' | 'simulated', visitId?: string }} init
    */
   constructor(init) {
     this.guestId = init.guestId;
     this.token = init.token;
     this.label = init.label;
+    /**
+     * One person's time with the handset. A phone keeps its guestId for good —
+     * it is the phone's number — and each person it is handed to is a new
+     * visit, with the show started afresh.
+     */
+    this.visitId = init.visitId ?? null;
     this.pathId = init.pathId;
     /**
      * Whether a person chose this path rather than the show drawing it.

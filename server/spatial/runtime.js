@@ -332,9 +332,16 @@ export class SpatialRuntime {
     }
   }
 
-  spawnGuest({ label, kind } = {}) {
+  /**
+   * @param {{ label?: string, kind?: 'phone'|'simulated', guestId?: string }} [opts]
+   *   `guestId` for a handset that names itself (its Headwind number), so the
+   *   same phone is always the same guest; null if that guest already exists.
+   */
+  spawnGuest({ label, kind, guestId: wanted } = {}) {
     if (!this.def) return null;
-    const guestId = `u-${randomUUID().slice(0, 8)}`;
+    if (wanted && this.guests.has(wanted)) return null;
+    const guestId = wanted ?? `u-${randomUUID().slice(0, 8)}`;
+    const visitId = `v-${randomUUID().slice(0, 8)}`;
     const token = randomUUID();
     const num = ++this._guestSeq;
 
@@ -345,6 +352,7 @@ export class SpatialRuntime {
       guestId,
       token,
       label: label ?? `Guest ${num}`,
+      visitId,
       pathId: null,
       // A guest issued a handset is one the show can ask things of. A spawned
       // dot is not, and never becomes one.
@@ -369,12 +377,12 @@ export class SpatialRuntime {
     this.coordinator?.ensureGuest(guestId);
     this.coordinator?.setConnected(guestId, true);
 
-    this.append({ type: 'guest.joined', guestId, label: guest.label });
+    this.append({ type: 'guest.joined', guestId, visitId, label: guest.label });
     if (this.running) {
-      this.io.log?.(`${guest.label} joined`);
+      this.io.log?.(`${guest.label} joined (visit ${visitId})`);
     }
     this.notifyChange();
-    return { token, guestId, label: guest.label };
+    return { token, guestId, visitId, label: guest.label };
   }
 
   removeGuest(guestId) {
@@ -406,7 +414,7 @@ export class SpatialRuntime {
     this.lastRefused.delete(guestId);
     this.layerSince.delete(guestId);
     this.director.dropGuest(guestId);
-    this.append({ type: 'guest.left', guestId, roomId: occupied });
+    this.append({ type: 'guest.left', guestId, visitId: p.visitId, roomId: occupied });
     this.notifyChange();
     return true;
   }

@@ -534,6 +534,7 @@ function sendRoster() {
     rosterUsers.push({
       token,
       guestId: u.guestId,
+      visitId: guest?.visitId ?? null,
       label: u.label,
       device: u.device ?? null,
       connected: !!u.ws,
@@ -654,16 +655,25 @@ function phoneSnapshot(token) {
   };
 }
 
-function ensurePhoneSession(token) {
+/**
+ * @param {string|null} token
+ * @param {string|null} [device] — the handset's own number, which becomes its
+ *   guestId: the same phone is the same guest for good, visit after visit.
+ */
+function ensurePhoneSession(token, device = null) {
   if (token && runtime.getGuestByToken(token)) {
     const u = users.get(token);
     if (u) return { token, ...u };
   }
   // A handset is being issued. This guest is a person from here on.
-  const spawned = runtime.spawnGuest({ kind: 'phone' });
+  const spawned = runtime.spawnGuest({
+    kind: 'phone',
+    ...(device ? { guestId: device, label: `#${device}` } : {}),
+  });
   if (!spawned) return null;
   users.set(spawned.token, {
     guestId: spawned.guestId,
+    visitId: spawned.visitId,
     label: spawned.label,
     ws: null,
     telemetry: null,
@@ -671,6 +681,28 @@ function ensurePhoneSession(token) {
     disconnectedAt: null,
   });
   return { token: spawned.token, ...users.get(spawned.token) };
+}
+
+/**
+ * Retire whatever visit a guest is on: the phone has been handed to someone
+ * new. The guest goes from the show — its rooms see a departure, the same as
+ * any walk-out — and its session is forgotten, so the next spawn under the
+ * same guestId starts the show from the top. A socket still open on the old
+ * visit (a second tab) is told it was displaced rather than left to flap.
+ */
+function endVisit(guestId, except) {
+  for (const [t, u] of users.entries()) {
+    if (u.guestId !== guestId) continue;
+    if (u.ws && u.ws !== except) {
+      try {
+        send(u.ws, { type: 'displaced' });
+        u.ws.close(4001, 'displaced');
+      } catch { /* already gone */ }
+    }
+    notifyRelayPeerLeft(t);
+    users.delete(t);
+  }
+  runtime.removeGuest(guestId);
 }
 
 function sendRelaySync(token) {
@@ -764,7 +796,21 @@ wss.on('connection', (ws) => {
           return;
         }
 
-        if (msg.token && runtime.getGuestByToken(msg.token)) {
+        // A handset that names itself (the Android app's Headwind number) is
+        // always the same guest. Its token is the visit: kept across refreshes
+        // and reconnects, wiped by the app when the phone is handed on — so a
+        // phone with no token, or one the server no longer knows, is a new
+        // person on the same phone. A browser names nothing, and its token is
+        // the whole identity, as before.
+        const device = cleanDevice(msg.device);
+        const known = msg.token ? runtime.getGuestByToken(msg.token) : null;
+        const sameVisit = known && (!device || known.guestId === device);
+        if (device && !sameVisit) {
+          if (known) endVisit(known.guestId, ws);
+          endVisit(device, ws);
+        }
+
+        if (sameVisit) {
           token = msg.token;
           let u = users.get(token);
           if (!u) {
@@ -798,20 +844,22 @@ wss.on('connection', (ws) => {
             runtime.coordinator?.touchLocation(p.guestId);
           }
         } else {
-          const session = ensurePhoneSession(null);
+          const session = ensurePhoneSession(null, device);
           if (!session) return;
           token = session.token;
           const u = users.get(token);
           u.ws = ws;
+          if (device) opLog(`#${device}: new visit ${session.visitId}`);
         }
 
         // The Android app names the handset; a browser sends no device.
-        applyDevice(token, cleanDevice(msg.device));
+        applyDevice(token, device);
 
         send(ws, {
           type: 'welcome',
           token,
           guestId: users.get(token).guestId,
+          visitId: runtime.getGuestByToken(token)?.visitId ?? null,
           label: label(token),
           serverTime: Date.now(),
           assets: currentAssets(),

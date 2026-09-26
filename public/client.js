@@ -60,7 +60,7 @@ function applyRelaySync(channels) {
 }
 
 window.DIM = {
-  self: { guestId: null, label: null, token: null },
+  self: { guestId: null, visitId: null, label: null, token: null },
   /** Promote an interaction to the show state machine (canonical input events). */
   emit(type, payload) {
     sendMsg({ type: 'input', event: { type, payload: payload ?? {} } });
@@ -874,6 +874,7 @@ function connect() {
         storeToken(msg.token);
         window.DIM.self = {
           guestId: msg.guestId,
+          visitId: msg.visitId ?? null,
           label: msg.label,
           token: msg.token,
         };

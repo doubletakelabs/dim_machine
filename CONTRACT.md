@@ -479,8 +479,8 @@ they have reached never enters — a door beacon is heard from the room before
 it, and only a room's own beacons may skip a room. The dwell counts from when
 the door became a way in, so reaching the room before it does not let a door
 already heard pull the guest straight through. A guest
-with no room yet moves at once, wherever they are; a new guest (the phone back
-on its charger, or reset) starts again. An operator placing a guest is
+with no room yet moves at once, wherever they are; a new visit (the phone
+handed on, or reset) starts again. An operator placing a guest is
 authoritative: the furthest stage becomes that room's, so they can be sent back.
 
 **Unlikely jumps (rooms without a `stage`).** A show with no stages, or a room
@@ -491,6 +491,20 @@ connected, waits `location.jumpFartherMs` (5000) and is logged. Never a refusal.
 `welcome` and `assets` carry `beacons`, so a phone has the current list. The
 phone's pings keep contact: a phone the app locates keeps its room while it is
 connected and pinging, and loses it after `contactLossMs` of silence.
+
+**Phones and visits** (decided 2026-09-26). A handset in the Android app sends
+its Headwind number as `device` in `hello`, and that number is its `guestId`
+(`mad0005`) for good: a refresh, a reconnect, a server restart and a show load
+all come back as the same guest, so a phone can be followed through a day. Each
+person it is handed to is a **visit**, with its own `visitId` (`v-…`) in
+`welcome`, the roster and the `guest.joined`/`guest.left` events. The page's
+session token is the visit: the page keeps it across refreshes, and the app
+wipes it when the phone comes off its charger or the reset button is tapped. A
+`hello` with a known `device` and that visit's token carries on; one without it
+— handed on, or a token the server has forgotten — ends the old visit (its
+rooms see a departure) and starts the show afresh on the same guest. A page
+still open on the old visit is sent `displaced`. A browser sends no `device`,
+and its token is its whole identity, as before.
 
 **Content for offline phones.** `GET /api/content` returns what a handset
 needs to run without streaming: `{ version, showId, beacons, files }`, where

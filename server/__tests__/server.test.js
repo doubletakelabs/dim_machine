@@ -451,6 +451,71 @@ describe('the Android app locating a phone', () => {
     op.close();
   });
 
+  it('keeps a refreshed handset the same guest, on the same visit', async () => {
+    const op = await openOperator(server);
+    await runShow(op);
+    const first = await openPhone(server, undefined, { device: 'mad0901' });
+    assert.equal(first.welcome.guestId, 'mad0901', 'the phone\'s number is its guestId');
+    assert.match(first.welcome.visitId, /^v-/);
+    first.close();
+
+    const again = await openPhone(server, first.welcome.token, { device: 'mad0901' });
+    assert.equal(again.welcome.guestId, 'mad0901');
+    assert.equal(again.welcome.visitId, first.welcome.visitId, 'a refresh carries on the visit');
+    assert.equal(again.welcome.token, first.welcome.token);
+    again.close();
+    op.close();
+  });
+
+  it('starts a new visit on the same guest when the handset is handed on', async () => {
+    const op = await openOperator(server);
+    await runShow(op);
+    const first = await openPhone(server, undefined, { device: 'mad0902' });
+    first.send({ type: 'setRoom', roomId: 'library' });
+    first.close();
+
+    // The app wipes the page's storage on hand-off, so the hello has no token.
+    const since = op.mark();
+    const next = await openPhone(server, undefined, { device: 'mad0902' });
+    assert.equal(next.welcome.guestId, 'mad0902', 'the same phone');
+    assert.notEqual(next.welcome.visitId, first.welcome.visitId, 'a new person on it');
+    assert.notEqual(next.welcome.token, first.welcome.token);
+    const roster = await op.waitFor((m) => m.type === 'roster'
+      && m.users.some((u) => u.visitId === next.welcome.visitId), { since, describe: 'the new visit on the roster' });
+    assert.equal(roster.users.filter((u) => u.guestId === 'mad0902').length, 1, 'one guest, not two');
+    const guest = roster.spatial.guests.find((g) => g.guestId === 'mad0902');
+    assert.notEqual(guest?.roomId, 'library', 'the show starts afresh for them');
+    next.close();
+    op.close();
+  });
+
+  it('knows a handset the server has forgotten — after a restart or a show load', async () => {
+    const op = await openOperator(server);
+    await runShow(op);
+    const phone = await openPhone(server, 'a-token-from-before-the-restart', { device: 'mad0903' });
+    assert.equal(phone.welcome.guestId, 'mad0903');
+    phone.close();
+
+    await runShow(op); // loading a show forgets every guest
+    const back = await openPhone(server, phone.welcome.token, { device: 'mad0903' });
+    assert.equal(back.welcome.guestId, 'mad0903', 'still itself');
+    assert.notEqual(back.welcome.visitId, phone.welcome.visitId, 'its progress went with the show, so a new visit');
+    back.close();
+    op.close();
+  });
+
+  it('displaces a page still open on the old visit', async () => {
+    const op = await openOperator(server);
+    await runShow(op);
+    const old = await openPhone(server, undefined, { device: 'mad0904' });
+    const since = old.mark();
+    const next = await openPhone(server, undefined, { device: 'mad0904' });
+    await old.waitFor('displaced', { since });
+    assert.equal(next.welcome.guestId, 'mad0904');
+    next.close();
+    op.close();
+  });
+
   it('preloads a room\'s own clips', async () => {
     const op = await openOperator(server);
     await runShow(op);
