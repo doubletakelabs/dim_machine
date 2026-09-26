@@ -1093,6 +1093,25 @@ wss.on('connection', (ws) => {
   });
 });
 
+/**
+ * The show this server runs from boot, started at once (2026-09-26): a
+ * restarted server is back in the show before the phones have reconnected.
+ * `--show <file>` or SHOW names another; SHOW='' boots with none, which is how
+ * the test harness starts every server empty.
+ */
+const DEFAULT_SHOW = 'MAD-DIM.json';
+const showFlag = argv.indexOf('--show');
+const bootShow = showFlag >= 0 && argv[showFlag + 1] ? argv[showFlag + 1] : process.env.SHOW ?? DEFAULT_SHOW;
+if (bootShow) {
+  loadShow(bootShow);
+  if (loadedShowFile === basename(bootShow)) {
+    runtime.start();
+    opLog(`${loadedShowFile} loaded and started at boot`);
+  } else {
+    opLog(`✗ ${bootShow} did not load at boot — load it from the panel`);
+  }
+}
+
 httpServer.listen(PORT, () => {
   // The bound port, not the asked-for one. `PORT=0` means "any free port",
   // which is how the test harness boots a server without fighting whatever is
@@ -1103,6 +1122,7 @@ httpServer.listen(PORT, () => {
   console.log(`  operator panel: http://localhost:${port}/operator.html`);
   console.log(`  shows dir:      ${showsDir} (${listShows().join(', ') || 'empty'})`);
   console.log(`  installation:   ${installation?.installation ?? (installationPath || 'none — the show carries its own addresses')}`);
+  console.log(`  show:           ${loadedShowFile ? `${loadedShowFile}${runtime.running ? ', running' : ''}` : 'none'}`);
   // Only ever set when started with `fork()`, which nothing but the tests does.
   // Parsing the banner would work until somebody reworded it.
   process.send?.({ type: 'listening', port });

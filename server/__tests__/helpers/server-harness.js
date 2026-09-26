@@ -55,6 +55,8 @@ export async function startServer(opts = {}) {
       // differently on every laptop it runs on. Covered by a test, because it
       // rests on `??` treating '' as a value.
       ...(opts.installation ? {} : { INSTALLATION: '' }),
+      // Every test starts from an empty server, not from the venue's show.
+      SHOW: '',
       ...(opts.env ?? {}),
     },
   });

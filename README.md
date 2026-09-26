@@ -27,7 +27,10 @@ npm start          # → http://localhost:4100  (4000 is dim_central's; PORT=…
 npm test           # the spatial core, the server over a real socket, the recogniser
 ```
 
-- **Test panel:** `http://localhost:4100/operator.html` → load **MAD-DIM.json** → Start
+- **Show:** the server loads **MAD-DIM.json** and starts it at boot — a restart is
+  back in the show before the phones reconnect. `--show <file>` or `SHOW=<file>`
+  boots another; `SHOW=` boots with none
+- **Test panel:** `http://localhost:4100/operator.html` — load another show, stop, start
 - **Phones:** `http://localhost:4100/` — connect one and it becomes a guest. Room and
   guidance audio play through the thin audio layer (CONTRACT.md §8.1); the operator
   panel shows what each phone is hearing, per slot
