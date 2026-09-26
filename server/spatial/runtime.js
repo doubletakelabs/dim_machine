@@ -92,6 +92,11 @@ export class SpatialRuntime {
      * arriving — moving anywhere puts the door behind them.
      */
     this.atThreshold = new Map();
+    /**
+     * guestId → a beacon report held because it jumps further than a person
+     * walks between reports: { roomId, zoneId, fromRoomId, steps, dueAt }.
+     */
+    this.beaconHolds = new Map();
     /** Injected so tests drive a link without a socket; see experience-link.js. */
     this.openExperienceSocket = io.openExperienceSocket ?? null;
     /** Show-clock instant the show started, for elapsed-time display. */
@@ -247,6 +252,7 @@ export class SpatialRuntime {
     }
     this.walkthrough?.stop();
     this.atThreshold.clear();
+    this.beaconHolds.clear();
     for (const link of this.experiences.values()) link.stop();
     for (const actor of this.guestActors.values()) actor.stop();
     this.startedAt = null;
@@ -269,6 +275,7 @@ export class SpatialRuntime {
     const tick = () => {
       if (!this.running || !this.coordinator) return;
       this.coordinator.processTime(this.now());
+      this.processBeaconHolds(this.now());
       this._tickHandle = this.clock.setTimeout(tick, TICK_MS);
     };
     this._tickHandle = this.clock.setTimeout(tick, TICK_MS);
@@ -348,6 +355,7 @@ export class SpatialRuntime {
     this.walkthrough?.remove(guestId);
     this.virtualLocation?.forget(guestId);
     this.atThreshold.delete(guestId);
+    this.beaconHolds.delete(guestId);
     this.director.dropGuest(guestId);
     this.append({ type: 'guest.left', guestId, roomId: occupied });
     this.notifyChange();
@@ -548,8 +556,72 @@ export class SpatialRuntime {
       return { ok: false, reason: beacon?.door ? 'door beacon' : 'unknown beacon' };
     }
     const zoneId = Object.keys(this.def.rooms[beacon.room]?.zones ?? {})[0] ?? null;
+
+    // The same far room said again (the app re-sends on every reconnect)
+    // keeps its hold running; anything else replaces it — so a flicker to a
+    // far room that the phone takes back before the hold runs out never lands.
+    const held = this.beaconHolds.get(guestId);
+    if (held?.roomId === beacon.room) return { ok: true, roomId: beacon.room, heldMs: held.dueAt - this.now() };
+    this.beaconHolds.delete(guestId);
+    const here = this.coordinator.getOccupancy(guestId);
+    const from = here?.occupancy === 'inside' ? here.roomId : null;
+    const steps = from ? this.stepsBetween(from, beacon.room) : 0;
+    const holdMs = this.jumpHoldMs(steps);
+    if (holdMs > 0) {
+      this.beaconHolds.set(guestId, { roomId: beacon.room, zoneId, fromRoomId: from, steps, dueAt: this.now() + holdMs });
+      const label = this.guests.get(guestId)?.label ?? guestId;
+      const apart = Number.isFinite(steps) ? `${steps} steps apart` : 'not connected';
+      this.append({ type: 'guest.unlikelyJump', guestId, fromRoomId: from, roomId: beacon.room, steps: Number.isFinite(steps) ? steps : null, holdMs });
+      this.io.log?.(`${label}: ${from} → ${beacon.room}, ${apart} — holding ${holdMs / 1000}s`);
+      return { ok: true, roomId: beacon.room, heldMs: holdMs };
+    }
     this.coordinator.ingestImmediate(guestId, beacon.room, 'inside', 'ble', zoneId);
     return { ok: true, roomId: beacon.room };
+  }
+
+  /**
+   * How long a beacon report must stand before it is believed, by how far it
+   * jumps along the building's connections (`adjacent`). Next door or the same
+   * room: at once. One space skipped (a brisk walk through a short hallway with
+   * no reading): a short hold. Further, or not connected at all: a long hold —
+   * never a refusal, because a phone out of contact can genuinely reappear
+   * anywhere, and a guest must not be stranded in the wrong room.
+   * Show settings: `location.jumpTwoStepsMs` (1500) and `location.jumpFartherMs` (5000).
+   */
+  jumpHoldMs(steps) {
+    if (steps <= 1) return 0;
+    const cfg = this.def?.location ?? {};
+    return steps === 2 ? (cfg.jumpTwoStepsMs ?? 1500) : (cfg.jumpFartherMs ?? 5000);
+  }
+
+  /** Fewest connections between two spaces (0 for the same one; Infinity if none). */
+  stepsBetween(fromRoomId, toRoomId) {
+    if (fromRoomId === toRoomId) return 0;
+    const rooms = this.def?.rooms ?? {};
+    const seen = new Set([fromRoomId]);
+    let frontier = [fromRoomId];
+    for (let steps = 1; frontier.length; steps++) {
+      const next = [];
+      for (const id of frontier) {
+        for (const n of rooms[id]?.adjacent ?? []) {
+          if (n === toRoomId) return steps;
+          if (!seen.has(n)) { seen.add(n); next.push(n); }
+        }
+      }
+      frontier = next;
+    }
+    return Infinity;
+  }
+
+  /** Believe held beacon reports whose hold has run out with nothing newer said. */
+  processBeaconHolds(now) {
+    for (const [guestId, hold] of this.beaconHolds) {
+      if (now < hold.dueAt) continue;
+      this.beaconHolds.delete(guestId);
+      if (!this.running || !this.coordinator) continue;
+      this.coordinator.ingestImmediate(guestId, hold.roomId, 'inside', 'ble', hold.zoneId);
+      this.io.log?.(`${this.guests.get(guestId)?.label ?? guestId}: ${hold.fromRoomId} → ${hold.roomId} confirmed after the hold`);
+    }
   }
 
   /** A phone at a door beacon (major), or away from any (null) — §4.2c. */
@@ -656,6 +728,7 @@ export class SpatialRuntime {
       const step = Math.min(TICK_MS, remaining);
       this.clock.advance(step);
       this.coordinator?.processTime(this.now());
+      this.processBeaconHolds(this.now());
       remaining -= step;
     } while (remaining > 0);
   }

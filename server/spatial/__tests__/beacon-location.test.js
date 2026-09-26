@@ -23,6 +23,8 @@ function show() {
     901: { at: [10, 10], room: 'museumHallway', rssi: -70 },
     902: { at: [20, 20], room: 'kin', rssi: -70 },
     903: { at: [30, 30], room: 'kin', rssi: -70 },
+    904: { at: [60, 60], room: 'hallOfHeroes', rssi: -70 },
+    905: { at: [70, 70], room: 'cyclorama', rssi: -70 },
     931: { at: [40, 40], door: 'influence-front', rssi: -70 },
     999: { at: [50, 50], rssi: -70 },
   };
@@ -88,5 +90,70 @@ describe('locating a phone by beacon', () => {
     assert.equal(roomOf(rt, guestId), 'kin', '20s standing still, still in kin');
     rt.testAdvanceTime(6000);
     assert.equal(roomOf(rt, guestId), null, 'no contact past contactLossMs — outside');
+  });
+});
+
+describe('unlikely jumps between beacons', () => {
+  // MAD-DIM's connections: Hall of Heroes – Cyclorama – Museum Hallway – Kin.
+  it('next door moves at once', () => {
+    const { rt, guestId } = running();
+    rt.setGuestBeacon(guestId, 904);
+    assert.equal(rt.setGuestBeacon(guestId, 905).heldMs, undefined);
+    assert.equal(roomOf(rt, guestId), 'cyclorama');
+  });
+
+  it('one space skipped is held briefly, then believed', () => {
+    const { rt, guestId } = running();
+    rt.setGuestBeacon(guestId, 904);
+    assert.equal(rt.setGuestBeacon(guestId, 901).heldMs, 1500, 'hall of heroes → museum hallway skips cyclorama');
+    assert.equal(roomOf(rt, guestId), 'hallOfHeroes');
+    rt.testAdvanceTime(1600);
+    assert.equal(roomOf(rt, guestId), 'museumHallway');
+  });
+
+  it('further is held longer, and a flicker the phone takes back never lands', () => {
+    const { rt, guestId } = running();
+    rt.setGuestBeacon(guestId, 904);
+    assert.equal(rt.setGuestBeacon(guestId, 902).heldMs, 5000, 'hall of heroes → kin, three steps');
+    rt.testAdvanceTime(2000);
+    rt.setGuestBeacon(guestId, 904); // back again: it was a misread
+    for (let i = 0; i < 3; i++) { rt.testAdvanceTime(2000); rt.coordinator.touchLocation(guestId); } // the page's pings
+    assert.equal(roomOf(rt, guestId), 'hallOfHeroes');
+    assert.equal(rt.rooms.get('kin').state, 'idle', 'kin never woke for a misread');
+    const logged = rt.eventLog.filter((e) => e.type === 'guest.unlikelyJump');
+    assert.equal(logged.length, 1);
+    assert.equal(logged[0].steps, 3);
+  });
+
+  it('a real far move lands after the hold; saying it again does not restart it', () => {
+    const { rt, guestId } = running();
+    rt.setGuestBeacon(guestId, 904);
+    rt.setGuestBeacon(guestId, 902);
+    rt.testAdvanceTime(3000);
+    rt.setGuestBeacon(guestId, 903); // kin again, another beacon of the same room
+    rt.testAdvanceTime(2100);
+    assert.equal(roomOf(rt, guestId), 'kin', 'five seconds from the first report');
+  });
+
+  it('coming back from nowhere is believed at once', () => {
+    const { rt, guestId } = running();
+    assert.equal(rt.setGuestBeacon(guestId, 902).heldMs, undefined, 'first fix');
+    assert.equal(roomOf(rt, guestId), 'kin');
+  });
+
+  it('the holds are show settings', () => {
+    const rt = new SpatialRuntime({ enableTick: false, clock: new ManualClock(), assetSeconds: () => 3 });
+    const def = show();
+    def.location = { ...(def.location ?? {}), jumpTwoStepsMs: 0, jumpFartherMs: 800 };
+    assert.deepEqual(rt.load(def).errors, []);
+    rt.start();
+    const g = rt.spawnGuest();
+    rt.setGuestBeacon(g.guestId, 904);
+    assert.equal(rt.setGuestBeacon(g.guestId, 901).heldMs, undefined, 'two steps: no hold');
+    assert.equal(rt.setGuestBeacon(g.guestId, 904).heldMs, undefined, 'and back, two steps');
+    assert.equal(rt.setGuestBeacon(g.guestId, 902).heldMs, 800);
+    const bad = show();
+    bad.location = { jumpFartherMs: -1 };
+    assert.match(rt.load(bad).errors.join('\n'), /location\.jumpFartherMs must be a non-negative number/);
   });
 });

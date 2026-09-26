@@ -989,6 +989,13 @@ export function validateShowDefinition(raw) {
 
   checkZoneOverlaps(def.rooms ?? {}, warnings);
   checkBeacons(def, errors, warnings);
+  // How long a beacon report that jumps between unconnected spaces is held.
+  for (const key of ['jumpTwoStepsMs', 'jumpFartherMs']) {
+    const v = def.location?.[key];
+    if (v != null && (typeof v !== 'number' || !Number.isFinite(v) || v < 0)) {
+      errors.push(`location.${key} must be a non-negative number of milliseconds`);
+    }
+  }
 
   if (def.zones != null) {
     errors.push('top-level "zones" was removed — declare zones inside each room (rooms.<id>.zones)');

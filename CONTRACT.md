@@ -420,6 +420,15 @@ own socket, only when something changes:
 - `{ "type": "door", "major": 31 }` / `{ "type": "door", "major": null }` — at
   a door beacon / away from it; plays that door's clips (§4.2c).
 
+**Unlikely jumps.** The phone is the sensor; the server decides. A report is
+weighed by how far it jumps along the rooms' `adjacent` connections from where
+the guest is: the same room or next door moves them at once; one space skipped
+waits `location.jumpTwoStepsMs` (1500); further, or not connected, waits
+`location.jumpFartherMs` (5000) and is logged. Any other report in the meantime
+cancels the wait, so a flicker the phone takes back never lands; the same far
+room said again keeps its wait. Never a refusal — a phone out of contact can
+genuinely reappear anywhere — and a guest with no room yet moves at once.
+
 `welcome` and `assets` carry `beacons`, so a phone has the current list. The
 phone's pings keep contact: a phone the app locates keeps its room while it is
 connected and pinging, and loses it after `contactLossMs` of silence.
