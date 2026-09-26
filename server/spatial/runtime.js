@@ -615,14 +615,24 @@ export class SpatialRuntime {
   processDoorDwell(now) {
     if (!this.running || !this.coordinator) return;
     for (const [guestId, at] of this.atThreshold) {
-      if (at.entered || now - at.since < this.doorDwellMs()) continue;
+      if (at.entered) continue;
       // The dwell stands in for any hold, but not for the way through: a door
-      // behind them, or rooms away, is not a way in.
+      // behind them, or rooms away, is not a way in. Nor is a door that skips a
+      // room they have not reached — a door beacon is heard from the room
+      // before it (the Museum Hallway's, from inside the Cyclorama), and only
+      // a room's own beacons may skip, on the longer hold.
       const move = this.judgeMove(guestId, at.roomId);
+      if (!move.refused && move.steps > 1 && this.stageOf(at.roomId) > (this.furthestStage.get(guestId) ?? 0)) {
+        move.refused = 'too far';
+      }
       if (move.refused) {
         this.refuseReading(guestId, at.roomId, move);
+        // The dwell counts from when it is a way in: reaching the room before
+        // it does not let a door already heard pull them straight through.
+        at.since = now;
         continue;
       }
+      if (now - at.since < this.doorDwellMs()) continue;
       at.entered = true;
       // The dwell is the confirmation; a jump held for this guest is moot.
       this.beaconHolds.delete(guestId);

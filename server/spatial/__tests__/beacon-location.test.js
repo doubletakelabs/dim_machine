@@ -35,6 +35,7 @@ function show({ staged = true } = {}) {
     909: { at: [99, 99], room: 'saas', rssi: -70 },
     931: { at: [40, 40], door: 'influence-front', rssi: -70 },
     932: { at: [85, 85], door: 'entranceHallway-door', rssi: -70 },
+    933: { at: [75, 75], door: 'museumHallway-door', rssi: -70 },
     999: { at: [50, 50], rssi: -70 },
   };
   return def;
@@ -250,6 +251,24 @@ describe('the way through the building (rooms.*.stage)', () => {
     rt.testAdvanceTime(4000);
     assert.equal(roomOf(rt, guestId), 'maskRoom');
     assert.equal(rt.atThreshold.get(guestId).entered, false);
+  });
+
+  it('a door that skips a room never lets them in: Hall of Heroes to the Museum Hallway', () => {
+    // What happened on site: from the Hall of Heroes, the Museum Hallway door
+    // was heard for 3s and pulled the guest past the Cyclorama.
+    const { rt, guestId } = inMaskRoom();
+    rt.setGuestBeacon(guestId, 904);
+    wait(rt, guestId, 3100);
+    assert.equal(roomOf(rt, guestId), 'hallOfHeroes');
+    rt.setGuestDoorBeacon(guestId, 933);
+    wait(rt, guestId, 1000);
+    rt.setGuestBeacon(guestId, 905); // the Cyclorama's own beacon, heard with the door
+    wait(rt, guestId, 4000);
+    assert.equal(roomOf(rt, guestId), 'cyclorama', 'the room in between, not past it');
+    wait(rt, guestId, 1500); // in the Cyclorama since 4s; the door not yet 3s from there
+    assert.equal(roomOf(rt, guestId), 'cyclorama', 'the door heard all along does not pull them straight through');
+    wait(rt, guestId, 1200);
+    assert.equal(roomOf(rt, guestId), 'museumHallway', 'three seconds at it from the Cyclorama: in');
   });
 
   it('an operator can send them back, and the way on starts again from there', () => {

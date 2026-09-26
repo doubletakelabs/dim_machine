@@ -471,7 +471,11 @@ Any other report in the meantime cancels a wait, so a flicker the phone takes
 back never lands — which matters, because a stage once reached cannot be left
 backwards. An ignored report cancels nothing and is logged once
 (`guest.readingRefused`). A door is judged the same way: its dwell stands in
-for any wait, but a door behind the guest or rooms away never enters. A guest
+for any wait, but a door behind the guest, rooms away, or one room past where
+they have reached never enters — a door beacon is heard from the room before
+it, and only a room's own beacons may skip a room. The dwell counts from when
+the door became a way in, so reaching the room before it does not let a door
+already heard pull the guest straight through. A guest
 with no room yet moves at once, wherever they are; a new guest (the phone back
 on its charger, or reset) starts again. An operator placing a guest is
 authoritative: the furthest stage becomes that room's, so they can be sent back.
