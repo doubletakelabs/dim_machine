@@ -532,14 +532,18 @@ describe('the Android app locating a phone', () => {
     const content = await (await fetch(`${server.url}/api/content`)).json();
     const byPath = Object.fromEntries(content.files.map((f) => [f.path, f]));
     for (const page of ['index.html', 'client.js', 'mixer.js']) assert.ok(byPath[page], `the page's ${page}`);
-    assert.ok(byPath['assets/whisper.wav'], 'the media');
+    assert.ok(byPath['assets/click.wav'], 'the media the show plays');
+    assert.ok(byPath['assets/keepawake.mp4'], 'and what the page itself loads');
+    // Only what is used: MAD-DIM plays neither of these, though both are on disk.
+    assert.equal(byPath['assets/whisper.wav'], undefined, 'not a file the show does not name');
+    assert.equal(byPath['assets/mad-floorplan.svg'], undefined, 'nor the operator floor plan');
     assert.ok(content.files.every((f) => !f.path.split('/').some((p) => p.startsWith('.'))), 'no dotfiles');
 
     // The checksum is the file's, and a download from the page's own URL matches it.
     const { createHash } = await import('node:crypto');
-    const body = Buffer.from(await (await fetch(`${server.url}/assets/whisper.wav`)).arrayBuffer());
-    assert.equal(createHash('sha256').update(body).digest('hex'), byPath['assets/whisper.wav'].sha256);
-    assert.equal(body.length, byPath['assets/whisper.wav'].size);
+    const body = Buffer.from(await (await fetch(`${server.url}/assets/click.wav`)).arrayBuffer());
+    assert.equal(createHash('sha256').update(body).digest('hex'), byPath['assets/click.wav'].sha256);
+    assert.equal(body.length, byPath['assets/click.wav'].size);
 
     assert.deepEqual(Object.keys(content.beacons).sort(), ['801', '831'], 'and the beacon list');
     assert.match(content.version, /^[0-9a-f]{16}$/);

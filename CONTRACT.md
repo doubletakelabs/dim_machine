@@ -46,6 +46,10 @@ Decided on site at MAD, in one day; each is written into its section.
 - **Up and down are the guest's (§8.1, Input).** The phone hangs upside
   down on a lanyard; `guest.input.mirrorY` flips touches top-to-bottom as they
   arrive, so swipes, drags and releases report the guest's up and down.
+- **Phones load only what they use (§4.2d).** The content a phone syncs is
+  the show's assets, not all of `public/assets`, and the page decodes each
+  clip when a cue first asks for it, within a memory budget — not all at load,
+  which crashed the page on the venue's phones.
 - **Placeholder sounds are gone from MAD-DIM.** No room plays `whisper.wav` or
   `ambient.wav`, and the museum stems are blank until new clips are cut.
 
@@ -508,10 +512,20 @@ and its token is its whole identity, as before.
 
 **Content for offline phones.** `GET /api/content` returns what a handset
 needs to run without streaming: `{ version, showId, beacons, files }`, where
-`files` is every file the phone page loads — its own files and everything
-under `public/assets` — each `{ path, size, sha256 }`, fetched from the same
-URL the page uses (`/<path>`). `version` changes when any file or the beacons
-change. The app syncs it on charge and serves the page from its own copy.
+`files` is every file the phone page loads — its own files, its keep-awake
+video, and the assets the loaded show names (the list `welcome` sends) — each
+`{ path, size, sha256 }`, fetched from the same URL the page uses
+(`/<path>`). Nothing else in `public/assets` goes to a phone (2026-09-26): a
+master mix or an unused take can sit there without costing every handset a
+download. `version` changes when any file or the beacons change. The app syncs
+it on charge and serves the page from its own copy.
+
+**Audio is decoded when it is needed** (2026-09-26). The page fetches images
+and video ahead, but decodes each clip the first time a cue asks for it, one
+at a time, and keeps up to ~320MB of decoded audio — least recently used goes
+first, never anything playing, fading or waiting to play. Decoded, MAD-DIM's
+29 minutes of clips are ~660MB; decoding them all at load had Android kill the
+page on 4GB phones, over and over.
 
 ### 4.2b Show floor plan — live
 

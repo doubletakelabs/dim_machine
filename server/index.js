@@ -138,12 +138,16 @@ app.get('/api/assets/audio', (_req, res) => {
 /**
  * Everything a show handset needs to run without streaming — the content the
  * Android app (dim_android_app) syncs when it is put on charge, then serves to
- * the page from its own copy: the phone page's files, every file under
- * public/assets, and the show's beacons. `version` changes when any of it
+ * the page from its own copy: the phone page's files, the assets the loaded
+ * show names (the same list `welcome` sends), and the show's beacons. Only
+ * those: a file that is merely in public/assets — a 195MB master mix, a take
+ * the show no longer uses — never goes to a phone (2026-09-26). `version` changes when any of it
  * does; each file carries its size and sha256 so only what changed is fetched
  * (from the same URL the page uses) and a download can be checked.
  */
 const PHONE_PAGE_FILES = ['index.html', 'client.js', 'gestures.js', 'clock-sync.js', 'cue-plan.js', 'mixer.js'];
+/** Assets the page itself loads, whatever the show: index.html's keep-awake video. */
+const PHONE_PAGE_ASSETS = ['keepawake.mp4'];
 /** absolute path → { size, mtimeMs, sha256 }: a hash is recomputed only when the file changed. */
 const hashCache = new Map();
 
@@ -164,9 +168,8 @@ async function contentEntry(rel) {
 
 app.get('/api/content', async (_req, res) => {
   try {
-    const assets = readdirSync(assetsDir, { recursive: true })
-      .map((f) => String(f).split(sep).join('/'))
-      .filter((f) => !f.split('/').some((part) => part.startsWith('.')))
+    const assets = [...new Set([...PHONE_PAGE_ASSETS, ...currentAssets()])]
+      .filter((f) => !f.split('/').some((part) => part.startsWith('.') || part === '..'))
       .map((f) => `assets/${f}`);
     const files = (await Promise.all([...PHONE_PAGE_FILES, ...assets].map(contentEntry)))
       .filter(Boolean)

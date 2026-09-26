@@ -221,8 +221,15 @@ function assetStore(id) {
   return audioBuffers;
 }
 
+/**
+ * Images and video, fetched ahead. Audio is not: decoded, the show's clips are
+ * far bigger than their files (MAD-DIM's 29 minutes are ~600MB of samples),
+ * and decoding them all at once had Android kill the page on a 4GB phone —
+ * which the app answers with a reload, which decoded them all again
+ * (2026-09-26). Audio is decoded when a cue asks for it; see `loadAudio`.
+ */
 async function preload(assets) {
-  const missing = assets.filter((id) => !assetStore(id).has(id));
+  const missing = assets.filter((id) => (isVideoAsset(id) || isImageAsset(id)) && !assetStore(id).has(id));
   if (!missing.length) return;
   $('loading').style.display = 'block';
   await Promise.all(missing.map(async (id) => {
@@ -232,14 +239,69 @@ async function preload(assets) {
       // Images and video become blob URLs so showing one is never a network
       // round trip — a screen that arrives a beat after its narration reads as
       // a fault, and in a dark room it is the only thing the guest can see.
-      if (isVideoAsset(id) || isImageAsset(id)) {
-        assetStore(id).set(id, URL.createObjectURL(await res.blob()));
-      } else {
-        audioBuffers.set(id, await ctx.decodeAudioData(await res.arrayBuffer()));
-      }
+      assetStore(id).set(id, URL.createObjectURL(await res.blob()));
     } catch (e) { console.warn('asset failed:', id, e); }
   }));
   $('loading').style.display = 'none';
+}
+
+/**
+ * Decoded audio kept for reuse, up to this many bytes of samples. What is
+ * playing, fading, or waiting to play is never let go, whatever the total; the
+ * rest goes oldest-used first. Two 5-minute layers are ~230MB on their own.
+ */
+const AUDIO_BUDGET_BYTES = 320e6;
+const AUDIO_FETCH_TIMEOUT_MS = 30000;
+const audioUsedAt = new Map(); // assetId → last asked for
+const audioLoading = new Map(); // assetId → Promise<AudioBuffer|null>
+/** assetId → the latest cue waiting for its audio, so a stop before it decodes wins. */
+const awaitingAudio = new Map();
+let decodeChain = Promise.resolve();
+
+const bufferBytes = (b) => b.length * b.numberOfChannels * 4;
+
+/**
+ * One clip's audio, decoded once and kept. Decodes run one at a time, so the
+ * page never holds more than one clip's worth of compressed and half-decoded
+ * data on top of what it keeps.
+ */
+function loadAudio(id) {
+  audioUsedAt.set(id, performance.now());
+  if (audioBuffers.has(id)) return Promise.resolve(audioBuffers.get(id));
+  if (audioLoading.has(id)) return audioLoading.get(id);
+  const loading = (decodeChain = decodeChain.then(async () => {
+    try {
+      // One at a time means one stuck fetch would hold up every clip after it.
+      const res = await fetch(`assets/${id}`, { signal: AbortSignal.timeout(AUDIO_FETCH_TIMEOUT_MS) });
+      if (!res.ok) throw new Error(res.status);
+      const buffer = await ctx.decodeAudioData(await res.arrayBuffer());
+      audioBuffers.set(id, buffer);
+      trimAudio();
+      return buffer;
+    } catch (e) {
+      console.warn('asset failed:', id, e);
+      return null;
+    } finally {
+      audioLoading.delete(id);
+    }
+  }));
+  audioLoading.set(id, loading);
+  return loading;
+}
+
+/** Let go of the least recently used clips nothing needs, down to the budget. */
+function trimAudio() {
+  let total = 0;
+  for (const b of audioBuffers.values()) total += bufferBytes(b);
+  if (total <= AUDIO_BUDGET_BYTES) return;
+  const idle = [...audioBuffers.keys()]
+    .filter((id) => !playing.has(id) && !stopping.has(id) && !awaitingAudio.has(id))
+    .sort((a, b) => (audioUsedAt.get(a) ?? 0) - (audioUsedAt.get(b) ?? 0));
+  for (const id of idle) {
+    if (total <= AUDIO_BUDGET_BYTES) break;
+    total -= bufferBytes(audioBuffers.get(id));
+    audioBuffers.delete(id);
+  }
 }
 
 function ctxTimeFor(serverTs) {
@@ -250,8 +312,21 @@ function ctxTimeFor(serverTs) {
 // Cue execution
 // ---------------------------------------------------------------------------
 function playAudio(cue, { seekIntoLoop = false } = {}) {
+  if (!ctx) return;
   const buffer = audioBuffers.get(cue.assetId);
-  if (!buffer || !ctx) return;
+  if (!buffer) {
+    // Decoded on first use. The plan below is made against the show clock when
+    // it lands, so a clip that took a moment to decode starts where it should
+    // be by then rather than from its top.
+    awaitingAudio.set(cue.assetId, cue);
+    loadAudio(cue.assetId).then((loaded) => {
+      if (awaitingAudio.get(cue.assetId) !== cue) return; // replaced or stopped meanwhile
+      awaitingAudio.delete(cue.assetId);
+      if (loaded) playAudio(cue, { seekIntoLoop });
+    });
+    return;
+  }
+  audioUsedAt.set(cue.assetId, performance.now());
   // The decision lives in cue-plan.js, where it has tests. This function only
   // owns the WebAudio wiring the decision is carried out with.
   const plan = planAudio(cue, buffer.duration, clock.serverNow(), { seekIntoLoop });
@@ -348,6 +423,8 @@ function loopPass(entry, buffer, when, into) {
 }
 
 function stopAudio(assetId, fadeMs = 0) {
+  if (assetId === '*') awaitingAudio.clear();
+  else awaitingAudio.delete(assetId);
   const targets = assetId === '*'
     ? [...new Set([...playing.keys(), ...stopping.keys()])]
     : [assetId];
