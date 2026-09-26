@@ -163,15 +163,14 @@
           ]
         }
       },
-      "cues": {
-        "idle": {
-          "audio": "ambient.wav",
-          "loop": true,
-          "gain": 0.3
-        }
-      },
       "thresholds": {
-        "entranceHallway-door": {}
+        "entranceHallway-door": {
+          "cues": {
+            "guidance": {
+              "audio": "audio/0301-boardroom_hall.mp3"
+            }
+          }
+        }
       }
     },
     "maskRoom": {
@@ -233,10 +232,19 @@
       "cues": {
         "active": {
           "audio": "whisper.wav"
+        },
+        "idle": {
+          "audio": "audio/0303-boardroom_visexercise.mp3"
         }
       },
       "thresholds": {
-        "maskRoom-door": {}
+        "maskRoom-door": {
+          "cues": {
+            "guidance": {
+              "audio": "audio/0302-boardroom_entry.mp3"
+            }
+          }
+        }
       }
     },
     "hallOfHeroes": {
