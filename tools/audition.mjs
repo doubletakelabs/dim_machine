@@ -53,6 +53,7 @@ if (!sequences.length) {
 
 const describe = (advance) => {
   if (!advance) return '?? no rule';
+  if (advance.kind === 'none') return 'stays';
   return advance.kind === 'delay' ? `after ${advance.ms}ms` : `on ${advance.input}`;
 };
 
@@ -86,7 +87,9 @@ if (!chosen.length) {
 const warnings = [];
 
 for (const seq of chosen) {
-  console.log(`\n${seq.path}  →  ${seq.state.onComplete ?? '(nothing follows)'}`);
+  const holds = advanceForStep(seq.state.sequence.at(-1))?.kind === 'none';
+  const next = seq.state.onComplete ?? (holds ? '(last step stays until the guest moves on)' : '(nothing follows)');
+  console.log(`\n${seq.path}  →  ${next}`);
   seq.state.sequence.forEach((step, i) => {
     const advance = advanceForStep(step);
     const secs = duration(step.audio);

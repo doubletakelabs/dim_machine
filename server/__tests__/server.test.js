@@ -710,7 +710,8 @@ describe('saving zones', () => {
 
   it('lists the audio the editor can assign', async () => {
     const files = await (await fetch(`${server.url}/api/assets/audio`)).json();
-    assert.ok(files.includes('audio/museum/entrance.wav'));
+    // public/assets/audio is local to each machine and not in the repo, so only
+    // the tracked fixture sounds can be relied on here.
     assert.ok(files.includes('whisper.wav'));
     assert.ok(files.every((f) => !f.split('/').some((p) => p.startsWith('.'))), 'no dotfiles');
   });

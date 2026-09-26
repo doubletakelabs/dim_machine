@@ -321,7 +321,7 @@ export const GUEST_KINDS = ['phone', 'simulated'];
  * decision, made by `inputBindings` mapping each to a guest-machine event, so a
  * room can ask for a tap without the client knowing why.
  */
-export const INPUT_KINDS = ['tap', 'swipe', 'shake'];
+export const INPUT_KINDS = ['tap', 'swipe', 'drag', 'shake'];
 
 /**
  * Who in a room a given cue is for, expressed in standings.

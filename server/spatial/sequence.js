@@ -57,10 +57,15 @@ export function advanceFromFilename(filename) {
   return INPUT_KINDS.includes(kind) ? { kind: 'input', input: kind } : null;
 }
 
-/** How a step advances: its own `advance`, else whatever its image says. */
+/**
+ * How a step advances: its own `advance`, else whatever its image says.
+ * `"none"` is a last step that stays up until something outside the sequence —
+ * walking into the next room — moves the guest on.
+ */
 export function advanceForStep(step) {
   const { advance } = step ?? {};
   if (advance == null) return advanceFromFilename(step?.image);
+  if (advance === 'none') return { kind: 'none' };
   if (typeof advance === 'number') {
     return Number.isFinite(advance) && advance >= 0 ? { kind: 'delay', ms: advance } : null;
   }
@@ -122,7 +127,11 @@ function expandOne(state, path, { cues, bindings, errors, warnings }) {
   }
 
   const generated = {};
-  const done = completionTarget(state, path, warnings, at);
+  const holdsAtEnd = advanceForStep(steps.at(-1))?.kind === 'none';
+  const done = holdsAtEnd ? null : completionTarget(state, path, warnings, at);
+  if (holdsAtEnd && state.onComplete) {
+    warnings.push(`guest.machine.${at}.onComplete is never reached — the last step advances on "none"`);
+  }
 
   steps.forEach((step, i) => {
     const stepAt = `${at}.sequence[${i}]`;
@@ -135,8 +144,14 @@ function expandOne(state, path, { cues, bindings, errors, warnings }) {
       return;
     }
 
-    const target = i === steps.length - 1 ? done : stepId(i + 1);
-    generated[stepId(i)] = advanceNode(advanceForStep(step), target, stepAt, bindings, errors);
+    const last = i === steps.length - 1;
+    const advance = advanceForStep(step);
+    if (advance?.kind === 'none' && !last) {
+      // Every step after it would be unreachable.
+      errors.push(`${stepAt} advances on "none", which only the last step may do`);
+      return;
+    }
+    generated[stepId(i)] = advanceNode(advance, last ? done : stepId(i + 1), stepAt, bindings, errors);
     cues[`${at}.${stepId(i)}`] = cueFor(step);
   });
 
@@ -155,7 +170,7 @@ function advanceNode(advance, target, stepAt, bindings, errors) {
     );
     return {};
   }
-  if (!target) return {};
+  if (!target || advance.kind === 'none') return {};
   if (advance.kind === 'delay') return { after: { [advance.ms]: target } };
 
   const event = bindings[advance.input];

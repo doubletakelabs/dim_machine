@@ -380,8 +380,8 @@ describe('walking a guest the show is waiting on', () => {
     const { rt, g } = atAScreen({ kind: 'phone' });
     assert.deepEqual(rt.pendingInputs(g.guestId), ['tap']);
     rt.guestInput(g.guestId, 'tap');
-    for (let i = 0; i < 4; i++) rt.guestInput(g.guestId, 'tap');
-    assert.deepEqual(rt.pendingInputs(g.guestId), ['swipe'], 'the swipe screen wants only a swipe');
+    rt.guestInput(g.guestId, 'tap');
+    assert.deepEqual(rt.pendingInputs(g.guestId), ['swipe'], 'the swipe step wants only a swipe');
   });
 
   it('does not sweep up a phone guest when walking everyone', () => {
@@ -412,7 +412,9 @@ describe('walking a guest the show is waiting on', () => {
     // deliberate act, not the start of a process.
     rt.testAdvanceTime(120_000);
     assert.equal(roomId(), 'entranceHallway');
-    assert.equal(guidance(), 'prologue.calibration.step1', 'their screen is untouched');
+    // Calibration ends on entering the hallway because the show says so — the
+    // same as walking there — not because anything was timed.
+    assert.equal(guidance(), 'prologue.done');
   });
 
   it('places a guest outside, and refuses a room that does not exist', () => {

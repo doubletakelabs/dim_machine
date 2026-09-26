@@ -16,7 +16,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createGestureRecogniser, createRepeatGuard,
-  HOLD_MS, SWIPE_MIN_PX, SWIPE_MAX_MS, TAP_MAX_PX,
+  HOLD_MS, SWIPE_MIN_PX, SWIPE_MAX_MS, TAP_MAX_PX, DRAG_MIN_PX,
 } from '../gestures.js';
 
 /**
@@ -155,6 +155,51 @@ describe('swipe', () => {
     const slow = swipeTo(120, 0, SWIPE_MAX_MS + 1);
     assert.deepEqual(slow.names().filter((n) => n !== 'touch'), [],
       'a slow travel is a finger moving, not an answer');
+  });
+});
+
+describe('drag', () => {
+  /** A finger drawn through the given points, `msEach` apart, then lifted. */
+  const drawn = (points, msEach = 100, mode = 'gestures') => {
+    const f = finger(mode);
+    const [[x0, y0], ...rest] = points;
+    f.begin(x0, y0);
+    rest.slice(0, -1).forEach(([x, y]) => { f.tick(msEach); f.move(x, y); });
+    f.tick(msEach);
+    f.end(...points.at(-1));
+    return f;
+  };
+  // Round and round a 150px square, back to where it began: 600px of travel.
+  const circle = [[100, 100], [250, 100], [250, 250], [100, 250], [100, 100]];
+
+  it('is a finger moved around the glass, answered once when it lifts', () => {
+    const f = drawn(circle);
+    assert.deepEqual(f.names().filter((n) => n !== 'touch'), ['drag']);
+    assert.deepEqual(f.of('drag')[0][1], { path: 600, ms: 400 });
+  });
+
+  it('is measured along the path — ending where it began is not a tap', () => {
+    const f = drawn(circle, 50);
+    assert.equal(f.of('tap').length, 0);
+    assert.equal(f.of('drag').length, 1);
+  });
+
+  it('needs travel', () => {
+    const short = drawn([[100, 100], [250, 100], [250, 250], [100, 250]], 300);
+    assert.equal(short.of('drag').length, 0, `450px is under ${DRAG_MIN_PX}px`);
+  });
+
+  it('is a slow straight travel too, where a quick one stays a swipe', () => {
+    const long = [[50, 300], [350, 300], [650, 300]];
+    assert.equal(drawn(long, SWIPE_MAX_MS).of('drag').length, 1, 'slow is a drag');
+    const quick = drawn(long, 100);
+    assert.equal(quick.of('swipe').length, 1, 'quick and straight is a swipe');
+    assert.equal(quick.of('drag').length, 0);
+  });
+
+  it('is left to the stream when a room experience has the surface', () => {
+    const f = drawn(circle, 100, 'stream');
+    assert.equal(f.of('drag').length, 0, 'the experience heard every move already');
   });
 });
 

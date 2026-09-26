@@ -887,6 +887,7 @@ show warns at load.
 |---|---|
 | `_ontap` | a tap |
 | `_onswipe` | a swipe |
+| `_ondrag` | a finger moved around the glass — about 500px of travel, answered on lift |
 | `_onshake` | a shake |
 | `_ondelay2500` | 2500ms, no input |
 
@@ -895,7 +896,15 @@ and listing them rather than editing a state machine to match. This is a
 deliberate exception to logic-as-data: the rule is a property of the screen
 itself — that one *says* TAP THE SCREEN — and holding it anywhere else means two
 places that can disagree. `"advance": "swipe"` or `"advance": 2500` on the step
-overrides the filename where a filename cannot carry the truth.
+overrides the filename where a filename cannot carry the truth, and is how a step
+with no image says what ends it.
+
+`"advance": "none"` on the last step holds it until something outside the
+sequence moves the guest on — calibration's last clip plays until they walk into
+the entrance hallway, which the calibration state handles with
+`"on": { "entered.entranceHallway": "done" }`. It needs no `onComplete`, and on
+any other step it is a load error, since the steps after it could never be
+reached.
 
 Both failure modes are load errors rather than runtime surprises: a filename with
 no readable rule, and a step waiting on a gesture `inputBindings` never binds —

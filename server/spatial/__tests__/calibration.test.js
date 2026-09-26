@@ -1,5 +1,5 @@
 /**
- * The calibration sequence: screens, their audio, and a run a guest paces
+ * The calibration sequence: clips, their screens, and a run a guest paces
  * themselves through one gesture at a time.
  *
  * Run against the real museum show rather than a fixture. The point is that the
@@ -90,63 +90,88 @@ describe('expanding a sequence into a machine', () => {
     return expandSequences(show);
   };
   const calibration = (def) => def.guest.machine.guidance.states.prologue.states.calibration;
+  const sequenceOf = (show) => show.guest.machine.guidance.states.prologue.states.calibration.sequence;
 
-  it('turns each screen into a state that waits for its own gesture', () => {
+  it('turns each step into a state that waits for its own gesture', () => {
     const { def, errors } = expand();
     assert.deepEqual(errors, []);
     const { states } = calibration(def);
     assert.deepEqual(states.step1.on, { TAP: 'step2' });
-    assert.deepEqual(states.step6.on, { SWIPE: 'step7' }, 'the swipe screen wants a swipe');
+    assert.deepEqual(states.step2.on, { SWIPE: 'step3' });
+    assert.deepEqual(states.step3.on, { DRAG: 'step4' });
   });
 
-  it('sends the last screen out of the sequence, not to a sibling step', () => {
-    const { def } = expand();
+  it('holds on a last step that advances on "none" — the room moves the guest on', () => {
+    const { def, warnings } = expand();
+    assert.deepEqual(calibration(def).states.step4, {}, 'no gesture or timer leaves it');
+    assert.deepEqual(calibration(def).on, { 'entered.entranceHallway': 'done' });
+    assert.ok(!warnings.some((w) => /onComplete/.test(w)), 'and nothing is missing an onComplete');
+  });
+
+  it('sends the last step out of the sequence, not to a sibling step', () => {
+    const { def } = expand((show) => {
+      const seq = sequenceOf(show);
+      seq.at(-1).advance = 5000;
+      show.guest.machine.guidance.states.prologue.states.calibration.onComplete = 'done';
+    });
     // A bare `onComplete` names a sibling of the sequence itself, so it has to
-    // resolve absolutely — XState would look for it among the steps. The last
-    // screen leaves on a delay, so the target hangs off `after`.
-    assert.deepEqual(calibration(def).states.step7.after, { 5000: '#guest.guidance.prologue.done' });
+    // resolve absolutely — XState would look for it among the steps.
+    assert.deepEqual(calibration(def).states.step4.after, { 5000: '#guest.guidance.prologue.done' });
   });
 
-  it('generates the cue for each step, pairing screen with clip', () => {
+  it('generates the cue for each step', () => {
     const { def } = expand();
     assert.deepEqual(def.guest.cues['guidance.prologue.calibration.step1'], {
-      audio: 'audio/calibrationsteps_01.mp3',
+      audio: 'audio/0102-calibration1.mp3',
+    });
+  });
+
+  it('pairs a screen with its clip when a step has both', () => {
+    const { def } = expand((show) => { sequenceOf(show)[0].image = 'img/calibration_01_ontap.png'; });
+    assert.deepEqual(def.guest.cues['guidance.prologue.calibration.step1'], {
+      audio: 'audio/0102-calibration1.mp3',
       image: 'img/calibration_01_ontap.png',
     });
   });
 
-  it('takes a delay from the filename when there is one', () => {
+  it('takes a delay from the filename when the step does not say', () => {
     const { def, errors } = expand((show) => {
-      const seq = show.guest.machine.guidance.states.prologue.states.calibration.sequence;
-      seq[0].image = 'img/calibration_01_ondelay2500.png';
+      sequenceOf(show)[0] = { image: 'img/calibration_01_ondelay2500.png' };
     });
     assert.deepEqual(errors, []);
     assert.deepEqual(calibration(def).states.step1, { after: { 2500: 'step2' } });
   });
 
-  it('refuses a screen whose rule it cannot read', () => {
-    const { errors } = expand((show) => {
-      const seq = show.guest.machine.guidance.states.prologue.states.calibration.sequence;
-      seq[2].image = 'img/calibration_03.png';
-    });
+  it('refuses a step whose rule it cannot read', () => {
+    const { errors } = expand((show) => { sequenceOf(show)[2] = { image: 'img/calibration_03.png' }; });
     assert.match(errors.join('\n'), /sequence\[2\] has no advance rule/);
   });
 
-  it('refuses a gesture the show does not bind — that would strand the guest', () => {
-    const { errors } = expand((show) => { show.inputBindings = { tap: 'TAP' }; });
-    assert.match(errors.join('\n'), /waits for a swipe, but inputBindings does not bind/);
+  it('refuses "none" anywhere but the last step — what follows could never be reached', () => {
+    const { errors } = expand((show) => { sequenceOf(show)[1].advance = 'none'; });
+    assert.match(errors.join('\n'), /sequence\[1\] advances on "none", which only the last step may do/);
   });
 
-  it('warns when nothing follows the last screen', () => {
-    const { warnings } = expand((show) => {
-      delete show.guest.machine.guidance.states.prologue.states.calibration.onComplete;
-    });
+  it('refuses a gesture the show does not bind — that would strand the guest', () => {
+    const { errors } = expand((show) => { show.inputBindings = { tap: 'TAP', swipe: 'SWIPE' }; });
+    assert.match(errors.join('\n'), /waits for a drag, but inputBindings does not bind/);
+  });
+
+  it('warns when nothing follows a last step that leaves', () => {
+    const { warnings } = expand((show) => { sequenceOf(show).at(-1).advance = 'tap'; });
     assert.match(warnings.join('\n'), /no onComplete — the last screen stays up/);
+  });
+
+  it('warns about an onComplete a "none" step can never reach', () => {
+    const { warnings } = expand((show) => {
+      show.guest.machine.guidance.states.prologue.states.calibration.onComplete = 'done';
+    });
+    assert.match(warnings.join('\n'), /onComplete is never reached/);
   });
 });
 
 describe('the calibration sequence, running', () => {
-  it('puts the first screen up on arrival, with its clip', () => {
+  it('starts the first clip on arrival', () => {
     const { rt, cues } = makeRuntime();
     const g = rt.spawnGuest();
     walkTo(rt, g.guestId, 'frontDesk');
@@ -154,8 +179,7 @@ describe('the calibration sequence, running', () => {
 
     walkTo(rt, g.guestId, 'calibration');
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1');
-    assert.deepEqual(screens(cues), ['img/calibration_01_ontap.png']);
-    assert.deepEqual(heard(cues), ['audio/calibrationsteps_01.mp3']);
+    assert.deepEqual(heard(cues), ['audio/0102-calibration1.mp3']);
   });
 
   it('waits on the guest, however long they take', () => {
@@ -164,46 +188,61 @@ describe('the calibration sequence, running', () => {
 
     rt.testAdvanceTime(300_000);
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1', 'no timer rescues them');
-    assert.deepEqual(screens(cues), [], 'and the screen does not change under them');
+    assert.deepEqual(heard(cues), [], 'and nothing new plays under them');
 
     rt.guestInput(g.guestId, 'tap');
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step2');
-    assert.deepEqual(screens(cues), ['img/calibration_02_ontap.png']);
+    assert.deepEqual(heard(cues), ['audio/0103-calibration2.mp3']);
   });
 
-  it('wants the gesture the screen asked for, and only one of it', () => {
+  it('wants the gesture each step asked for, and only one of it', () => {
     const { rt, cues } = makeRuntime();
     const g = arrive(rt, cues);
     rt.guestInput(g.guestId, 'swipe');
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1', 'a swipe is not a tap');
 
-    for (let i = 0; i < 5; i++) rt.guestInput(g.guestId, 'tap');
-    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step6', 'five taps, five screens');
-
     rt.guestInput(g.guestId, 'tap');
-    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step6', 'and this one wants a swipe');
+    rt.guestInput(g.guestId, 'tap');
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step2', 'a second tap is not a swipe');
+
     rt.guestInput(g.guestId, 'swipe');
-    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step7');
+    rt.guestInput(g.guestId, 'swipe');
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step3', 'nor is a second swipe a drag');
+
+    rt.guestInput(g.guestId, 'drag');
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step4');
+    assert.deepEqual(heard(cues), [
+      'audio/0103-calibration2.mp3', 'audio/0104-calibration3.mp3', 'audio/0105-calibration4.mp3',
+    ]);
   });
 
-  it('leaves the sequence when the last screen has had its time', () => {
+  it('stays on the last step until the guest walks into the entrance hallway', () => {
     const { rt, cues } = makeRuntime();
     const g = arrive(rt, cues);
-    for (let i = 0; i < 5; i++) rt.guestInput(g.guestId, 'tap');
-    rt.guestInput(g.guestId, 'swipe');
+    for (const input of ['tap', 'swipe', 'drag']) rt.guestInput(g.guestId, input);
     cues.length = 0;
 
-    rt.testAdvanceTime(4900);
-    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step7', 'not a moment early');
-    rt.testAdvanceTime(200);
+    rt.testAdvanceTime(600_000);
+    for (const input of ['tap', 'swipe', 'drag']) rt.guestInput(g.guestId, input);
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step4', 'no time or gesture ends it');
+
+    walkTo(rt, g.guestId, 'entranceHallway');
     assert.equal(guidance(rt, g.guestId), 'prologue.done');
     assert.ok(
-      cues.some((c) => c.kind === 'clearImage'),
-      'the last screen comes down rather than being left up',
+      cues.some((c) => c.kind === 'stopAudio' && c.assetId === 'audio/0105-calibration4.mp3'),
+      'and its clip stops rather than following them out',
     );
   });
 
-  it('lets two guests be on different screens in the same room', () => {
+  it('ends early for a guest who walks out partway through', () => {
+    const { rt, cues } = makeRuntime();
+    const g = arrive(rt, cues);
+    rt.guestInput(g.guestId, 'tap');
+    walkTo(rt, g.guestId, 'entranceHallway');
+    assert.equal(guidance(rt, g.guestId), 'prologue.done');
+  });
+
+  it('lets two guests be on different steps in the same room', () => {
     const { rt, cues } = makeRuntime();
     const a = arrive(rt, cues);
     const b = rt.spawnGuest();
@@ -211,30 +250,28 @@ describe('the calibration sequence, running', () => {
     walkTo(rt, b.guestId, 'calibration');
 
     rt.guestInput(a.guestId, 'tap');
-    rt.guestInput(a.guestId, 'tap');
+    rt.guestInput(a.guestId, 'swipe');
 
     assert.equal(guidance(rt, a.guestId), 'prologue.calibration.step3');
     assert.equal(guidance(rt, b.guestId), 'prologue.calibration.step1');
-    // A's taps must not have moved B. This is the whole reason the sequence
+    // A's gestures must not have moved B. This is the whole reason the sequence
     // lives on the guest and not in the room machine.
-    const bScreens = screens(cues.filter((c) => c.guestId === b.guestId));
-    assert.deepEqual(bScreens, ['img/calibration_01_ontap.png']);
+    assert.deepEqual(heard(cues.filter((c) => c.guestId === b.guestId)), ['audio/0102-calibration1.mp3']);
   });
 
-  it('shows a reconnecting phone the screen it should be on', () => {
+  it('plays a reconnecting phone the clip it should be on', () => {
     const { rt, cues } = makeRuntime();
     const g = arrive(rt, cues);
     rt.guestInput(g.guestId, 'tap');
-    rt.guestInput(g.guestId, 'tap');
+    rt.guestInput(g.guestId, 'swipe');
     cues.length = 0;
 
     rt.resyncCues(g.guestId);
-    assert.deepEqual(screens(cues), ['img/calibration_03_ontap.png'], 'a screen is a state, not an event');
-    assert.deepEqual(heard(cues), ['audio/calibrationsteps_03.mp3']);
+    assert.deepEqual(heard(cues), ['audio/0104-calibration3.mp3'], 'a step is a state, not an event');
   });
 
   it('ignores a gesture the show binds to nothing', () => {
-    const { rt, cues } = makeRuntime((show) => { show.inputBindings = { tap: 'TAP', swipe: 'SWIPE' }; });
+    const { rt, cues } = makeRuntime();
     const g = arrive(rt, cues);
     assert.equal(rt.guestInput(g.guestId, 'shake'), false);
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1');

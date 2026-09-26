@@ -1742,37 +1742,27 @@
                 }
               },
               "calibration": {
+                "on": {
+                  "entered.entranceHallway": "done"
+                },
                 "sequence": [
                   {
-                    "image": "img/calibration_01_ontap.png",
-                    "audio": "audio/calibrationsteps_01.mp3"
+                    "audio": "audio/0102-calibration1.mp3",
+                    "advance": "tap"
                   },
                   {
-                    "image": "img/calibration_02_ontap.png",
-                    "audio": "audio/calibrationsteps_02.mp3"
+                    "audio": "audio/0103-calibration2.mp3",
+                    "advance": "swipe"
                   },
                   {
-                    "image": "img/calibration_03_ontap.png",
-                    "audio": "audio/calibrationsteps_03.mp3"
+                    "audio": "audio/0104-calibration3.mp3",
+                    "advance": "drag"
                   },
                   {
-                    "image": "img/calibration_04_ontap.png",
-                    "audio": "audio/calibrationsteps_04.mp3"
-                  },
-                  {
-                    "image": "img/calibration_05_ontap.png",
-                    "audio": "audio/calibrationsteps_05.mp3"
-                  },
-                  {
-                    "image": "img/calibration_06_onswipe.png",
-                    "audio": "audio/calibrationsteps_06.mp3"
-                  },
-                  {
-                    "image": "img/calibration_07_ondelay5000.png",
-                    "audio": "audio/calibrationsteps_07.mp3"
+                    "audio": "audio/0105-calibration4.mp3",
+                    "advance": "none"
                   }
-                ],
-                "onComplete": "done"
+                ]
               },
               "done": {}
             }
@@ -1813,7 +1803,8 @@
   },
   "inputBindings": {
     "tap": "TAP",
-    "swipe": "SWIPE"
+    "swipe": "SWIPE",
+    "drag": "DRAG"
   },
   "museum": {
     "limit": 4,

@@ -12,3 +12,7 @@ handover.zip
 [0-9][0-9]_*/
 02_influence/
 
+
+# Show audio is local to each machine: large, re-cut often, and copied in by
+# hand. The short fixture sounds in public/assets itself stay tracked.
+public/assets/audio/
