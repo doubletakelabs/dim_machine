@@ -1,7 +1,10 @@
 {
   "installation": "MAD — Dead Internet Museum",
-  "note": "The room machines on the show network (192.168.3.x). Start the show server with --installation installations/mad.json (or INSTALLATION=installations/mad.json). A room with an experience but no address here runs as an ordinary room.",
+  "note": "The room machines on the show network (192.168.3.x). Start the show server with --installation installations/mad.json (or INSTALLATION=installations/mad.json). The show server connects to each as the broker; a guest's phone connects to the same address directly to drive the room. A room with an experience but no address here runs as an ordinary room. Not yet listed, because they have no room piece in dim_rooms yet: saas at 192.168.3.8, consumption3 at 192.168.3.15.",
   "experiences": {
-    "slop": "ws://192.168.3.7:8080"
+    "cyclorama": "ws://192.168.3.2:8080",
+    "slop": "ws://192.168.3.7:8080",
+    "influence": "ws://192.168.3.9:8080",
+    "consumption2": "ws://192.168.3.11:8080"
   }
 }

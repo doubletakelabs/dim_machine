@@ -388,6 +388,16 @@
       "thresholds": {
         "cyclorama-door": {}
       },
+      "experience": {
+        "experienceId": "cyc-wall",
+        "inputMode": "stream",
+        "inputs": [
+          "drag",
+          "release",
+          "tap"
+        ],
+        "maxDrivers": 32
+      },
       "cues": {
         "active": {
           "audio": "audio/0501-cyc.mp3"
@@ -1091,6 +1101,17 @@
       },
       "thresholds": {
         "consumption2-door": {}
+      },
+      "experience": {
+        "experienceId": "consumption2-unscroll",
+        "inputMode": "stream",
+        "inputs": [
+          "drag",
+          "release",
+          "tap",
+          "hold"
+        ],
+        "maxDrivers": 4
       }
     },
     "consumption3": {
