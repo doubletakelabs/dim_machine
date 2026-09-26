@@ -121,14 +121,17 @@ machines run its pieces, so rehearsing elsewhere is a different file rather than
 an edit to the show. `installations/` holds them.
 
 ```
-cp installations/local.example.json installations/local.json   # once, set your LAN IP
-node server/index.js                                           # picks local.json up
-node server/index.js --installation installations/venue.json   # the real building
+node server/index.js                                           # the venue: installations/mad.json
+cp installations/local.example.json installations/local.json   # a laptop: once, set your LAN IP
+node server/index.js                                           # …then picks local.json up instead
+node server/index.js --installation installations/venue.json   # or name one outright
 ```
 
-`installations/local.json` is git-ignored and loaded when nothing else is named,
-so a LAN address that belongs to one laptop never lands in a file everybody
-shares. Whichever was used is printed at boot and shown in the panel.
+With nothing named, the server uses `installations/local.json` if this machine
+has one, else the venue's `installations/mad.json` — so the show server needs no
+flag, and **must not have a local.json**. local.json is git-ignored, so a LAN
+address that belongs to one laptop never lands in a file everybody shares.
+Whichever was used is printed at boot and shown in the panel.
 
 A rehearsal installation is expected to be **partial** — a room with no address
 runs as an ordinary room. A venue file sets `"requireAll": true`, which turns a

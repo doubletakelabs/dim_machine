@@ -26,20 +26,25 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
 const flagIndex = argv.indexOf('--installation');
 const LOCAL_INSTALLATION = 'installations/local.json';
+/** The venue, used when nothing else is named (2026-09-26: no flag to forget). */
+const DEFAULT_INSTALLATION = 'installations/mad.json';
 
 /**
- * Named on the command line, or in INSTALLATION, or — failing both — this
- * machine's own `installations/local.json` if it has one.
+ * Named on the command line, or in INSTALLATION, or this machine's own
+ * `installations/local.json` if it has one, or — failing all three — the
+ * venue's, `installations/mad.json`.
  *
- * That last is the answer to an address that belongs to one laptop and changes:
- * it is git-ignored, so a LAN IP never lands in a file everybody shares. Which
+ * local.json is the answer to an address that belongs to one laptop and
+ * changes: it is git-ignored, so a LAN IP never lands in a file everybody
+ * shares. The venue default means the show server needs no flag at all. Which
  * installation was used is printed at boot and shown in the panel, so the
  * convenience is never a silent difference between rehearsal and the night.
  */
 const installationPath = flagIndex >= 0 && argv[flagIndex + 1]
   ? argv[flagIndex + 1]
   : process.env.INSTALLATION
-    ?? (existsSync(join(root, LOCAL_INSTALLATION)) ? LOCAL_INSTALLATION : null);
+    ?? (existsSync(join(root, LOCAL_INSTALLATION)) ? LOCAL_INSTALLATION
+      : existsSync(join(root, DEFAULT_INSTALLATION)) ? DEFAULT_INSTALLATION : null);
 
 let installation = null;
 if (installationPath) {
