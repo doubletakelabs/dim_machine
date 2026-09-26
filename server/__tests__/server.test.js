@@ -667,7 +667,9 @@ describe('saving zones', () => {
     assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
     let after = await onDisk();
     assert.deepEqual(after.rooms.influence.thresholds, { 'influence-door': door });
-    assert.deepEqual(after.museum.roomStems, { influence: { entrance: 'whisper.wav' } });
+    // Other rooms' own clips, whatever the show has assigned, stay as they were.
+    const { influence: _was, ...others } = before.museum.roomStems ?? {};
+    assert.deepEqual(after.museum.roomStems, { ...others, influence: { entrance: 'whisper.wav' } });
     assert.deepEqual(after.museum.stems, before.museum.stems, 'the shared clips are untouched');
     assert.deepEqual(after.rooms.influence.zones, before.rooms.influence.zones, 'and so is the geometry');
 
@@ -679,7 +681,7 @@ describe('saving zones', () => {
     assert.equal(res.status, 200);
     after = await onDisk();
     assert.equal(after.rooms.influence.thresholds, undefined);
-    assert.equal(after.museum.roomStems, undefined);
+    assert.deepEqual(after.museum.roomStems ?? {}, others);
   });
 
   it('saves a room\'s own audio for the rooms named, and only those', async () => {
