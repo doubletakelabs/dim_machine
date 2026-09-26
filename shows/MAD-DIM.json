@@ -1508,6 +1508,9 @@
             "gain": 0.25
           }
         ]
+      },
+      "thresholds": {
+        "controlRoom-door": {}
       }
     },
     "library": {
@@ -1603,6 +1606,9 @@
             "gain": 0.25
           }
         ]
+      },
+      "thresholds": {
+        "library-door": {}
       }
     },
     "westHallway": {
@@ -1618,6 +1624,31 @@
           "loop": true,
           "gain": 0.3
         }
+      },
+      "zones": {
+        "westHallway": {
+          "polygon": [
+            [
+              27,
+              615
+            ],
+            [
+              90,
+              615
+            ],
+            [
+              84,
+              952
+            ],
+            [
+              29,
+              957
+            ]
+          ]
+        }
+      },
+      "thresholds": {
+        "westHallway-door": {}
       }
     },
     "griefbot": {
@@ -1652,6 +1683,28 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "zones": {
+        "griefbot": {
+          "polygon": [
+            [
+              153,
+              800
+            ],
+            [
+              225,
+              797
+            ],
+            [
+              229,
+              838
+            ],
+            [
+              151,
+              835
+            ]
+          ]
+        }
       }
     }
   },
@@ -1981,8 +2034,8 @@
         280,
         828
       ],
-      "room": "controlRoom",
-      "rssi": -70
+      "rssi": -70,
+      "door": "controlRoom-door"
     },
     "48896": {
       "at": [
@@ -2078,7 +2131,7 @@
         989
       ],
       "rssi": -70,
-      "room": "adminOffice"
+      "door": "adminOffice-door"
     },
     "52736": {
       "at": [
@@ -2109,7 +2162,8 @@
         190,
         825
       ],
-      "rssi": -70
+      "rssi": -70,
+      "room": "griefbot"
     },
     "55040": {
       "at": [
@@ -2124,8 +2178,8 @@
         106,
         734
       ],
-      "room": "library",
-      "rssi": -70
+      "rssi": -70,
+      "door": "library-door"
     },
     "56320": {
       "at": [
@@ -2164,14 +2218,16 @@
         72,
         829
       ],
-      "rssi": -70
+      "rssi": -70,
+      "door": "westHallway-door"
     },
     "57600": {
       "at": [
         66,
         639
       ],
-      "rssi": -70
+      "rssi": -70,
+      "room": "westHallway"
     },
     "57856": {
       "at": [
@@ -2186,7 +2242,8 @@
         59,
         749
       ],
-      "rssi": -70
+      "rssi": -70,
+      "room": "westHallway"
     },
     "58368": {
       "at": [
