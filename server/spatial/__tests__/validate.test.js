@@ -67,9 +67,9 @@ describe('validateShowDefinition', () => {
     // a show the server would refuse to load.
     // MAD-DIM is also where the beacon install is recorded as it happens, so
     // it may warn about exactly that: beacons not yet assigned, a door not yet
-    // given a beacon or a clip, a new room not yet traced. Anything else is a
-    // real problem.
-    const installing = /belongs to no room or door yet|no beacon in beacons is at this door yet|declares no cues|zones is empty/;
+    // given a beacon, a new room not yet traced, museum clips not yet cut.
+    // Anything else is a real problem.
+    const installing = /belongs to no room or door yet|no beacon in beacons is at this door yet|zones is empty|museum\.stems\.\w+ is not set/;
     for (const file of ['shows/MAD-DIM.json', 'fixtures/small-show.json']) {
       const { errors, warnings } = validateShowDefinition(load(file));
       assert.deepEqual(errors, [], file);

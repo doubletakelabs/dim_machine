@@ -89,7 +89,7 @@ is allowed in — that keeps them portable across shows (spec §3.1).
 | `revisit.whenSeen` / `whenCompleted` | declaring one makes the runtime send `ACTIVATE_SEEN` / `ACTIVATE_COMPLETED` instead of `ACTIVATE`; `idle` must handle it (validated) | **live** |
 | `zones` | one or more polygons; occupancy is reported for the **room**, not the zone | **live** |
 | `zones.<id>.ble` | `beacons`, `rssiEnter`, `rssiExit` for that zone (§4.2) | declared |
-| `thresholds` | the room's doorways: `beacons`, `rssi`, `cues.guidance` / `cues.room` — plays at the door, never enters (§4.2c) | **live** (operator panel) |
+| `thresholds` | the room's doorways, each `{}` — heard for `location.doorDwellMs` it enters the room; doors play nothing (§4.2c) | **live** |
 | `location` | per-room `entryConfirmMs` / `exitConfirmMs` overrides | **live** |
 
 Unknown keys are preserved and ignored, so authoring can run ahead of the runtime.
@@ -362,41 +362,36 @@ Validated: `rssiExit` must be weaker (more negative) than `rssiEnter` — the ga
 is the hysteresis; an entry beacon may mean only one room; and `ble` on the room
 itself is an error, since an earlier draft (spec v0.3 §5.2) put it there.
 
-### 4.2c Thresholds — live (operator panel; beacons pending)
+### 4.2c Thresholds — live
 
-A room's doorways. A guest standing at one hears its clips — and that is all a
-threshold does. It never enters the room: no occupancy change, no activation,
-nothing counted toward the guest's rooms. Entry is still the room's zones.
+A room's doorways, and a way in (2026-09-26). Doors play nothing of their own:
+a door says roughly where a guest is, and standing at one is entering the room
+it leads into, whose own cues then play.
 
 ```jsonc
-"influence": {
-  "zones": { "influence": { "polygon": [...], "ble": { "beacons": ["b-14"], "rssiEnter": -62, "rssiExit": -70 } } },
-  "thresholds": {
-    "influence-door": {
-      "beacons": ["b-31"],
-      "rssi": -60,
-      "cues": {
-        "guidance": { "audio": "influence-tease.mp3" },
-        "room":     { "audio": "influence-bleed.mp3", "loop": true }
-      }
-    }
-  }
-}
+"maskRoom": {
+  "thresholds": { "maskRoom-door": {} }
+},
+"beacons": { "31": { "at": [440, 205], "door": "maskRoom-door", "rssi": -70 } },
+"location": { "doorDwellMs": 3000 }
 ```
 
-- **Triggering is immediate.** RSSI above `rssi` means the guest is at the door
-  rather than walking past; smoothing that reading is the beacon tracking
-  side's job, so the runtime acts on arrival at once. Hold times may come later.
-- **Every approach is heard.** Arriving starts the clips from the top; staying
-  put restarts nothing; stepping away and coming back plays them again.
-- **Cues** declare either or both slots, `guidance` and `room`, with the usual
-  cue fields (§8.1). While the guest stands there they win those slots over
-  the show and the museum layer alike, so a guidance clip ducks the bed and a
-  room cue crossfades from it.
-- **Leaving ends it.** Stepping away (`thresholdId: null`), walking into the
-  room, or moving anywhere else stops the clips and hands the slots back.
-- Threshold ids are unique show-wide. A threshold's beacons may not also be an
-  entry beacon of its own room — standing at the door would count as inside.
+- **Three seconds at a door is entering.** A door heard continuously for
+  `location.doorDwellMs` (3000) puts the guest inside its room — occupancy,
+  activation, a slot — with no unlikely-jump hold, since the dwell already is
+  one. Someone walking past is not there that long; someone who really walked
+  in is soon seen by the room's own beacons as well. "Heard" is the phone's
+  call: that door is its strongest, above the beacon's `rssi`.
+- **The door holds them in.** While the door they entered by is still heard,
+  room readings for anywhere else are kept but not applied — standing in the
+  doorway with the hallway's beacon strongest is still inside (accepted for
+  now). When the door goes (`null`), the phone's latest room reading says
+  where they are: the hallway if they backed out, the room if they walked on.
+- **Leaving has no rule of its own.** No strong room or door beacon for the
+  room means they are not in it — the ordinary location rule.
+- A door heard again after a gap starts the dwell over. Threshold ids are
+  unique show-wide. `cues` on a threshold is retired and warns at load, as are
+  a threshold's own `beacons`/`rssi`.
 
 Set by `setGuestThreshold { guestId, thresholdId | null }` over the operator
 socket, or `POST /api/spatial/threshold` (the operator panel's **At door**
@@ -418,7 +413,7 @@ own socket, only when something changes:
   commits at once, with no entry hold. A door, unassigned or unknown major
   places nobody (logged once per major).
 - `{ "type": "door", "major": 31 }` / `{ "type": "door", "major": null }` — at
-  a door beacon / away from it; plays that door's clips (§4.2c).
+  a door beacon / away from it; three seconds there enters its room (§4.2c).
 
 **Unlikely jumps.** The phone is the sensor; the server decides. A report is
 weighed by how far it jumps along the rooms' `adjacent` connections from where
@@ -808,8 +803,8 @@ Per-room stems: `entrance`, `inRoom`, `returnVisited`, `inRoomDisabled`,
 per room. Validated: the room must be one of `museum.rooms`, and each key a
 per-room stem naming an asset.
 
-The zone editor (`/zones.html`) edits these, a room's thresholds (§4.2c) and
-each zone's `ble` (§4.2) in its side panel, picking clips from
+The zone editor (`/zones.html`) edits these, a room's doors (§4.2c) and its
+beacons (§4.2d) in its side panel, picking clips from
 `GET /api/assets/audio` — every sound under `public/assets`. Its save
 (`POST /api/shows/:file/zones`) writes only zones, and the thresholds and room
 clips of the rooms it names; everything else is merged from the file on disk.

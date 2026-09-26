@@ -637,7 +637,7 @@ function renderDetails() {
     ${museumRoom ? '' : roomAudio(roomId, room)}
 
     <h3>Doors into ${esc(room.name ?? roomId)}</h3>
-    ${doors.length ? '' : '<div class="note">None. A door plays its clips while a guest stands at it — it never enters the room.</div>'}
+    ${doors.length ? '' : '<div class="note">None. A guest heard at a door for 3 seconds has entered the room, and stays in it while the door is heard. Doors play nothing of their own.</div>'}
     ${doors.map(([doorId, door]) => `
       <div class="door" data-door="${esc(doorId)}">
         <div class="doorHead">
@@ -645,10 +645,6 @@ function renderDetails() {
           <button class="tiny" data-door-delete title="Delete this door">✕</button>
         </div>
         <div class="note">Beacons at this door: ${esc(Object.entries(def.beacons ?? {}).filter(([, b]) => b.door === doorId).map(([m]) => m).join(', ') || 'none yet — place one with ◉ Place beacons, kind “at a door”')}</div>
-        ${clipField('Guidance', 'data-door-field="guidance"', door.cues?.guidance?.audio, 'none')}
-        ${clipField('Room bed', 'data-door-field="room"', door.cues?.room?.audio, 'none')}
-        <div class="field"><span></span>
-          <label class="muted"><input type="checkbox" data-door-field="roomLoop"${door.cues?.room?.loop ? ' checked' : ''}> loop the bed</label><span></span></div>
       </div>`).join('')}
     <button class="tiny" data-door-add>+ door</button>
 
@@ -734,7 +730,6 @@ $('details').addEventListener('change', (e) => {
     el.blur();
     editRoom(roomId, () => {
       const doors = room.thresholds;
-      const door = doors[doorId];
       if (field === 'id') {
         const next = el.value.trim();
         const taken = new Set(Object.values(def.rooms).flatMap((r) => Object.keys(r.thresholds ?? {})));
@@ -742,15 +737,6 @@ $('details').addEventListener('change', (e) => {
         // Rebuild so the door keeps its place in the list.
         room.thresholds = Object.fromEntries(Object.entries(doors).map(([k, v]) => [k === doorId ? next : k, v]));
         for (const b of Object.values(def.beacons ?? {})) if (b.door === doorId) { b.door = next; beaconsTouched = true; }
-      } else if (field === 'guidance' || field === 'room') {
-        door.cues ??= {};
-        if (el.value) door.cues[field] = { ...(door.cues[field] ?? {}), audio: el.value };
-        else delete door.cues[field];
-        if (!Object.keys(door.cues).length) delete door.cues;
-      } else if (field === 'roomLoop') {
-        if (door.cues?.room) {
-          if (el.checked) door.cues.room.loop = true; else delete door.cues.room.loop;
-        }
       }
     });
     return;

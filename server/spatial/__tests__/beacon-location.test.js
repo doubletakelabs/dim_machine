@@ -17,7 +17,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 function show() {
   const def = JSON.parse(readFileSync(join(root, 'shows/MAD-DIM.json'), 'utf8'));
   def.rooms.influence.thresholds = {
-    'influence-front': { cues: { guidance: { audio: 'whisper.wav' } } },
+    'influence-front': {},
   };
   def.beacons = {
     901: { at: [10, 10], room: 'museumHallway', rssi: -70 },
@@ -68,12 +68,12 @@ describe('locating a phone by beacon', () => {
     }
   });
 
-  it('a door beacon plays the door, and null leaves it', () => {
+  it('a door beacon marks the door, and null leaves it', () => {
     const { rt, guestId } = running();
     rt.setGuestBeacon(guestId, 901);
     assert.equal(rt.setGuestDoorBeacon(guestId, 931), true);
-    assert.equal(rt.desiredCues(guestId).get('guidance')?.assetId, 'whisper.wav');
-    assert.equal(roomOf(rt, guestId), 'museumHallway', 'a door never locates');
+    assert.equal(rt.atThreshold.get(guestId)?.thresholdId, 'influence-front');
+    assert.equal(roomOf(rt, guestId), 'museumHallway', 'not in until the door has been heard for the dwell');
     assert.equal(rt.setGuestDoorBeacon(guestId, null), true);
     assert.equal(rt.atThreshold.has(guestId), false);
     assert.equal(rt.setGuestDoorBeacon(guestId, 902), false, 'a room beacon is not a door');

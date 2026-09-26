@@ -62,11 +62,6 @@
       "seen": {
         "dwellMs": 8000,
         "accumulate": true
-      },
-      "cues": {
-        "active": {
-          "audio": "whisper.wav"
-        }
       }
     },
     "calibration": {
@@ -164,13 +159,7 @@
         }
       },
       "thresholds": {
-        "entranceHallway-door": {
-          "cues": {
-            "guidance": {
-              "audio": "audio/0301-boardroom_hall.mp3"
-            }
-          }
-        }
+        "entranceHallway-door": {}
       }
     },
     "maskRoom": {
@@ -231,20 +220,11 @@
       },
       "cues": {
         "active": {
-          "audio": "whisper.wav"
-        },
-        "idle": {
           "audio": "audio/0303-boardroom_visexercise.mp3"
         }
       },
       "thresholds": {
-        "maskRoom-door": {
-          "cues": {
-            "guidance": {
-              "audio": "audio/0302-boardroom_entry.mp3"
-            }
-          }
-        }
+        "maskRoom-door": {}
       }
     },
     "hallOfHeroes": {
@@ -323,11 +303,6 @@
         "dwellMs": 20000,
         "accumulate": true
       },
-      "cues": {
-        "active": {
-          "audio": "whisper.wav"
-        }
-      },
       "thresholds": {
         "hallOfHeroes-door": {}
       }
@@ -399,11 +374,6 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
-      },
-      "cues": {
-        "active": {
-          "audio": "whisper.wav"
-        }
       },
       "thresholds": {
         "cyclorama-door": {}
@@ -514,13 +484,6 @@
               429
             ]
           ]
-        }
-      },
-      "cues": {
-        "idle": {
-          "audio": "ambient.wav",
-          "loop": true,
-          "gain": 0.3
         }
       },
       "thresholds": {
@@ -1206,13 +1169,6 @@
           ]
         }
       },
-      "cues": {
-        "idle": {
-          "audio": "ambient.wav",
-          "loop": true,
-          "gain": 0.3
-        }
-      },
       "thresholds": {
         "southCorridor-door": {}
       }
@@ -1281,20 +1237,6 @@
         "dwellMs": 20000,
         "accumulate": true
       },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ]
-      },
       "thresholds": {
         "warehouse-door": {}
       }
@@ -1356,20 +1298,6 @@
         "dwellMs": 20000,
         "accumulate": true
       },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ]
-      },
       "thresholds": {
         "adminOffice-door": {}
       }
@@ -1428,20 +1356,6 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
-      },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ]
       },
       "thresholds": {
         "dataCenter-door": {}
@@ -1502,20 +1416,6 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
-      },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ]
       },
       "thresholds": {
         "controlRoom-door": {}
@@ -1601,20 +1501,6 @@
         "dwellMs": 30000,
         "accumulate": true
       },
-      "cues": {
-        "active": [
-          {
-            "audio": "whisper.wav",
-            "audience": "participants"
-          },
-          {
-            "audio": "ambient.wav",
-            "audience": "spectators",
-            "loop": true,
-            "gain": 0.25
-          }
-        ]
-      },
       "thresholds": {
         "library-door": {}
       }
@@ -1626,13 +1512,6 @@
         "southCorridor",
         "library"
       ],
-      "cues": {
-        "idle": {
-          "audio": "ambient.wav",
-          "loop": true,
-          "gain": 0.3
-        }
-      },
       "zones": {
         "westHallway": {
           "polygon": [
@@ -1807,7 +1686,8 @@
   "location": {
     "entryConfirmMs": 1500,
     "exitConfirmMs": 800,
-    "contactLossMs": 5000
+    "contactLossMs": 5000,
+    "doorDwellMs": 3000
   },
   "inputBindings": {
     "tap": "TAP",
@@ -1829,19 +1709,7 @@
       "consumption2",
       "consumption3"
     ],
-    "stems": {
-      "entrance": "audio/museum/entrance.wav",
-      "inRoom": "audio/museum/in_room.wav",
-      "returnVisited": "audio/museum/return_visited.wav",
-      "inRoomDisabled": "audio/museum/in_room_disabled.wav",
-      "returnDisabled": "audio/museum/return_disabled.wav",
-      "inHallway": [
-        "audio/museum/in_hallway_1.wav",
-        "audio/museum/in_hallway_2.wav",
-        "audio/museum/in_hallway_3.wav",
-        "audio/museum/in_hallway_4.wav"
-      ]
-    }
+    "stems": {}
   },
   "beacons": {
     "24065": {

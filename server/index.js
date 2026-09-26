@@ -13,7 +13,7 @@ import * as relay from './relay.js';
 
 // Not 4000: dim_central (the deploy dashboard) runs there on the same machine.
 const PORT = process.env.PORT || 4100;
-const BASE_ASSETS = ['click.wav', 'ambient.wav', 'whisper.wav', 'chime.wav'];
+const BASE_ASSETS = ['click.wav', 'chime.wav'];
 const OFFLINE_HIDE_MS = 60_000;
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -358,8 +358,6 @@ function currentAssets() {
   collect(runtime.def?.guest?.cues);
   for (const room of Object.values(runtime.def?.rooms ?? {})) {
     collect(room.cues);
-    // A door's clips are cues too (§4.2c): { guidance, room } per threshold.
-    for (const door of Object.values(room.thresholds ?? {})) collect(door.cues);
   }
   // The museum's stems are cues by another road, and a phone that has not
   // preloaded one plays silence at the exact moment it mattered.

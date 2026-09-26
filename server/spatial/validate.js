@@ -184,13 +184,12 @@ function checkBeacons(def, errors, warnings) {
 }
 
 /**
- * Thresholds (§4.2c): a room's doorways. A guest at one hears its clips, and
- * that is all it does — it never enters the room, so it cannot activate it or
- * spend one of the guest's rooms. Checked after every zone, because a
- * threshold's beacons must not also mean "inside this very room".
+ * Thresholds (§4.2c): a room's doorways. A guest held at one for
+ * `location.doorDwellMs` has entered its room, and stays in it while the door
+ * is still heard. Doors play nothing of their own (2026-09-26); the room they
+ * lead into does. Settings go on the door beacons in `beacons`, so a threshold
+ * is an empty object.
  */
-const THRESHOLD_KEYS = ['cues'];
-const THRESHOLD_CUE_SLOTS = ['guidance', 'room'];
 function checkThresholds(roomId, room, errors, warnings, seenThresholdIds, doorBeacons) {
   if (room.thresholds == null) return;
   const path = `rooms.${roomId}.thresholds`;
@@ -212,34 +211,15 @@ function checkThresholds(roomId, room, errors, warnings, seenThresholdIds, doorB
     for (const key of Object.keys(threshold)) {
       if (key === 'beacons' || key === 'rssi') {
         warnings.push(`${at}.${key} is no longer used — a door's beacons are entries in the top-level beacons map with "door": "${thresholdId}"`);
-      } else if (!THRESHOLD_KEYS.includes(key)) {
-        warnings.push(`${at}.${key} is not a threshold setting (${THRESHOLD_KEYS.join(', ')})`);
+      } else if (key === 'cues') {
+        warnings.push(`${at}.cues is no longer used — a door plays nothing; standing at it enters ${roomId}, whose cues play`);
+      } else {
+        warnings.push(`${at}.${key} is not a threshold setting — a threshold is an empty object`);
       }
     }
     if (!doorBeacons.has(thresholdId)) {
       warnings.push(`${at}: no beacon in beacons is at this door yet — only the operator panel can put a guest there`);
     }
-
-    const cues = threshold.cues;
-    if (cues != null && !isObject(cues)) {
-      errors.push(`${at}.cues must be an object`);
-      continue;
-    }
-    let sounds = false;
-    for (const [slot, cue] of Object.entries(cues ?? {})) {
-      if (!THRESHOLD_CUE_SLOTS.includes(slot)) {
-        errors.push(`${at}.cues.${slot}: a threshold plays on ${THRESHOLD_CUE_SLOTS.join(' or ')}`);
-        continue;
-      }
-      if (!isObject(cue)) {
-        errors.push(`${at}.cues.${slot} must be a cue object`);
-        continue;
-      }
-      if (cue.audience != null) errors.push(`${at}.cues.${slot}.audience does not apply — a threshold cue has one listener`);
-      checkCueMedia(cue, `${at}.cues.${slot}`, errors);
-      if (cue.audio || cue.image) sounds = true;
-    }
-    if (!sounds) warnings.push(`${at} declares no cues — standing there does nothing`);
   }
 }
 
@@ -989,8 +969,9 @@ export function validateShowDefinition(raw) {
 
   checkZoneOverlaps(def.rooms ?? {}, warnings);
   checkBeacons(def, errors, warnings);
-  // How long a beacon report that jumps between unconnected spaces is held.
-  for (const key of ['jumpTwoStepsMs', 'jumpFartherMs']) {
+  // How long a beacon report that jumps between unconnected spaces is held,
+  // and how long a guest stands at a door before they have entered its room.
+  for (const key of ['jumpTwoStepsMs', 'jumpFartherMs', 'doorDwellMs']) {
     const v = def.location?.[key];
     if (v != null && (typeof v !== 'number' || !Number.isFinite(v) || v < 0)) {
       errors.push(`location.${key} must be a non-negative number of milliseconds`);

@@ -87,11 +87,16 @@ export class SpatialRuntime {
     /** roomId → last presentation state seen, so a reset can be spotted once. */
     this._roomStateWas = new Map();
     /**
-     * guestId → the doorway they are standing at (§4.2c):
-     * { thresholdId, roomId, from, since }. `from` is the room they were in on
-     * arriving — moving anywhere puts the door behind them.
+     * guestId → the doorway their phone hears (§4.2c):
+     * { thresholdId, roomId, since, entered }. `entered` once they have stood
+     * there `location.doorDwellMs` — from then the door holds them in its room.
      */
     this.atThreshold = new Map();
+    /**
+     * guestId → the room beacon (major) their phone last reported, kept while a
+     * door holds them elsewhere so that leaving the door lands them there.
+     */
+    this.lastRoomBeacon = new Map();
     /**
      * guestId → a beacon report held because it jumps further than a person
      * walks between reports: { roomId, zoneId, fromRoomId, steps, dueAt }.
@@ -129,6 +134,7 @@ export class SpatialRuntime {
     this.outputLog = [];
     this.eventLog = [];
     this.atThreshold.clear();
+    this.lastRoomBeacon.clear();
 
     this.coordinator = new OccupancyCoordinator({
       rooms: this.def.rooms,
@@ -252,6 +258,7 @@ export class SpatialRuntime {
     }
     this.walkthrough?.stop();
     this.atThreshold.clear();
+    this.lastRoomBeacon.clear();
     this.beaconHolds.clear();
     for (const link of this.experiences.values()) link.stop();
     for (const actor of this.guestActors.values()) actor.stop();
@@ -276,6 +283,7 @@ export class SpatialRuntime {
       if (!this.running || !this.coordinator) return;
       this.coordinator.processTime(this.now());
       this.processBeaconHolds(this.now());
+      this.processDoorDwell(this.now());
       this._tickHandle = this.clock.setTimeout(tick, TICK_MS);
     };
     this._tickHandle = this.clock.setTimeout(tick, TICK_MS);
@@ -355,6 +363,7 @@ export class SpatialRuntime {
     this.walkthrough?.remove(guestId);
     this.virtualLocation?.forget(guestId);
     this.atThreshold.delete(guestId);
+    this.lastRoomBeacon.delete(guestId);
     this.beaconHolds.delete(guestId);
     this.director.dropGuest(guestId);
     this.append({ type: 'guest.left', guestId, roomId: occupied });
@@ -510,13 +519,13 @@ export class SpatialRuntime {
   }
 
   /**
-   * A guest is at a room's doorway, or has left it (thresholdId null) — §4.2c.
-   *
-   * Immediate: deciding that someone has stopped at a door rather than walked
-   * past is the beacon tracking side's job (RSSI over the threshold's value).
-   * It never touches occupancy, so it cannot enter the room, activate it, or
-   * spend one of the guest's rooms; it only sounds. Every arrival restarts the
-   * clips — each approach is heard — and staying put restarts nothing.
+   * A guest's phone hears a room's door, or no door any more (thresholdId
+   * null) — §4.2c. Doors play nothing (2026-09-26). Heard for
+   * `location.doorDwellMs` (3000), the door enters its room: someone walking
+   * past is not there long enough, and someone who really walked in is soon
+   * seen by the room's own beacons anyway. From then the door holds them in
+   * that room for as long as it is heard; when it goes, the phone's latest room
+   * reading says where they are.
    */
   setGuestThreshold(guestIdOrToken, thresholdId) {
     const guestId = this.resolveGuestId(guestIdOrToken);
@@ -526,16 +535,42 @@ export class SpatialRuntime {
       if (!was) return true;
       this.atThreshold.delete(guestId);
       this.append({ type: 'guest.threshold', guestId, thresholdId: null, left: was.thresholdId });
+      if (was.entered) this.applyRoomReading(guestId);
     } else {
       const found = this.findThreshold(thresholdId);
       if (!found) return false;
       if (was?.thresholdId === thresholdId) return true;
-      const from = this.guestActors.get(guestId)?.currentRoom()?.roomId ?? null;
-      this.atThreshold.set(guestId, { thresholdId, roomId: found.roomId, from, since: this.now() });
+      this.atThreshold.set(guestId, { thresholdId, roomId: found.roomId, since: this.now(), entered: false });
       this.append({ type: 'guest.threshold', guestId, thresholdId, roomId: found.roomId });
+      this.processDoorDwell(this.now());
     }
     this.notifyChange();
     return true;
+  }
+
+  doorDwellMs() {
+    return this.def?.location?.doorDwellMs ?? 3000;
+  }
+
+  /** Guests who have stood at a door long enough have entered its room. */
+  processDoorDwell(now) {
+    if (!this.running || !this.coordinator) return;
+    for (const [guestId, at] of this.atThreshold) {
+      if (at.entered || now - at.since < this.doorDwellMs()) continue;
+      at.entered = true;
+      // The dwell is the confirmation; a jump held for this guest is moot.
+      this.beaconHolds.delete(guestId);
+      const zoneId = Object.keys(this.def.rooms[at.roomId]?.zones ?? {})[0] ?? null;
+      this.append({ type: 'guest.doorEntered', guestId, thresholdId: at.thresholdId, roomId: at.roomId });
+      this.io.log?.(`${this.guests.get(guestId)?.label ?? guestId}: at ${at.thresholdId} for ${this.doorDwellMs() / 1000}s → ${at.roomId}`);
+      this.coordinator.ingestImmediate(guestId, at.roomId, 'inside', 'ble', zoneId);
+    }
+  }
+
+  /** Off a door that held them: wherever the phone last said. */
+  applyRoomReading(guestId) {
+    const major = this.lastRoomBeacon.get(guestId);
+    if (major != null) this.setGuestBeacon(guestId, major);
   }
 
   /**
@@ -543,7 +578,8 @@ export class SpatialRuntime {
    * strongest room group it hears. The phone already smooths, holds through
    * silence and estimates in dead spots (the location rule, 2026-09-25), so
    * this commits at once — no entry hold. A room beacon places the guest; a
-   * door beacon or an unknown major places nobody.
+   * door beacon or an unknown major places nobody. While a door they have
+   * entered by is still heard, it wins: the reading is kept for when it goes.
    *
    * @returns {{ ok: boolean, roomId?: string, reason?: string }}
    */
@@ -554,6 +590,12 @@ export class SpatialRuntime {
     if (!beacon?.room || !this.rooms.has(beacon.room)) {
       this.warnUnplacedBeacon(major, beacon);
       return { ok: false, reason: beacon?.door ? 'door beacon' : 'unknown beacon' };
+    }
+    this.lastRoomBeacon.set(guestId, major);
+    const door = this.atThreshold.get(guestId);
+    if (door?.entered && door.roomId !== beacon.room) {
+      this.beaconHolds.delete(guestId);
+      return { ok: true, roomId: door.roomId, heldByDoor: door.thresholdId };
     }
     const zoneId = Object.keys(this.def.rooms[beacon.room]?.zones ?? {})[0] ?? null;
 
@@ -655,21 +697,6 @@ export class SpatialRuntime {
     return null;
   }
 
-  /**
-   * The clips a guest at a doorway hears, by slot. Nothing once they are inside
-   * the room the door leads to, or anywhere other than where they stood.
-   */
-  thresholdCues(guestId, roomId) {
-    const at = this.atThreshold.get(guestId);
-    if (!at || roomId !== at.from || roomId === at.roomId) return {};
-    const out = {};
-    for (const [slot, cue] of Object.entries(this.findThreshold(at.thresholdId)?.def.cues ?? {})) {
-      if (!cue?.audio && !cue?.image) continue;
-      out[slot] = { ...cue, assetId: cue.audio, startAt: at.since, key: `threshold.${at.thresholdId}.${slot}:${at.since}` };
-    }
-    return out;
-  }
-
   /** Every threshold in the show, for the panel's doorway picker. */
   thresholdChoices() {
     const out = [];
@@ -729,6 +756,7 @@ export class SpatialRuntime {
       this.clock.advance(step);
       this.coordinator?.processTime(this.now());
       this.processBeaconHolds(this.now());
+      this.processDoorDwell(this.now());
       remaining -= step;
     } while (remaining > 0);
   }
@@ -746,11 +774,6 @@ export class SpatialRuntime {
     const outcome = this.guestActors.get(event.guestId)?.handleOccupancy(event);
     if (outcome) this.logEntryOutcome(event.guestId, outcome);
     if (this.running) this.museum?.handleOccupancy(event);
-    // Walking into the room, or anywhere else, puts the door behind them.
-    const door = this.atThreshold.get(event.guestId);
-    if (door && (this.guestActors.get(event.guestId)?.currentRoom()?.roomId ?? null) !== door.from) {
-      this.atThreshold.delete(event.guestId);
-    }
     this.io.onOccupancy?.(event);
     this.notifyChange();
   }
@@ -978,13 +1001,6 @@ export class SpatialRuntime {
     if (museum) {
       desired.set('room', museum.room ? audioPart(museum.room) : null);
       if (museum.guidance) desired.set('guidance', audioPart(museum.guidance));
-    }
-
-    // At a doorway (§4.2c) its clips take the slots they declare, over the show
-    // and the museum layer alike, for exactly as long as the guest stands there.
-    for (const [slot, cue] of Object.entries(this.thresholdCues(guestId, here?.roomId ?? null))) {
-      desired.set(slot, audioPart(cue));
-      resolved[slot] = cue;
     }
 
     desired.set(EXPERIENCE_CUE_SLOT, this.experienceCueFor(guestId, here));

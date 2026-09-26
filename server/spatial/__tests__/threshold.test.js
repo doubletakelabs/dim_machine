@@ -13,77 +13,105 @@ const fixture = () => JSON.parse(readFileSync(join(root, 'fixtures/small-show.js
 /** The small fixture with a doorway into the greenhouse (§4.2c). */
 function showWithDoor() {
   const def = fixture();
-  def.rooms.greenhouse.thresholds = {
-    'greenhouse-door': {
-      cues: {
-        guidance: { audio: 'whisper.wav' },
-        room: { audio: 'ambient.wav', loop: true },
-      },
-    },
+  def.rooms.greenhouse.thresholds = { 'greenhouse-door': {} };
+  // Beacons live in the top-level map, keyed by their major.
+  def.beacons = {
+    14: { at: [320, 235], room: 'hallway' },
+    15: { at: [520, 205], room: 'greenhouse' },
+    31: { at: [440, 205], door: 'greenhouse-door', rssi: -60 },
   };
-  // The door's beacon lives in the top-level map, keyed by its major.
-  def.beacons = { 31: { at: [440, 205], door: 'greenhouse-door', rssi: -60 } };
   return def;
 }
 
-function running() {
+const HALLWAY = 14;
+const GREENHOUSE = 15;
+const DOOR = 31;
+
+function running(mutate = () => {}) {
   const rt = new SpatialRuntime({ enableTick: false, clock: new ManualClock() });
-  assert.equal(rt.load(showWithDoor()).ok, true);
+  const def = showWithDoor();
+  mutate(def);
+  assert.equal(rt.load(def).ok, true);
   rt.start();
   const g = rt.spawnGuest();
-  // Into the hallway, where the door is.
-  rt.setVirtualPosition(g.guestId, 320, 235);
-  rt.testAdvanceTime(1700);
+  // A phone in the hallway, where the door is.
+  rt.setGuestBeacon(g.guestId, HALLWAY);
+  rt.testAdvanceTime(100);
   assert.equal(rt.guests.get(g.guestId).roomId, 'hallway');
   return { rt, guestId: g.guestId };
 }
 
-const heard = (rt, guestId) => {
-  const desired = rt.desiredCues(guestId);
-  return { guidance: desired.get('guidance')?.assetId ?? null, room: desired.get('room')?.assetId ?? null };
-};
+const roomOf = (rt, guestId) => rt.guests.get(guestId).roomId;
 
 describe('thresholds', () => {
-  it('a guest at a door hears its clips, and is still in the hallway', () => {
+  it('three seconds at a door is entering its room', () => {
     const { rt, guestId } = running();
-    const before = heard(rt, guestId);
-    assert.equal(rt.setGuestThreshold(guestId, 'greenhouse-door'), true);
-    assert.deepEqual(heard(rt, guestId), { guidance: 'whisper.wav', room: 'ambient.wav' });
+    assert.equal(rt.setGuestDoorBeacon(guestId, DOOR), true);
+    rt.testAdvanceTime(2900);
+    assert.equal(roomOf(rt, guestId), 'hallway', 'not yet');
+    rt.testAdvanceTime(200);
+    assert.equal(roomOf(rt, guestId), 'greenhouse');
+    assert.ok(rt.eventLog.some((e) => e.type === 'guest.doorEntered' && e.roomId === 'greenhouse'));
+  });
 
-    // Nothing entered: no occupancy change, no activation, no visit counted.
-    rt.testAdvanceTime(5000);
-    assert.equal(rt.guests.get(guestId).roomId, 'hallway');
-    assert.equal(rt.rooms.get('greenhouse').state, 'idle');
+  it('walking past a door does nothing', () => {
+    const { rt, guestId } = running();
+    const before = [...rt.desiredCues(guestId).entries()].map(([k, v]) => [k, v?.assetId ?? null]);
+    rt.setGuestDoorBeacon(guestId, DOOR);
+    rt.testAdvanceTime(2000);
+    // A door plays nothing of its own.
+    assert.deepEqual([...rt.desiredCues(guestId).entries()].map(([k, v]) => [k, v?.assetId ?? null]), before);
+    rt.setGuestDoorBeacon(guestId, null);
+    rt.testAdvanceTime(2000);
+    assert.equal(roomOf(rt, guestId), 'hallway');
     assert.equal(rt.guests.get(guestId).visitHistory.greenhouse, undefined);
-
-    assert.equal(rt.setGuestThreshold(guestId, null), true);
-    assert.deepEqual(heard(rt, guestId), before);
   });
 
-  it('every approach restarts the clip; standing still does not', () => {
+  it('a door heard again starts the three seconds over', () => {
     const { rt, guestId } = running();
-    rt.setGuestThreshold(guestId, 'greenhouse-door');
-    const first = rt.desiredCues(guestId).get('guidance').startAt;
-
+    rt.setGuestDoorBeacon(guestId, DOOR);
     rt.testAdvanceTime(2000);
-    rt.setGuestThreshold(guestId, 'greenhouse-door');
-    assert.equal(rt.desiredCues(guestId).get('guidance').startAt, first, 'still there — no restart');
-
-    rt.setGuestThreshold(guestId, null);
+    rt.setGuestDoorBeacon(guestId, null);
+    rt.setGuestDoorBeacon(guestId, DOOR);
     rt.testAdvanceTime(2000);
-    rt.setGuestThreshold(guestId, 'greenhouse-door');
-    assert.ok(rt.desiredCues(guestId).get('guidance').startAt > first, 'a new approach starts from the top');
+    assert.equal(roomOf(rt, guestId), 'hallway');
+    rt.testAdvanceTime(1100);
+    assert.equal(roomOf(rt, guestId), 'greenhouse');
   });
 
-  it('walking into the room puts the door behind them', () => {
+  it('the door holds them in its room while it is heard', () => {
     const { rt, guestId } = running();
-    rt.setGuestThreshold(guestId, 'greenhouse-door');
-    rt.setVirtualOccupancy(guestId, 'greenhouse', 'inside');
-    rt.testAdvanceTime(5000);
-    assert.equal(rt.guests.get(guestId).roomId, 'greenhouse');
-    assert.equal(rt.atThreshold.has(guestId), false);
-    assert.notEqual(heard(rt, guestId).guidance, 'whisper.wav');
-    assert.equal(rt.getGuestsRoster().find((g) => g.guestId === guestId).threshold, null);
+    rt.setGuestDoorBeacon(guestId, DOOR);
+    rt.testAdvanceTime(3100);
+    // Standing in the doorway, the hallway's beacon is the strongest room.
+    const r = rt.setGuestBeacon(guestId, HALLWAY);
+    assert.equal(r.heldByDoor, 'greenhouse-door');
+    rt.testAdvanceTime(2000);
+    assert.equal(roomOf(rt, guestId), 'greenhouse');
+  });
+
+  it('when the door goes, the latest room reading says where they are', () => {
+    const { rt, guestId } = running();
+    rt.setGuestDoorBeacon(guestId, DOOR);
+    rt.testAdvanceTime(3100);
+    rt.setGuestBeacon(guestId, HALLWAY);
+    rt.setGuestDoorBeacon(guestId, null);
+    rt.testAdvanceTime(100);
+    assert.equal(roomOf(rt, guestId), 'hallway', 'backed out');
+
+    rt.setGuestDoorBeacon(guestId, DOOR);
+    rt.testAdvanceTime(3100);
+    rt.setGuestBeacon(guestId, GREENHOUSE);
+    rt.setGuestDoorBeacon(guestId, null);
+    rt.testAdvanceTime(100);
+    assert.equal(roomOf(rt, guestId), 'greenhouse', 'walked on in');
+  });
+
+  it('the dwell is a show setting', () => {
+    const { rt, guestId } = running((d) => { d.location = { ...(d.location ?? {}), doorDwellMs: 0 }; });
+    rt.setGuestDoorBeacon(guestId, DOOR);
+    rt.testAdvanceTime(100);
+    assert.equal(roomOf(rt, guestId), 'greenhouse');
   });
 
   it('refuses an unknown threshold, and shows known ones to the panel', () => {
@@ -100,6 +128,7 @@ describe('thresholds', () => {
     rt.setGuestThreshold(guestId, 'greenhouse-door');
     rt.removeGuest(guestId);
     assert.equal(rt.atThreshold.size, 0);
+    assert.equal(rt.lastRoomBeacon.size, 0);
   });
 });
 
@@ -142,18 +171,17 @@ describe('BLE and threshold validation', () => {
     assert.match(errorsFor((d) => { d.beacons[43] = { at: [1, 1], room: 'cellar', rssi: 60 }; }), /rssi must be a negative number/);
   });
 
-  it('checks slots and duplicate door ids', () => {
+  it('says door clips are retired, and refuses duplicate door ids', () => {
+    assert.match(warningsFor((d) => {
+      d.rooms.greenhouse.thresholds['greenhouse-door'].cues = { guidance: { audio: 'chime.wav' } };
+    }), /greenhouse-door\.cues is no longer used — a door plays nothing/);
     assert.match(errorsFor((d) => {
-      d.rooms.greenhouse.thresholds['greenhouse-door'].cues.adherence = { audio: 'click.wav' };
-    }), /cues\.adherence: a threshold plays on guidance or room/);
-    assert.match(errorsFor((d) => {
-      d.rooms.cellar.thresholds = { 'greenhouse-door': { cues: { guidance: { audio: 'chime.wav' } } } };
+      d.rooms.cellar.thresholds = { 'greenhouse-door': {} };
     }), /duplicates a threshold id in rooms\.greenhouse/);
   });
 
-  it('warns about a door no beacon is at, or that does nothing', () => {
+  it('warns about a door no beacon is at', () => {
     const w = warningsFor((d) => { d.rooms.cellar.thresholds = { 'cellar-door': {} }; });
     assert.match(w, /cellar-door: no beacon in beacons is at this door yet/);
-    assert.match(w, /cellar-door declares no cues/);
   });
 });

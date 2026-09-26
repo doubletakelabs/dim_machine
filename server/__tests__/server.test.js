@@ -374,7 +374,8 @@ describe('the Android app locating a phone', () => {
     const { join } = await import('node:path');
     dir = mkdtempSync(join(tmpdir(), 'dim-beacons-'));
     const def = JSON.parse(readFileSync(join(process.cwd(), 'shows/MAD-DIM.json'), 'utf8'));
-    def.rooms.library.thresholds = { 'library-door': { cues: { guidance: { audio: 'whisper.wav' }, room: { audio: 'audio/test/door-bed.wav' } } } };
+    def.rooms.library.thresholds = { 'library-door': {} };
+    def.rooms.library.cues = { active: { audio: 'audio/test/library-bed.wav' } };
     def.museum.roomStems = { kin: { entrance: 'audio/test/kin-entrance.wav' } };
     def.beacons = {
       801: { at: [1, 1], room: 'library', rssi: -70 },
@@ -389,7 +390,7 @@ describe('the Android app locating a phone', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('hands the phone the beacon list, places it by major, and plays a door', async () => {
+  it('hands the phone the beacon list, places it by major, and marks a door', async () => {
     const op = await openOperator(server);
     await runShow(op);
     const phone = await openPhone(server);
@@ -449,11 +450,11 @@ describe('the Android app locating a phone', () => {
     op.close();
   });
 
-  it('preloads door clips and a room\'s own clips', async () => {
+  it('preloads a room\'s own clips', async () => {
     const op = await openOperator(server);
     await runShow(op);
     const phone = await openPhone(server);
-    assert.ok(phone.welcome.assets.includes('audio/test/door-bed.wav'), 'a door clip');
+    assert.ok(phone.welcome.assets.includes('audio/test/library-bed.wav'), 'a room cue');
     assert.ok(phone.welcome.assets.includes('audio/test/kin-entrance.wav'), 'a room stem');
     phone.close();
     op.close();

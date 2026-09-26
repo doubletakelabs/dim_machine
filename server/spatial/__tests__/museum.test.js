@@ -18,6 +18,16 @@ import { applyInstallation } from '../installation.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const museum = JSON.parse(readFileSync(join(root, 'shows/MAD-DIM.json'), 'utf8'));
+// The show's own stems are blank until new clips are cut (2026-09-26); the
+// museum's behaviour is tested against these names, whatever the show says.
+museum.museum.stems = {
+  entrance: 'audio/museum/entrance.wav',
+  inRoom: 'audio/museum/in_room.wav',
+  returnVisited: 'audio/museum/return_visited.wav',
+  inRoomDisabled: 'audio/museum/in_room_disabled.wav',
+  returnDisabled: 'audio/museum/return_disabled.wav',
+  inHallway: [1, 2, 3, 4].map((n) => `audio/museum/in_hallway_${n}.wav`),
+};
 
 const ENTRANCE_SECONDS = 3;
 
