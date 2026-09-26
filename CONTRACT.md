@@ -16,6 +16,24 @@ Each section is marked with what the runtime does with it **today**:
 - **declared** — validated on load, consumed in a later phase
 - **carried** — inherited from v0.2 and still working
 
+### Changed 2026-09-26
+
+Decided on site at MAD, in one day; each is written into its section.
+
+- **Doors are a way in, not a sound (§4.2c).** A door heard for
+  `location.doorDwellMs` (3000) enters its room, and holds the guest there while
+  it is heard. Doors play nothing; `cues` on a threshold is retired.
+- **Every guest has their own timeline (§8.1).** `audio.timing` is `own` by
+  default: a room's clip plays from its top for each person, from when they
+  walk in or when the room's state changes. `together` — one timeline for the
+  room, joined partway by late arrivals — is for the Slop room only. The old
+  names `perGuest` / `masterTimeline` still load, with a warning.
+- **"Shared" is about who runs a room, not about audio.** A `shared` room has no
+  holder and costs no slot (§2, Kinds); what each guest hears in it is still
+  their own timeline unless the room says `together`.
+- **Placeholder sounds are gone from MAD-DIM.** No room plays `whisper.wav` or
+  `ambient.wav`, and the museum stems are blank until new clips are cut.
+
 ---
 
 ## 1. Show definition — live
@@ -61,7 +79,7 @@ is allowed in — that keeps them portable across shows (spec §3.1).
   "ineligible": { "policy": "ambientOnly", "audio": "library-locked" },
   "exit":       { "policy": "resetAfter", "graceMs": 10000,
                   "audioOnExit": "fadeOut", "resumeIfReturned": true },
-  "audio":      { "timing": "masterTimeline" },   // | "perGuest" — §8.1
+  "audio":      { "timing": "own" },              // | "together" — §8.1
   "seen":       { "dwellMs": 20000, "accumulate": true },
   "revisit":    { "whenSeen": {}, "whenCompleted": {} },
   "location":   { "entryConfirmMs": 1500, "exitConfirmMs": 800 },
@@ -83,7 +101,7 @@ is allowed in — that keeps them portable across shows (spec §3.1).
 | `exit.resumeIfReturned` | re-entry during grace cancels the reset and sends `RESUME`; requires `settling` to handle it | **live** |
 | `exit.audioOnExit` | `fadeOut` \| `continue` \| `cut` — governs the *departing phone*, independently of the room | declared |
 | `whenAvailable.policy` | `wait` (default) \| `activate` — what the room does when it frees up with eligible guests still inside | **live** |
-| `audio.timing` | `masterTimeline` \| `perGuest` | **live** (§8.1) |
+| `audio.timing` | `own` (default) \| `together` — each guest's own timeline, or one for the room | **live** (§8.1) |
 | `audio.joinPolicy` | `inProgress` \| `waitForNext` \| `restart` | declared |
 | `seen.dwellMs` / `accumulate` | dwell inside before the room counts as seen; `accumulate` sums separate visits | **live** |
 | `revisit.whenSeen` / `whenCompleted` | declaring one makes the runtime send `ACTIVATE_SEEN` / `ACTIVATE_COMPLETED` instead of `ACTIVATE`; `idle` must handle it (validated) | **live** |
@@ -107,15 +125,22 @@ surprise.**
 
 ### Kinds — who the room runs for
 
+A room's kind decides who runs its state — who can start it, whether someone
+holds it, whether it costs a slot. It says nothing about audio sync: in every
+kind each guest hears the room's clips on their own timeline unless the room
+declares `audio.timing: "together"` (§8.1).
+
 | Kind | Runs for | Holder | Company | Revisit variant |
 |---|---|---|---|---|
 | `destination` | a person | yes | `multiGuest` policy | keyed on the holder |
 | `shared` | the space | **none** | everyone is `present` | **not allowed** |
 | `hallway` | nobody | none | n/a | n/a |
 
-A **`shared`** room plays when the first eligible guest arrives, and everyone
-inside gets the same thing. Nobody holds it, because there is nothing to
-arbitrate. That is also why it can have no revisit variant: with a holder, a
+A **`shared`** room starts when the first eligible guest arrives, and everyone
+inside is in the same room state. Nobody holds it and it costs no slot, because
+there is nothing to arbitrate. Being in the same state is not hearing the same
+moment: each guest still gets the state's clip from its top unless the room is
+`together`. That is also why it can have no revisit variant: with a holder, a
 veteran arriving a second before a newcomer would choose the abbreviated version
 for a room the newcomer has never seen — the same argument that rejected
 room-side memory of having run before. The validator rejects `revisit`,
@@ -749,13 +774,16 @@ The semantics are fixed; a show only tunes the numbers, and every field is
 optional — the values above are the defaults. The decisions live in
 `public/mixer.js` (tested); the client owns only the gain nodes.
 
-**`audio.timing`** (per room, live): whose clock the room bed runs on.
-`masterTimeline` (the default) anchors `startAt` to the room state's own
-timestamp — one moment shared by everyone standing in the space, which
-projection or lighting could later align to. `perGuest` anchors it to each
-guest's arrival, so every visitor hears the bed from its top; a guest already
-inside when the state began still starts at the state. Decided 2026-09-14:
-mixed, per room — declare it where it matters.
+**`audio.timing`** (per room, live): whose clock a room's cues run on.
+`own` (the default) anchors `startAt` to each guest's arrival, so every visitor
+hears the clip from its top, individually; when the room's state changes, each
+guest inside gets the new state's clip from its top at that moment.
+`together` anchors it to the room state's own timestamp — one timeline for
+everyone in the room, which a late arrival joins partway through, and which
+starts again from the top once the room empties and someone walks in. Decided
+2026-09-26: `own` everywhere except the Slop room. `perGuest` and
+`masterTimeline`, the names before that, still load as `own` and `together`
+with a warning.
 
 A fourth slot, `screen`, holds an image rather than a sound — a phone has one
 screen, so the sources compete for it instead of mixing. Guidance takes it first,

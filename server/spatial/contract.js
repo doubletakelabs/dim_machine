@@ -115,7 +115,22 @@ export const AUTHORED_GUEST_REGIONS = ['guidance', 'adherence'];
 
 export const ADHERENCE_STATES = ['golden', 'drifting', 'cursed'];
 
-export const AUDIO_TIMINGS = ['masterTimeline', 'perGuest'];
+/**
+ * Whose clock a room's cues run on (§8.1, decided 2026-09-26). `own`, the
+ * default: each guest hears a state's clip from its top — from when they
+ * walked in, or from when the state began if they were already inside.
+ * `together`: one timeline for everyone in the room, from when the state
+ * began, so a late arrival joins partway through (the Slop room).
+ */
+export const AUDIO_TIMINGS = ['own', 'together'];
+/** The names these had before 2026-09-26; still honoured, and warned about. */
+export const RETIRED_AUDIO_TIMINGS = { perGuest: 'own', masterTimeline: 'together' };
+
+/** A room's timing, the retired names read as their new ones. */
+export function audioTiming(roomDef) {
+  const t = roomDef?.audio?.timing;
+  return RETIRED_AUDIO_TIMINGS[t] ?? t ?? 'own';
+}
 
 export const AUDIO_JOIN_POLICIES = ['inProgress', 'waitForNext', 'restart'];
 

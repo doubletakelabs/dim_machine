@@ -16,7 +16,7 @@ import { MuseumLayer } from './museum.js';
 import { systemClock } from './clock.js';
 import {
   OCCUPANCY_STATES, CUE_SLOTS, AUDIO_CUE_SLOTS, SCREEN_CUE_SLOT, EXPERIENCE_CUE_SLOT,
-  AUTHORED_GUEST_REGIONS, DRIVER_HUES,
+  AUTHORED_GUEST_REGIONS, DRIVER_HUES, audioTiming,
 } from './contract.js';
 import { ExperienceLink } from './experience-link.js';
 
@@ -971,18 +971,17 @@ export class SpatialRuntime {
       const room = this.rooms.get(here.roomId);
       const def = this.def.rooms?.[here.roomId];
       if (room && def) {
-        // `audio.timing` decides whose clock the room bed runs on (§8.1).
-        // masterTimeline (the default): the state's own timestamp, one moment
-        // for everyone standing in it — the timeline projection could later
-        // align to. perGuest: this guest's own arrival, so each visitor hears
-        // the bed from its top; joining "in sync" is meaningless for a bed
-        // addressed to one person. A guest who was already inside when the
-        // state began still starts at the state, hence the max.
+        // `audio.timing` decides whose clock the room's cues run on (§8.1).
+        // own (the default): this guest's arrival, so each visitor hears the
+        // clip from its top; a guest already inside when the state changed
+        // starts at the change, hence the max. together: the state's own
+        // timestamp, one moment for everyone in the room, joined partway
+        // through by anyone who arrives late.
         const arrived = this.coordinator?.getRoomOccupants(here.roomId)
           .find((o) => o.guestId === guestId)?.sinceTs;
-        const startAt = def.audio?.timing === 'perGuest'
-          ? Math.max(arrived ?? room.stateSince, room.stateSince)
-          : room.stateSince;
+        const startAt = audioTiming(def) === 'together'
+          ? room.stateSince
+          : Math.max(arrived ?? room.stateSince, room.stateSince);
         resolved.room = roomCueFor(def, room.state, here.standing, startAt);
       }
     }

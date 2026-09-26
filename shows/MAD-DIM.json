@@ -748,6 +748,9 @@
       },
       "thresholds": {
         "slop-door": {}
+      },
+      "audio": {
+        "timing": "together"
       }
     },
     "kin": {

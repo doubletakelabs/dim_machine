@@ -11,6 +11,7 @@ import {
   EXIT_POLICIES,
   WHEN_AVAILABLE_POLICIES,
   AUDIO_TIMINGS,
+  RETIRED_AUDIO_TIMINGS,
   AUDIO_JOIN_POLICIES,
   AUDIO_ON_EXIT,
   GUIDANCE_POLICIES,
@@ -369,7 +370,12 @@ function checkRoom(roomId, room, errors, warnings) {
   }
 
   if (isObject(room.audio)) {
-    checkEnum(room.audio.timing, AUDIO_TIMINGS, `${path}.audio.timing`, errors);
+    const renamed = RETIRED_AUDIO_TIMINGS[room.audio.timing];
+    if (renamed) {
+      warnings.push(`${path}.audio.timing "${room.audio.timing}" was renamed "${renamed}"`);
+    } else {
+      checkEnum(room.audio.timing, AUDIO_TIMINGS, `${path}.audio.timing`, errors);
+    }
     checkEnum(room.audio.joinPolicy, AUDIO_JOIN_POLICIES, `${path}.audio.joinPolicy`, errors);
   }
 

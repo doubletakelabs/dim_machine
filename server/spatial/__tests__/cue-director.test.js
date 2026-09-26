@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { SpatialRuntime } from '../runtime.js';
 import { ManualClock } from '../clock.js';
+import { validateShowDefinition } from '../validate.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const demo = JSON.parse(readFileSync(join(root, 'fixtures/small-show.json'), 'utf8'));
@@ -80,8 +81,12 @@ describe('cue director', () => {
     // before this guest existed, so there is no event left to receive.
     // The greenhouse, not the library: the library moves to a collaborative
     // sub-state when a second guest arrives, which restarts its content on
-    // purpose. Here the room genuinely carries on where it was.
-    const { rt, cues } = makeRuntime((s) => { delete s.rooms.greenhouse.machine.states.active.after; });
+    // purpose. Here the room genuinely carries on where it was — and runs one
+    // timeline for everyone (`together`), so the late arrival joins partway.
+    const { rt, cues } = makeRuntime((s) => {
+      delete s.rooms.greenhouse.machine.states.active.after;
+      s.rooms.greenhouse.audio = { ...s.rooms.greenhouse.audio, timing: 'together' };
+    });
     const a = spawnOnPath(rt, 'pathA');
     enter(rt, a.guestId, AT.greenhouse);
     rt.testAdvanceTime(30_000);
@@ -157,13 +162,12 @@ describe('cue director', () => {
   });
 });
 
-describe('audio timing — whose clock a room bed runs on', () => {
-  // §8.1 `audio.timing`. masterTimeline (the default) keys the bed to the
-  // state's own timestamp: one moment, shared by everyone standing in the
-  // space, that projection could later align to. perGuest keys it to each
-  // guest's arrival: everyone gets the bed from its top.
-  it('masterTimeline: two guests hear the same moment', () => {
-    const { rt } = makeRuntime();
+describe('audio timing — whose clock a room\'s cues run on', () => {
+  // §8.1 `audio.timing` (2026-09-26). own (the default) keys a clip to each
+  // guest's arrival, so everyone hears it from its top. together keys it to the
+  // state's own timestamp: one timeline for the room, joined partway through.
+  function twoArrivals(mutate) {
+    const { rt } = makeRuntime(mutate);
     const a = rt.spawnGuest();
     walk(rt, a.guestId, AT.hallway);
     const b = rt.spawnGuest();
@@ -172,24 +176,42 @@ describe('audio timing — whose clock a room bed runs on', () => {
     const cueA = rt.desiredCues(a.guestId).get('room');
     const cueB = rt.desiredCues(b.guestId).get('room');
     assert.ok(cueA && cueB, 'both hear the hallway bed');
-    assert.equal(cueA.startAt, cueB.startAt, 'anchored to the state, not to either of them');
-  });
+    return { rt, a, b, cueA, cueB };
+  }
 
-  it('perGuest: each guest hears the bed from their own arrival', () => {
-    const { rt } = makeRuntime((show) => {
-      show.rooms.hallway.audio = { timing: 'perGuest' };
-    });
-    const a = rt.spawnGuest();
-    walk(rt, a.guestId, AT.hallway);
-    const b = rt.spawnGuest();
-    rt.testAdvanceTime(5000);
-    walk(rt, b.guestId, AT.hallway);
-    const cueA = rt.desiredCues(a.guestId).get('room');
-    const cueB = rt.desiredCues(b.guestId).get('room');
+  it('own, the default: each guest hears the clip from their own arrival', () => {
+    const { cueA, cueB } = twoArrivals();
     assert.ok(cueB.startAt > cueA.startAt, 'the later arrival starts later');
     // And the key carries the difference, so the director actually re-cues
     // per guest rather than treating both as the same playing thing.
     assert.notEqual(cueA.key, cueB.key);
+  });
+
+  it('own: a change of state starts the new clip from its top for everyone inside', () => {
+    const { rt, a, b } = twoArrivals();
+    rt.testAdvanceTime(3000);
+    const room = rt.rooms.get('hallway');
+    const before = room.stateSince;
+    // Stand in for the room's computer moving the room on.
+    room.stateSince = rt.now();
+    const cueA = rt.desiredCues(a.guestId).get('room');
+    const cueB = rt.desiredCues(b.guestId).get('room');
+    assert.ok(room.stateSince > before);
+    assert.equal(cueA.startAt, room.stateSince);
+    assert.equal(cueB.startAt, room.stateSince);
+  });
+
+  it('together: two guests hear the same moment', () => {
+    const { cueA, cueB } = twoArrivals((show) => { show.rooms.hallway.audio = { timing: 'together' }; });
+    assert.equal(cueA.startAt, cueB.startAt, 'anchored to the state, not to either of them');
+  });
+
+  it('the old names still work, and are warned about', () => {
+    const { cueA, cueB } = twoArrivals((show) => { show.rooms.hallway.audio = { timing: 'masterTimeline' }; });
+    assert.equal(cueA.startAt, cueB.startAt);
+    const def = structuredClone(demo);
+    def.rooms.greenhouse.audio = { ...def.rooms.greenhouse.audio, timing: 'perGuest' };
+    assert.match(validateShowDefinition(def).warnings.join('\n'), /"perGuest" was renamed "own"/);
   });
 });
 
