@@ -718,17 +718,17 @@ function checkGuest(guest, rooms, errors, warnings) {
     }
   }
 
-  // How the handset is worn (2026-09-26): hung upside down on a lanyard,
-  // facing out, the glass's left is the guest's right.
+  // How the handset is worn (2026-09-26): hung upside down on a lanyard, the
+  // glass's top is the guest's bottom.
   if (guest.input !== undefined) {
     if (!isObject(guest.input)) {
       errors.push('guest.input must be an object');
     } else {
-      if (guest.input.mirrorX !== undefined && typeof guest.input.mirrorX !== 'boolean') {
-        errors.push('guest.input.mirrorX must be true or false');
+      if (guest.input.mirrorY !== undefined && typeof guest.input.mirrorY !== 'boolean') {
+        errors.push('guest.input.mirrorY must be true or false');
       }
       for (const key of Object.keys(guest.input)) {
-        if (key !== 'mirrorX') warnings.push(`guest.input.${key} is not an input setting (known: mirrorX)`);
+        if (key !== 'mirrorY') warnings.push(`guest.input.${key} is not an input setting (known: mirrorY)`);
       }
     }
   }

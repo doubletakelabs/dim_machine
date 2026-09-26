@@ -1778,7 +1778,7 @@
       "loopCrossfadeMs": 10000
     },
     "input": {
-      "mirrorX": true
+      "mirrorY": true
     },
     "timers": {
       "museumTime": {

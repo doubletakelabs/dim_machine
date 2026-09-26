@@ -817,7 +817,7 @@ wss.on('connection', (ws) => {
           assets: currentAssets(),
           // How this show mixes: duck depth and crossfade length (CONTRACT §8.1).
           audioLayers: runtime.def?.guest?.audioLayers ?? null,
-          // How the handset is worn: mirrorX flips left and right (§8.1).
+          // How the handset is worn: mirrorY flips up and down (§8.1).
           input: runtime.def?.guest?.input ?? null,
           // For the handset's own room picker; see `setRoom`.
           rooms: runtime.roomChoices(),

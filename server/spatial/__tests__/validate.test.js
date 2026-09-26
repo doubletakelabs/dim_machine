@@ -333,19 +333,19 @@ describe('guest.input', () => {
   };
 
   it('accepts a handset worn mirrored, or not', () => {
-    assert.deepEqual(withInput({ mirrorX: true }).errors, []);
-    assert.deepEqual(withInput({ mirrorX: false }).errors, []);
+    assert.deepEqual(withInput({ mirrorY: true }).errors, []);
+    assert.deepEqual(withInput({ mirrorY: false }).errors, []);
   });
 
   it('refuses anything but true or false', () => {
-    assert.match(withInput({ mirrorX: 'yes' }).errors.join('\n'), /guest\.input\.mirrorX must be true or false/);
+    assert.match(withInput({ mirrorY: 'yes' }).errors.join('\n'), /guest\.input\.mirrorY must be true or false/);
     assert.match(withInput('mirrored').errors.join('\n'), /guest\.input must be an object/);
   });
 
   it('warns about a setting it does not have', () => {
-    const result = withInput({ mirrorY: true });
+    const result = withInput({ mirrorX: true });
     assert.deepEqual(result.errors, []);
-    assert.match(result.warnings.join('\n'), /guest\.input\.mirrorY/);
+    assert.match(result.warnings.join('\n'), /guest\.input\.mirrorX/);
   });
 });
 
