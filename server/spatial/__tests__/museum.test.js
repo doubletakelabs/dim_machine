@@ -481,3 +481,25 @@ describe('a room with its own clips', () => {
     assert.equal(errorsFor({ kin: { returnDisabled: 'chime.wav' } }), '');
   });
 });
+
+describe('a phone handed on (a new visit on the same guestId)', () => {
+  it('starts the museum afresh: a room the last person had is the new person\'s to hear', () => {
+    const rt = makeRuntime();
+    const first = rt.spawnGuest({ kind: 'phone', guestId: 'mad0007' });
+    walk(rt, first.guestId, 'museumHallway');
+    walk(rt, first.guestId, 'saas');
+    walk(rt, first.guestId, 'museumHallway');
+    assert.equal(snap(rt, 'mad0007').rooms.saas, 'visited');
+
+    // What the server does when the reset button wipes the phone's session.
+    rt.removeGuest('mad0007');
+    const next = rt.spawnGuest({ kind: 'phone', guestId: 'mad0007' });
+    assert.notEqual(next.visitId, first.visitId);
+    walk(rt, next.guestId, 'museumHallway');
+    assert.equal(snap(rt, 'mad0007').seen, 0, 'no rooms spent');
+
+    walk(rt, next.guestId, 'saas');
+    assert.equal(voice(rt, 'mad0007'), 'audio/museum/entrance.wav', 'the entrance, not the return');
+    assert.equal(roomState(rt, 'saas'), 'active');
+  });
+});

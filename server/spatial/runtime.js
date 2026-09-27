@@ -428,6 +428,10 @@ export class SpatialRuntime {
     this.lastRefused.delete(guestId);
     this.trustNextReading.delete(guestId);
     this.layerSince.delete(guestId);
+    // The museum remembers rooms per guestId, and a phone's guestId outlives
+    // the visit: left here, a reset handset would come back to its rooms
+    // already spent, hearing returns instead of the rooms themselves.
+    this.museum?.removeGuest(guestId);
     this.director.dropGuest(guestId);
     this.append({ type: 'guest.left', guestId, visitId: p.visitId, roomId: occupied });
     this.notifyChange();
