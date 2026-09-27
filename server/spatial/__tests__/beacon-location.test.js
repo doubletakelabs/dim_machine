@@ -346,6 +346,12 @@ describe('the way through the building (rooms.*.stage)', () => {
     assert.equal(implied.museumHallway.minHeard, 2);
   });
 
+  it('phones are told which rooms connect, for the app to move a guest only next door', () => {
+    const adjacent = running().rt.roomAdjacency();
+    assert.ok(adjacent.museumHallway.includes('kin'));
+    assert.deepEqual(adjacent.kin, ['museumHallway']);
+  });
+
   it('a phone may place itself in an implied hallway, judged like any reading', () => {
     const { rt, guestId } = running({ dropBeacons: [901] });
     rt.setGuestBeacon(guestId, 902); // kin

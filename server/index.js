@@ -494,6 +494,7 @@ function sendAssetsToPhones() {
     input: runtime.def?.guest?.input ?? null,
     beacons: runtime.def?.beacons ?? null,
     hallways: runtime.impliedHallways(),
+    adjacent: runtime.roomAdjacency(),
   }, 'phones');
 }
 
@@ -892,6 +893,8 @@ wss.on('connection', (ws) => {
           beacons: runtime.def?.beacons ?? null,
           // Hallways without beacons, and the rooms around them (the app infers them).
           hallways: runtime.impliedHallways(),
+          // Which rooms connect, so the app only moves a guest next door.
+          adjacent: runtime.roomAdjacency(),
           snapshot: phoneSnapshot(token),
         });
         sendRelaySync(token);

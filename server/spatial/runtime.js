@@ -747,6 +747,19 @@ export class SpatialRuntime {
   }
 
   /**
+   * Each room's `adjacent`, for the Android app's locator: a room it hears
+   * can become the guest's only if it is next door, or across a hallway with
+   * no beacons of its own (2026-09-27). Sent to phones with `hallways`.
+   *
+   * @returns {Record<string, string[]>}
+   */
+  roomAdjacency() {
+    const out = {};
+    for (const [id, room] of Object.entries(this.def?.rooms ?? {})) out[id] = [...(room?.adjacent ?? [])];
+    return out;
+  }
+
+  /**
    * Hallways with no room beacons of their own, and the rooms around them
    * that have some — MAD-DIM's Museum Hallway. A phone that hears two or more
    * of those rooms, none at its threshold, is between them: in the hallway.

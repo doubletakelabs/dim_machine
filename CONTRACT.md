@@ -477,6 +477,9 @@ own socket, only when something changes:
   around it (MAD-DIM: the Museum Hallway). A phone hearing `minHeard` of those
   rooms, none at its `rssi`, reports the hallway by name; the server judges it
   like any reading. Only an implied hallway may be named.
+  They also carry `adjacent`, each room's `adjacent` list (2026-09-27): the
+  app moves a guest only to a room next door or across a beaconless hallway,
+  unless that room clears its `rssi` by a wide margin.
 
 **The way through (rooms with a `stage`).** The phone is the sensor; the
 server decides. A report is weighed against the room the guest is in — or, out
