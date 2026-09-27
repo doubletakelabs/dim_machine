@@ -2118,7 +2118,7 @@
         495
       ],
       "room": "maskRoom",
-      "rssi": -70
+      "rssi": -65
     },
     "47616": {
       "at": [
@@ -2429,21 +2429,13 @@
       "room": "hallOfHeroes",
       "rssi": -65
     },
-    "60672": {
-      "at": [
-        390,
-        441
-      ],
-      "rssi": -70,
-      "door": "maskRoom-door"
-    },
     "60673": {
       "at": [
         334,
         564
       ],
       "room": "maskRoom",
-      "rssi": -70
+      "rssi": -65
     },
     "60928": {
       "at": [
