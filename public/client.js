@@ -252,41 +252,70 @@ async function preload(assets) {
  */
 const AUDIO_BUDGET_BYTES = 320e6;
 const AUDIO_FETCH_TIMEOUT_MS = 30000;
+/** A voice cue arriving within this of its start is fresh, not a reconnect mid-line. */
+const VOICE_FRESH_MS = 3000;
 const audioUsedAt = new Map(); // assetId → last asked for
 const audioLoading = new Map(); // assetId → Promise<AudioBuffer|null>
 /** assetId → the latest cue waiting for its audio, so a stop before it decodes wins. */
 const awaitingAudio = new Map();
-let decodeChain = Promise.resolve();
-
 const bufferBytes = (b) => b.length * b.numberOfChannels * 4;
 
 /**
- * One clip's audio, decoded once and kept. Decodes run one at a time, so the
- * page never holds more than one clip's worth of compressed and half-decoded
- * data on top of what it keeps.
+ * What decodes first when several clips are waiting: speech, then a room's
+ * bg, then the bed. The bed is five minutes of samples; a guest walking into
+ * calibration must not wait out its decode to hear the first line (2026-09-26).
  */
-function loadAudio(id) {
+const DECODE_PRIORITY = { bg: 1, bed: 2 };
+const decodePriority = (slot) => (VOICE_SLOTS.has(slot) ? 0 : DECODE_PRIORITY[slot] ?? 1);
+const decodeQueue = []; // { id, priority, seq, resolve }
+let decodeSeq = 0;
+let decoding = false;
+
+/**
+ * One clip's audio, decoded once and kept. Decodes run one at a time, most
+ * urgent first, so the page never holds more than one clip's worth of
+ * compressed and half-decoded data on top of what it keeps.
+ */
+function loadAudio(id, priority = 1) {
   audioUsedAt.set(id, performance.now());
   if (audioBuffers.has(id)) return Promise.resolve(audioBuffers.get(id));
+  const queued = decodeQueue.find((job) => job.id === id);
+  if (queued) queued.priority = Math.min(queued.priority, priority);
   if (audioLoading.has(id)) return audioLoading.get(id);
-  const loading = (decodeChain = decodeChain.then(async () => {
-    try {
-      // One at a time means one stuck fetch would hold up every clip after it.
-      const res = await fetch(`assets/${id}`, { signal: AbortSignal.timeout(AUDIO_FETCH_TIMEOUT_MS) });
-      if (!res.ok) throw new Error(res.status);
-      const buffer = await ctx.decodeAudioData(await res.arrayBuffer());
-      audioBuffers.set(id, buffer);
-      trimAudio();
-      return buffer;
-    } catch (e) {
-      console.warn('asset failed:', id, e);
-      return null;
-    } finally {
-      audioLoading.delete(id);
-    }
-  }));
+  const loading = new Promise((resolve) => {
+    decodeQueue.push({ id, priority, seq: ++decodeSeq, resolve });
+  });
   audioLoading.set(id, loading);
+  pumpDecodes();
   return loading;
+}
+
+async function pumpDecodes() {
+  if (decoding) return;
+  decoding = true;
+  while (decodeQueue.length) {
+    decodeQueue.sort((a, b) => a.priority - b.priority || a.seq - b.seq);
+    const job = decodeQueue.shift();
+    job.resolve(await decodeOne(job.id));
+  }
+  decoding = false;
+}
+
+async function decodeOne(id) {
+  try {
+    // One at a time means one stuck fetch would hold up every clip after it.
+    const res = await fetch(`assets/${id}`, { signal: AbortSignal.timeout(AUDIO_FETCH_TIMEOUT_MS) });
+    if (!res.ok) throw new Error(res.status);
+    const buffer = await ctx.decodeAudioData(await res.arrayBuffer());
+    audioBuffers.set(id, buffer);
+    trimAudio();
+    return buffer;
+  } catch (e) {
+    console.warn('asset failed:', id, e);
+    return null;
+  } finally {
+    audioLoading.delete(id);
+  }
 }
 
 /** Let go of the least recently used clips nothing needs, down to the budget. */
@@ -319,10 +348,21 @@ function playAudio(cue, { seekIntoLoop = false } = {}) {
     // it lands, so a clip that took a moment to decode starts where it should
     // be by then rather than from its top.
     awaitingAudio.set(cue.assetId, cue);
-    loadAudio(cue.assetId).then((loaded) => {
+    const arrivedAt = clock.serverNow();
+    loadAudio(cue.assetId, decodePriority(cue.slot)).then((loaded) => {
       if (awaitingAudio.get(cue.assetId) !== cue) return; // replaced or stopped meanwhile
       awaitingAudio.delete(cue.assetId);
-      if (loaded) playAudio(cue, { seekIntoLoop });
+      if (!loaded) return;
+      // A spoken line that reached us fresh and is late only because we were
+      // decoding starts from its top: the guest hears its opening words, a
+      // beat later. One already well under way when it arrived — a phone
+      // reconnecting mid-line — joins where the line has got to.
+      const now = clock.serverNow();
+      const fresh = cue.startAt == null || arrivedAt - cue.startAt < VOICE_FRESH_MS;
+      const late = cue.startAt != null && now > cue.startAt;
+      playAudio(VOICE_SLOTS.has(cue.slot) && fresh && late && cue.offset == null
+        ? { ...cue, startAt: now }
+        : cue, { seekIntoLoop });
     });
     return;
   }
