@@ -167,7 +167,7 @@
       },
       "cues": {
         "idle": {
-          "audio": "audio/guidance/0201-announcement.mp3"
+          "audio": "audio/guidance/0201-entry_hall.mp3"
         }
       },
       "bg": "audio/bg/0301-02_MASK_SEQUENCE_5MIN.mp3"
@@ -248,7 +248,7 @@
       },
       "cues": {
         "active": {
-          "audio": "audio/guidance/0303-boardroom_visexercise.mp3"
+          "audio": "audio/guidance/0301-maskroom.mp3"
         }
       },
       "thresholds": {
@@ -400,7 +400,7 @@
       },
       "cues": {
         "active": {
-          "audio": "audio/guidance/0401-hallofheroes.mp3"
+          "audio": "audio/guidance/0401-hallofheroes_crosstalk.mp3"
         }
       },
       "bg": "audio/bg/0401_HALL_OF_HEROS.mp3"
@@ -1443,6 +1443,11 @@
       },
       "thresholds": {
         "warehouse-door": {}
+      },
+      "cues": {
+        "active": {
+          "audio": "audio/guidance/1902-warehouse.mp3"
+        }
       }
     },
     "adminOffice": {
@@ -1565,6 +1570,11 @@
       },
       "thresholds": {
         "dataCenter-door": {}
+      },
+      "cues": {
+        "active": {
+          "audio": "audio/guidance/1801-datacenter.mp3"
+        }
       }
     },
     "controlRoom": {
@@ -1626,6 +1636,11 @@
       },
       "thresholds": {
         "controlRoom-door": {}
+      },
+      "cues": {
+        "active": {
+          "audio": "audio/guidance/2102-controlroom_table.mp3"
+        }
       }
     },
     "library": {
@@ -2115,10 +2130,10 @@
     },
     "47872": {
       "at": [
-        400,
-        658
+        399,
+        656
       ],
-      "rssi": -70,
+      "rssi": -68,
       "door": "hallOfHeroes-door"
     },
     "48128": {
@@ -2303,7 +2318,7 @@
         497
       ],
       "room": "hallOfHeroes",
-      "rssi": -70
+      "rssi": -65
     },
     "56832": {
       "at": [
@@ -2412,7 +2427,7 @@
         531
       ],
       "room": "hallOfHeroes",
-      "rssi": -70
+      "rssi": -65
     },
     "60672": {
       "at": [
