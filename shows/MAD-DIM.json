@@ -1954,6 +1954,7 @@
         "faerie"
       ]
     ],
+    "doneAfterMs": 5000,
     "stems": {},
     "roomStems": {
       "saas": {

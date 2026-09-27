@@ -418,6 +418,12 @@ function playAudio(cue, { seekIntoLoop = false } = {}) {
     gainNode.gain.linearRampToValueAtTime(target, beginsAt + fadeInMs / 1000);
   }
 
+  // Tell the show a voice has begun — the museum counts a room as heard from
+  // here (museum.doneAfterMs), not from when the cue was sent.
+  if (VOICE_SLOTS.has(cue.slot)) {
+    sendMsg({ type: 'playing', assetId: cue.assetId, slot: cue.slot, at: plan.action === 'schedule' ? plan.at : clock.serverNow() });
+  }
+
   // A spoken line ducks the layers under it for exactly as long as it sounds.
   if (VOICE_SLOTS.has(cue.slot)) {
     voices.set(cue.assetId, voiceEndsAt(cue, plan, clock.serverNow()));

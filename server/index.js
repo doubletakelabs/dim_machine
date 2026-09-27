@@ -969,6 +969,13 @@ wss.on('connection', (ws) => {
         return;
       }
 
+      case 'playing': {
+        // The page began playing a clip: { assetId, slot, at } (server time).
+        const guest = runtime.getGuestByToken(token);
+        if (guest) runtime.clipPlaying(guest.guestId, msg.assetId, msg.at);
+        return;
+      }
+
       case 'door': {
         // Arriving at a door beacon ({ major }), or leaving it ({ major: null }).
         const guest = runtime.getGuestByToken(token);

@@ -39,6 +39,9 @@ function makeRuntime(mutate) {
     assetSeconds: () => ENTRANCE_SECONDS,
   });
   const def = structuredClone(museum);
+  // These tests walk in and out without a phone to report clips; when a room
+  // becomes theirs is tested on its own below, with the show's own 5s.
+  if (!mutate?.keepDone) def.museum.doneAfterMs = 0;
   mutate?.(def);
   assert.deepEqual(rt.load(def).errors, []);
   rt.start();
@@ -177,6 +180,81 @@ describe('as many rooms as they like', () => {
     assert.equal(voice(rt, g.guestId), 'audio/museum/in_hallway_4.wav', 'the count is unchanged');
     walk(rt, g.guestId, 'consumption1');
     assert.equal(voice(rt, g.guestId), 'audio/museum/return_disabled.wav');
+  });
+});
+
+describe('a room is theirs 5s after its first clip starts on their phone (museum.doneAfterMs)', () => {
+  const real = Object.assign(() => {}, { keepDone: true });
+  const playing = (rt, g, asset) => rt.clipPlaying(g.guestId, asset, rt.now());
+
+  it('in and out before the clip had played 5s is forgotten: the next entry plays it from the top', () => {
+    const rt = makeRuntime(real);
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'saas');
+    assert.equal(voice(rt, g.guestId), 'audio/museum/entrance.wav');
+    playing(rt, g, 'audio/museum/entrance.wav');
+    rt.testAdvanceTime(3000);
+    walk(rt, g.guestId, 'museumHallway');
+    assert.equal(snap(rt, g.guestId).rooms.saas, undefined, 'not theirs');
+    assert.equal(snap(rt, g.guestId).seen, 0);
+    walk(rt, g.guestId, 'saas');
+    assert.equal(voice(rt, g.guestId), 'audio/museum/entrance.wav', 'the entrance again, not the return');
+    assert.ok(bed(rt, g.guestId), 'and its in_room');
+  });
+
+  it('the clock is the clip, not the entry: a clip that never got to play leaves the room unheard', () => {
+    const rt = makeRuntime(real);
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'saas');
+    rt.testAdvanceTime(30000); // a long time inside, but the phone never started it
+    walk(rt, g.guestId, 'museumHallway');
+    assert.equal(snap(rt, g.guestId).rooms.saas, undefined);
+  });
+
+  it('still in it 5s after the clip began: theirs, and after that a return', () => {
+    const rt = makeRuntime(real);
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'saas');
+    playing(rt, g, 'audio/museum/entrance.wav');
+    rt.testAdvanceTime(5100);
+    walk(rt, g.guestId, 'museumHallway');
+    assert.equal(snap(rt, g.guestId).rooms.saas, 'visited');
+    walk(rt, g.guestId, 'saas');
+    assert.equal(voice(rt, g.guestId), 'audio/museum/return_visited.wav');
+  });
+
+  it('only the room\'s own clips start the clock', () => {
+    const rt = makeRuntime(real);
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'saas');
+    playing(rt, g, 'chime.wav');
+    rt.testAdvanceTime(6000);
+    walk(rt, g.guestId, 'museumHallway');
+    assert.equal(snap(rt, g.guestId).rooms.saas, undefined);
+  });
+
+  it('a room with no clips counts from the entry', () => {
+    const rt = makeRuntime(Object.assign((def) => { def.museum.stems = {}; def.museum.roomStems = {}; }, { keepDone: true }));
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'automation');
+    rt.testAdvanceTime(5100);
+    walk(rt, g.guestId, 'museumHallway');
+    assert.equal(snap(rt, g.guestId).rooms.automation, 'visited');
+  });
+
+  it('a moment in Kin does not cost them Faerie', () => {
+    const rt = makeRuntime(real);
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'kin');
+    walk(rt, g.guestId, 'museumHallway');
+    walk(rt, g.guestId, 'faerie');
+    assert.equal(roomState(rt, 'faerie'), 'active', 'faerie is still theirs to choose');
+  });
+
+  it('validates the setting', () => {
+    const def = structuredClone(museum);
+    def.museum.doneAfterMs = -1;
+    assert.match(validateShowDefinition(def).errors.join('\n'), /museum\.doneAfterMs must be a non-negative number/);
   });
 });
 
@@ -365,6 +443,7 @@ describe('a room with its own clips', () => {
   // not declare falls back to museum.stems.
   function withOwnClips() {
     const def = JSON.parse(JSON.stringify(museum));
+    def.museum.doneAfterMs = 0;
     def.museum.roomStems = { kin: { entrance: 'whisper.wav', inRoom: 'ambient.wav', returnVisited: 'click.wav' } };
     const rt = new SpatialRuntime({ enableTick: false, clock: new ManualClock(), assetSeconds: () => ENTRANCE_SECONDS });
     assert.deepEqual(rt.load(def).errors, []);

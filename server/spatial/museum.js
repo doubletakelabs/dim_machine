@@ -21,6 +21,13 @@
  * - Returning to a room they have had runs it again, so they can use it, but
  *   without its entrance or in_room: they have heard those. The
  *   return_visited clip plays instead.
+ * - A room is only *had* once they are still in it `doneAfterMs` after its
+ *   first clip actually started playing on their phone (MAD-DIM: 5s; the
+ *   phone reports the start). A room with no clips has nothing to wait for:
+ *   it counts from the entry. Out sooner — a misread that landed, a step in
+ *   and back, a clip that never got to play — and it is as if they never went
+ *   in: no slot, no choice made, and the next entry plays it from the top
+ *   (2026-09-27).
  * - A full room (maxOccupants) refuses by capacity: silence, nothing burned,
  *   nothing remembered. Walking away from it can never count against anyone.
  * - A below-capacity room that is already running activates *for the joiner*
@@ -72,6 +79,8 @@ export class MuseumLayer {
     this.rooms = new Set(config.rooms ?? []);
     /** How many rooms a guest gets; no `limit`, no cap. */
     this.limit = config.limit ?? Infinity;
+    /** How long after its first clip starts a room becomes theirs; 0, at once. */
+    this.doneAfterMs = config.doneAfterMs ?? 0;
     /** roomId → the other rooms of its `chooseOne` group. */
     this.rivals = new Map();
     for (const group of config.chooseOne ?? []) {
@@ -91,6 +100,7 @@ export class MuseumLayer {
         engagedRoom: null,
         engagedAt: 0,
         replay: false,       // engaged on a return: the room runs, its clips do not
+        clipAt: null,        // when the engaged room's first clip began on their phone
         visitKind: null,     // what this entry was, consumed on exit
         voice: null,         // the current spoken line: { stem, assetId, startAt }
       });
@@ -187,11 +197,32 @@ export class MuseumLayer {
     this.io.log?.(`museum: ${guestId} engaged ${roomId} (${g.seen}${Number.isFinite(this.limit) ? `/${this.limit}` : ''})`);
   }
 
+  /** Still in it `doneAfterMs` after its first clip began: the room is theirs. */
+  had(g) {
+    if (this.doneAfterMs <= 0) return true;
+    return g.clipAt != null && this.io.now() - g.clipAt >= this.doneAfterMs;
+  }
+
+  /**
+   * Their phone began playing a clip (`{ type: "playing" }`). The first of the
+   * engaged room's own clips starts the clock on it becoming theirs.
+   */
+  clipPlaying(guestId, assetId, at) {
+    const g = this.guests.get(guestId);
+    if (!g?.engagedRoom || g.replay || g.clipAt != null) return;
+    const own = ['entrance', 'inRoom'].map((stem) => this.stemAsset(stem, g, g.engagedRoom));
+    if (!own.includes(assetId)) return;
+    g.clipAt = Math.min(at ?? this.io.now(), this.io.now());
+  }
+
   /** The room is running for them from now until they walk out. */
   engage(g, guestId, roomId, now, replay) {
     g.engagedRoom = roomId;
     g.engagedAt = now;
     g.replay = replay;
+    // A room with no clips has nothing to wait for: its clock starts now.
+    const clips = ['entrance', 'inRoom'].some((stem) => this.stemAsset(stem, g, roomId));
+    g.clipAt = clips ? null : now;
     g.visitKind = replay ? 'return' : 'engaged';
     if (!this.engaged.has(roomId)) this.engaged.set(roomId, new Set());
     this.engaged.get(roomId).add(guestId);
@@ -199,9 +230,18 @@ export class MuseumLayer {
 
   handleExit(guestId, roomId) {
     const g = this.guest(guestId);
-    const kind = g.visitKind;
+    let kind = g.visitKind;
     g.visitKind = null;
-    if (g.engagedRoom === roomId) this.disengage(guestId, roomId);
+    if (g.engagedRoom === roomId) {
+      // Too brief to have heard it: forgotten, slot and choice with it.
+      if (kind === 'engaged' && !this.had(g)) {
+        g.memory.delete(roomId);
+        g.seen -= 1;
+        kind = null; // nothing happened in there, so the hallway says nothing
+        this.io.log?.(`museum: ${guestId} left ${roomId} too soon to have had it — forgotten`);
+      }
+      this.disengage(guestId, roomId);
+    }
     // The hallway speaks after every visit — except a capacity refusal, which
     // has been a non-event in every ruling: nothing happened in there.
     if (kind && kind !== 'full') this.say(g, 'inHallway', this.io.now());
@@ -304,6 +344,9 @@ export function checkMuseum(museum, rooms, errors, warnings) {
   }
   if (museum.limit != null && (!Number.isInteger(museum.limit) || museum.limit < 1)) {
     errors.push('museum.limit must be a positive integer');
+  }
+  if (museum.doneAfterMs != null && !(typeof museum.doneAfterMs === 'number' && museum.doneAfterMs >= 0)) {
+    errors.push('museum.doneAfterMs must be a non-negative number of milliseconds');
   }
   if (!Array.isArray(museum.rooms) || !museum.rooms.length) {
     errors.push('museum.rooms must be a non-empty array of room ids');

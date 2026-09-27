@@ -961,6 +961,15 @@ the per-room stems; whatever it does not declare falls back to the shared one.
   because it was full is not a choice.
 - A return runs the room again, so they can use it, but not its entrance or
   in_room: they hear `returnVisited` instead.
+- A room is only theirs once they are still in it `museum.doneAfterMs`
+  after its first clip actually began on their phone (MAD-DIM: 5000). The
+  page reports each voice it starts — `{ "type": "playing", "assetId",
+  "slot", "at" }` — and the room's own entrance or in_room starts the clock. A
+  room with no clips counts from the entry. Out sooner — a misread that
+  landed, a step in and back, a clip that never got to play — and it is
+  forgotten: no choice made, and the next entry plays it from the top
+  (2026-09-27: a guest's BLE had passed through all eight rooms, so every real
+  visit was a silent return). No `doneAfterMs` (0): theirs at once, as before.
 
 ```jsonc
 "museum": {

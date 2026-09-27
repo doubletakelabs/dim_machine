@@ -912,6 +912,13 @@ export class SpatialRuntime {
     return true;
   }
 
+  /** A phone began playing a clip — for the museum's "had it" clock. */
+  clipPlaying(guestIdOrToken, assetId, at) {
+    const guestId = this.resolveGuestId(guestIdOrToken);
+    if (!guestId || typeof assetId !== 'string') return;
+    this.museum?.clipPlaying(guestId, assetId, typeof at === 'number' ? at : null);
+  }
+
   /** Once per major: a beacon the show cannot place is an install fault to fix. */
   warnUnplacedBeacon(major, beacon) {
     this._warnedBeacons ??= new Set();
