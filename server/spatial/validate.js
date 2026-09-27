@@ -15,6 +15,7 @@ import {
   AUDIO_JOIN_POLICIES,
   AUDIO_ON_EXIT,
   GUIDANCE_POLICIES,
+  PHONE_LOCATOR_KEYS,
   REVISIT_EVENTS,
   ROOM_KINDS,
   OFF_PATH_ACTIVATION_EVENT,
@@ -1032,6 +1033,17 @@ export function validateShowDefinition(raw) {
   checkStages(def.rooms ?? {}, errors, warnings);
   if (def.location?.skipAhead != null && typeof def.location.skipAhead !== 'boolean') {
     errors.push('location.skipAhead must be true or false');
+  }
+  // How the Android app chooses a room from what it hears (§4.2b): sent to
+  // phones, and tuned live from the zone editor.
+  const phone = def.location?.phone;
+  if (phone != null && (typeof phone !== 'object' || Array.isArray(phone))) {
+    errors.push('location.phone must be an object');
+  } else if (phone) {
+    for (const [key, v] of Object.entries(phone)) {
+      if (!PHONE_LOCATOR_KEYS.includes(key)) errors.push(`location.phone.${key} is not a phone setting (${PHONE_LOCATOR_KEYS.join(', ')})`);
+      else if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) errors.push(`location.phone.${key} must be a non-negative number of dB`);
+    }
   }
   for (const key of ['jumpTwoStepsMs', 'jumpFartherMs', 'doorDwellMs', 'nextStageMs', 'skipAheadMs', 'sameStageMs']) {
     const v = def.location?.[key];

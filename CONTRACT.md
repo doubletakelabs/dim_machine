@@ -480,6 +480,10 @@ own socket, only when something changes:
   They also carry `adjacent`, each room's `adjacent` list (2026-09-27): the
   app moves a guest only to a room next door or across a beaconless hallway,
   unless that room clears its `rssi` by a wide margin.
+  And `locator`, the show's `location.phone`: the margins, in dB, the app
+  chooses a room by — `nearDb`, `leadDb`, `switchMarginDb`, `farMarginDb`
+  (any left out keep the app's default). Edited in the zone editor and, like
+  beacons, live on every phone at Save.
 
 **The way through (rooms with a `stage`).** The phone is the sensor; the
 server decides. A report is weighed against the room the guest is in — or, out

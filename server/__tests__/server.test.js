@@ -555,6 +555,34 @@ describe('the Android app locating a phone', () => {
     op.close();
   });
 
+  it('phone margins saved in the zone editor reach every phone at once', async () => {
+    const op = await openOperator(server);
+    await runShow(op);
+    const phone = await openPhone(server);
+    const save = (phone) => fetch(`${server.url}/api/shows/MAD-DIM.json/zones`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ zones: {}, phone }),
+    });
+    const before = phone.welcome.locator ?? null;
+    assert.equal((await save({ bogusDb: 3 })).status, 400, 'only settings the app knows');
+    assert.equal((await save({ nearDb: -1 })).status, 400, 'margins are not negative');
+    const res = await save({ nearDb: 9, farMarginDb: 12 });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).live, true);
+    const pushed = await phone.waitFor((m) => m.type === 'assets' && m.locator?.nearDb === 9, {
+      describe: 'the new margins pushed to the phone, no reload',
+    });
+    assert.equal(pushed.locator.farMarginDb, 12);
+    const late = await openPhone(server);
+    assert.equal(late.welcome.locator.nearDb, 9, 'and a phone joining later');
+
+    assert.equal((await save(before)).status, 200); // as it was, for the tests after
+    late.close();
+    phone.close();
+    op.close();
+  });
+
   it('serves the content manifest a handset syncs on charge', async () => {
     const op = await openOperator(server);
     await runShow(op);

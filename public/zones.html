@@ -140,6 +140,8 @@
         <button class="tiny" id="addZoneBtn">+ zone to this room</button>
         <button class="tiny" id="delZoneBtn">delete zone</button>
       </div>
+      <h2 style="margin-top:14px">Phones choosing a room</h2>
+      <div id="phoneLocator" class="muted">—</div>
       <h2 style="margin-top:14px">Overlaps</h2>
       <div id="clashes" class="muted">—</div>
       <div id="help">
@@ -173,6 +175,7 @@ let beaconMode = false;    // clicks on the plan drop beacons
 let selBeacon = null;      // id of the selected beacon
 let beaconDrag = null;     // { id, pointerId, handle, label }
 let beaconsTouched = false;
+let phoneTouched = false;   // location.phone edited here
 
 // ---------------------------------------------------------------- undo
 
@@ -974,6 +977,44 @@ $('plan').addEventListener('click', (evt) => {
 });
 window.addEventListener('resize', render);
 
+// ---------------------------------------------------------------- phones choosing a room
+
+/**
+ * `location.phone`: the margins the Android app weighs beacons by, in dB.
+ * Blank keeps the app's own default. Saved with Save, live on every phone.
+ */
+const PHONE_FIELDS = [
+  ['nearDb', 'Near', 6, 'With no room at its RSSI, the loudest room may still win this far below its own RSSI…'],
+  ['leadDb', 'Lead', 4, '…if it is this far ahead of every other room heard, each measured against its own RSSI.'],
+  ['switchMarginDb', 'Switch', 6, 'While the current room is at its RSSI, a rival at its own must be this far further above it.'],
+  ['farMarginDb', 'Far', 8, 'A room not next door (or across the museum hallway) must clear its RSSI by this much to take over.'],
+];
+
+function renderPhone() {
+  const box = $('phoneLocator');
+  if (box.contains(document.activeElement)) return;
+  if (!def) { box.textContent = '—'; return; }
+  const phone = def.location?.phone ?? {};
+  box.classList.remove('muted');
+  box.innerHTML = PHONE_FIELDS.map(([key, label, fallback, note]) => `
+    <div class="field"><span>${esc(label)} (dB)</span>
+      <input type="number" min="0" step="1" data-phone="${key}" value="${esc(phone[key])}" placeholder="${fallback}"><span></span>
+    </div><div class="note">${esc(note)}</div>`).join('');
+}
+
+$('phoneLocator').addEventListener('change', (e) => {
+  const key = e.target.dataset?.phone;
+  if (!key || !def) return;
+  const v = rssiValue(e.target.value);
+  def.location ??= {};
+  def.location.phone ??= {};
+  if (v == null || !Number.isFinite(v)) delete def.location.phone[key];
+  else def.location.phone[key] = v;
+  if (!Object.keys(def.location.phone).length) delete def.location.phone;
+  phoneTouched = true;
+  markDirty();
+});
+
 // ---------------------------------------------------------------- load/save
 
 async function loadShow(f) {
@@ -987,11 +1028,13 @@ async function loadShow(f) {
   undoStack.length = 0;
   touched.clear();
   beaconsTouched = false;
+  phoneTouched = false;
   selBeacon = null;
   dirty = false;
   $('dirtyPill').style.display = 'none';
   setStatus(`${Object.keys(def.rooms ?? {}).length} rooms`);
   render();
+  renderPhone();
 }
 
 async function save() {
@@ -1021,6 +1064,7 @@ async function save() {
   }
   const body = { zones, thresholds, cues, roomStems };
   if (beaconsTouched) body.beacons = def.beacons ?? null;
+  if (phoneTouched) body.phone = def.location?.phone ?? null;
   const res = await fetch(`/api/shows/${encodeURIComponent(file)}/zones`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -1034,11 +1078,12 @@ async function save() {
   dirty = false;
   touched.clear();
   beaconsTouched = false;
+  phoneTouched = false;
   $('dirtyPill').style.display = 'none';
   const warned = (result.warnings ?? []).filter((w) => /overlap/.test(w));
   // Beacons and doors apply to the running show at once and reach every
   // phone; the rest of an edit waits for the next load.
-  const saved = result.live ? 'saved — beacons and doors live on every phone' : 'saved';
+  const saved = result.live ? 'saved — beacons, doors and phone margins live on every phone' : 'saved';
   setStatus(warned.length ? `${saved}, with warnings: ${warned.join(' · ')}` : saved);
   render();
   return true;

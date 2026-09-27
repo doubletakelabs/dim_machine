@@ -902,12 +902,19 @@ export class SpatialRuntime {
   /**
    * Beacon and door edits from the zone editor, applied to the running show
    * (the server then sends phones the new list). `beacons` undefined leaves
-   * them as they are; `doors` is roomId → that room's thresholds, or null.
+   * them as they are; `doors` is roomId → that room's thresholds, or null;
+   * `phone` (`location.phone`, how the app chooses a room) likewise, when
+   * not undefined.
    * Where guests are is untouched: a door they stand at that no longer
    * exists simply stops being one on their next reading.
    */
-  applyLocationEdits(beacons, doors = {}) {
+  applyLocationEdits(beacons, doors = {}, phone = undefined) {
     if (!this.def) return false;
+    if (phone !== undefined) {
+      this.def.location ??= {};
+      if (phone) this.def.location.phone = phone;
+      else delete this.def.location.phone;
+    }
     if (beacons !== undefined) {
       if (beacons) this.def.beacons = beacons;
       else delete this.def.beacons;

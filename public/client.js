@@ -1014,6 +1014,7 @@ function connect() {
         if ('beacons' in msg) tellNative('onBeacons', JSON.stringify(msg.beacons ?? null));
         if ('hallways' in msg) tellNative('onHallways', JSON.stringify(msg.hallways ?? {}));
         if ('adjacent' in msg) tellNative('onAdjacent', JSON.stringify(msg.adjacent ?? {}));
+        if ('locator' in msg) tellNative('onLocator', JSON.stringify(msg.locator ?? null));
         // Inside the app there is nobody to press Join: a handset on a lanyard
         // is in the show the moment it is unplugged. The app lets media play
         // without a gesture, so the AudioContext unlocks on its own. Joined
@@ -1029,6 +1030,7 @@ function connect() {
         if ('beacons' in msg) tellNative('onBeacons', JSON.stringify(msg.beacons ?? null));
         if ('hallways' in msg) tellNative('onHallways', JSON.stringify(msg.hallways ?? {}));
         if ('adjacent' in msg) tellNative('onAdjacent', JSON.stringify(msg.adjacent ?? {}));
+        if ('locator' in msg) tellNative('onLocator', JSON.stringify(msg.locator ?? null));
         applyDuck();
         if (joined) await preload(assetList);
         break;

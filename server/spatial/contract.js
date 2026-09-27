@@ -148,6 +148,12 @@ export const AUDIO_ON_EXIT = ['fadeOut', 'continue', 'cut'];
 export const GUIDANCE_POLICIES = ['goldenPath', 'guestDirectedPath', 'freeExplore'];
 
 /**
+ * How the Android app chooses a room from the beacons it hears, in dB
+ * (`location.phone`, §4.2b). Any left out keep the app's own default.
+ */
+export const PHONE_LOCATOR_KEYS = ['switchMarginDb', 'nearDb', 'leadDb', 'farMarginDb'];
+
+/**
  * What a guest gets on entering a room that is not theirs. This now
  * carries the weight the passing-by glitch used to: it is the only place the
  * show distinguishes "this room is yours" from "this room is not".

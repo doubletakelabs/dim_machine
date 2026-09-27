@@ -194,8 +194,9 @@ app.get('/api/content', async (_req, res) => {
  * Now the disk copy is the base truth for everything the editor does not own,
  * and the patch cannot say anything else. The editor owns, per room: `zones`
  * (polygons), `cues` (the room's own audio), `thresholds` (its doors) and its
- * own museum clips (`museum.roomStems.<roomId>`); and the show's `beacons`.
- * Each named block is replaced wholesale — that
+ * own museum clips (`museum.roomStems.<roomId>`); the show's `beacons`; and
+ * `location.phone`, how phones choose a room. Each named block is replaced
+ * wholesale — that
  * is what carries a deletion; `null` or `{}` removes it — and the merged show
  * must validate before anything lands.
  */
@@ -208,8 +209,10 @@ app.post('/api/shows/:file/zones', (req, res) => {
   const thresholds = req.body?.thresholds ?? {};
   const cues = req.body?.cues ?? {};
   const roomStems = req.body?.roomStems ?? {};
+  const hasPhone = req.body != null && Object.prototype.hasOwnProperty.call(req.body, 'phone');
+  const phone = req.body?.phone ?? null;
   const isMap = (v) => v && typeof v === 'object' && !Array.isArray(v);
-  if (!isMap(zones) || !isMap(thresholds) || !isMap(cues) || !isMap(roomStems) || (beacons != null && !isMap(beacons))) {
+  if (!isMap(zones) || !isMap(thresholds) || !isMap(cues) || !isMap(roomStems) || (beacons != null && !isMap(beacons)) || (phone != null && !isMap(phone))) {
     return res.status(400).json({
       error: 'body must be { zones: { roomId: { zoneId: { polygon, ble? } } }, thresholds?: { roomId: {…} }, roomStems?: { roomId: {…} } }',
     });
@@ -235,6 +238,13 @@ app.post('/api/shows/:file/zones', (req, res) => {
   if (hasBeacons) {
     if (empty(beacons)) delete def.beacons;
     else def.beacons = beacons;
+  }
+  // How phones choose a room (`location.phone`), as a whole when sent.
+  if (hasPhone) {
+    def.location ??= {};
+    if (empty(phone)) delete def.location.phone;
+    else def.location.phone = phone;
+    if (!Object.keys(def.location).length) delete def.location;
   }
   for (const [roomId, doors] of Object.entries(thresholds)) {
     if (empty(doors)) delete def.rooms[roomId].thresholds;
@@ -267,9 +277,13 @@ app.post('/api/shows/:file/zones', (req, res) => {
   // a reload that sends every guest back to the start (2026-09-26). The rest
   // of an edit — geometry, clips — still applies on the next load.
   let live = false;
-  if (file === loadedShowFile && runtime.def && (hasBeacons || Object.keys(thresholds).length)) {
+  if (file === loadedShowFile && runtime.def && (hasBeacons || hasPhone || Object.keys(thresholds).length)) {
     const doors = Object.fromEntries(Object.keys(thresholds).map((roomId) => [roomId, def.rooms[roomId]?.thresholds ?? null]));
-    live = runtime.applyLocationEdits(hasBeacons ? (def.beacons ?? null) : undefined, doors);
+    live = runtime.applyLocationEdits(
+      hasBeacons ? (def.beacons ?? null) : undefined,
+      doors,
+      hasPhone ? (def.location?.phone ?? null) : undefined,
+    );
     if (live) sendAssetsToPhones();
   }
   res.json({ ok: true, warnings: result.warnings, live });
@@ -495,6 +509,7 @@ function sendAssetsToPhones() {
     beacons: runtime.def?.beacons ?? null,
     hallways: runtime.impliedHallways(),
     adjacent: runtime.roomAdjacency(),
+    locator: runtime.def?.location?.phone ?? null,
   }, 'phones');
 }
 
@@ -895,6 +910,8 @@ wss.on('connection', (ws) => {
           hallways: runtime.impliedHallways(),
           // Which rooms connect, so the app only moves a guest next door.
           adjacent: runtime.roomAdjacency(),
+          // How the app chooses a room: margins in dB, tuned live (§4.2b).
+          locator: runtime.def?.location?.phone ?? null,
           snapshot: phoneSnapshot(token),
         });
         sendRelaySync(token);
