@@ -988,6 +988,7 @@ const PHONE_FIELDS = [
   ['leadDb', 'Lead', 4, '…if it is this far ahead of every other room heard, each measured against its own RSSI.'],
   ['switchMarginDb', 'Switch', 6, 'While the current room is at its RSSI, a rival at its own must be this far further above it.'],
   ['farMarginDb', 'Far', 8, 'A room not next door (or across the museum hallway) must clear its RSSI by this much to take over.'],
+  ['settleMs', 'Settle', 2000, 'A move by Near/Lead, or into the museum hallway, must hold this long (ms) before the phone makes it.'],
 ];
 
 function renderPhone() {
@@ -997,8 +998,8 @@ function renderPhone() {
   const phone = def.location?.phone ?? {};
   box.classList.remove('muted');
   box.innerHTML = PHONE_FIELDS.map(([key, label, fallback, note]) => `
-    <div class="field"><span>${esc(label)} (dB)</span>
-      <input type="number" min="0" step="1" data-phone="${key}" value="${esc(phone[key])}" placeholder="${fallback}"><span></span>
+    <div class="field"><span>${esc(label)} (${key.endsWith('Ms') ? 'ms' : 'dB'})</span>
+      <input type="number" min="0" step="${key.endsWith('Ms') ? 100 : 1}" data-phone="${key}" value="${esc(phone[key])}" placeholder="${fallback}"><span></span>
     </div><div class="note">${esc(note)}</div>`).join('');
 }
 

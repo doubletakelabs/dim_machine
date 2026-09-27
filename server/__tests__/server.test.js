@@ -567,13 +567,14 @@ describe('the Android app locating a phone', () => {
     const before = phone.welcome.locator ?? null;
     assert.equal((await save({ bogusDb: 3 })).status, 400, 'only settings the app knows');
     assert.equal((await save({ nearDb: -1 })).status, 400, 'margins are not negative');
-    const res = await save({ nearDb: 9, farMarginDb: 12 });
+    const res = await save({ nearDb: 9, farMarginDb: 12, settleMs: 1500 });
     assert.equal(res.status, 200);
     assert.equal((await res.json()).live, true);
     const pushed = await phone.waitFor((m) => m.type === 'assets' && m.locator?.nearDb === 9, {
       describe: 'the new margins pushed to the phone, no reload',
     });
     assert.equal(pushed.locator.farMarginDb, 12);
+    assert.equal(pushed.locator.settleMs, 1500);
     const late = await openPhone(server);
     assert.equal(late.welcome.locator.nearDb, 9, 'and a phone joining later');
 

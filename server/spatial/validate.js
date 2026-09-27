@@ -1042,7 +1042,7 @@ export function validateShowDefinition(raw) {
   } else if (phone) {
     for (const [key, v] of Object.entries(phone)) {
       if (!PHONE_LOCATOR_KEYS.includes(key)) errors.push(`location.phone.${key} is not a phone setting (${PHONE_LOCATOR_KEYS.join(', ')})`);
-      else if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) errors.push(`location.phone.${key} must be a non-negative number of dB`);
+      else if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) errors.push(`location.phone.${key} must be a non-negative number of ${key.endsWith('Ms') ? 'milliseconds' : 'dB'}`);
     }
   }
   for (const key of ['jumpTwoStepsMs', 'jumpFartherMs', 'doorDwellMs', 'nextStageMs', 'skipAheadMs', 'sameStageMs']) {

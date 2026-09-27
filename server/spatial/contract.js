@@ -148,10 +148,11 @@ export const AUDIO_ON_EXIT = ['fadeOut', 'continue', 'cut'];
 export const GUIDANCE_POLICIES = ['goldenPath', 'guestDirectedPath', 'freeExplore'];
 
 /**
- * How the Android app chooses a room from the beacons it hears, in dB
- * (`location.phone`, §4.2b). Any left out keep the app's own default.
+ * How the Android app chooses a room from the beacons it hears
+ * (`location.phone`, §4.2b): margins in dB, and `settleMs`, how long a move
+ * not earned at a threshold must hold. Any left out keep the app's default.
  */
-export const PHONE_LOCATOR_KEYS = ['switchMarginDb', 'nearDb', 'leadDb', 'farMarginDb'];
+export const PHONE_LOCATOR_KEYS = ['switchMarginDb', 'nearDb', 'leadDb', 'farMarginDb', 'settleMs'];
 
 /**
  * What a guest gets on entering a room that is not theirs. This now

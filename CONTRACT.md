@@ -481,8 +481,10 @@ own socket, only when something changes:
   app moves a guest only to a room next door or across a beaconless hallway,
   unless that room clears its `rssi` by a wide margin.
   And `locator`, the show's `location.phone`: the margins, in dB, the app
-  chooses a room by — `nearDb`, `leadDb`, `switchMarginDb`, `farMarginDb`
-  (any left out keep the app's default). Edited in the zone editor and, like
+  chooses a room by — `nearDb`, `leadDb`, `switchMarginDb`, `farMarginDb` —
+  and `settleMs`, how long a move not earned at a threshold (a lead, or an
+  inferred hallway) must hold before the app makes it (any left out keep the
+  app's default). Edited in the zone editor and, like
   beacons, live on every phone at Save.
 
 **The way through (rooms with a `stage`).** The phone is the sensor; the
