@@ -31,7 +31,6 @@ function show({ staged = true } = {}) {
     905: { at: [70, 70], room: 'cyclorama', rssi: -70 },
     906: { at: [80, 80], room: 'entranceHallway', rssi: -70 },
     907: { at: [90, 90], room: 'maskRoom', rssi: -70 },
-    908: { at: [95, 95], room: 'maskMirror', rssi: -70 },
     909: { at: [99, 99], room: 'saas', rssi: -70 },
     931: { at: [40, 40], door: 'influence-front', rssi: -70 },
     932: { at: [85, 85], door: 'entranceHallway-door', rssi: -70 },
@@ -200,24 +199,32 @@ describe('the way through the building (rooms.*.stage)', () => {
     assert.equal(rt.eventLog.filter((e) => e.type === 'guest.readingRefused').length, 1, 'logged once');
   });
 
+  /** A guest with no room yet is placed at once, wherever they are. */
+  function inMuseumHallway() {
+    const r = running();
+    r.rt.setGuestBeacon(r.guestId, 901);
+    assert.equal(roomOf(r.rt, r.guestId), 'museumHallway');
+    return r;
+  }
+
   it('rooms at one stage are free to move between, both ways, after sameStageMs', () => {
-    const { rt, guestId } = inMaskRoom();
-    assert.equal(rt.setGuestBeacon(guestId, 908).heldMs, 3000, 'MAD-DIM: three seconds of steady reading');
+    const { rt, guestId } = inMuseumHallway();
+    assert.equal(rt.setGuestBeacon(guestId, 909).heldMs, 3000, 'MAD-DIM: three seconds of steady reading');
     wait(rt, guestId, 3100);
-    assert.equal(roomOf(rt, guestId), 'maskMirror');
-    assert.equal(rt.setGuestBeacon(guestId, 907).heldMs, 3000, 'and back');
+    assert.equal(roomOf(rt, guestId), 'saas');
+    assert.equal(rt.setGuestBeacon(guestId, 901).heldMs, 3000, 'and back');
     wait(rt, guestId, 3100);
-    assert.equal(roomOf(rt, guestId), 'maskRoom');
+    assert.equal(roomOf(rt, guestId), 'museumHallway');
   });
 
   it('a reading through the wall that the phone takes back never moves them', () => {
-    const { rt, guestId } = inMaskRoom();
-    rt.setGuestBeacon(guestId, 908); // the mirror, heard for a moment
+    const { rt, guestId } = inMuseumHallway();
+    rt.setGuestBeacon(guestId, 909); // SaaS, heard for a moment
     wait(rt, guestId, 2000);
-    rt.setGuestBeacon(guestId, 907); // back to the mask room
+    rt.setGuestBeacon(guestId, 901); // back to the hallway
     wait(rt, guestId, 4000);
-    assert.equal(roomOf(rt, guestId), 'maskRoom');
-    assert.equal(rt.rooms.get('maskMirror').state, 'idle', 'the mirror never woke');
+    assert.equal(roomOf(rt, guestId), 'museumHallway');
+    assert.equal(rt.rooms.get('saas').state, 'idle', 'SaaS never woke');
   });
 
   it('a flicker into the next stage never lands, so it cannot shut them out', () => {

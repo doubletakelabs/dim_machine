@@ -177,8 +177,7 @@
       "kind": "shared",
       "adjacent": [
         "entranceHallway",
-        "hallOfHeroes",
-        "maskMirror"
+        "hallOfHeroes"
       ],
       "stage": 3,
       "zones": {
@@ -255,68 +254,6 @@
         "maskRoom-door": {}
       },
       "bg": "audio/bg/0301-02_MASK_SEQUENCE_5MIN.mp3"
-    },
-    "maskMirror": {
-      "name": "Mask Mirror",
-      "kind": "shared",
-      "adjacent": [
-        "maskRoom"
-      ],
-      "stage": 3,
-      "machine": {
-        "id": "maskMirror",
-        "initial": "idle",
-        "states": {
-          "idle": {
-            "on": {
-              "ACTIVATE": "active"
-            }
-          },
-          "active": {
-            "initial": "main",
-            "on": {
-              "RELEASE": "idle"
-            },
-            "states": {
-              "main": {}
-            }
-          }
-        }
-      },
-      "ineligible": {
-        "policy": "ignore"
-      },
-      "seen": {
-        "dwellMs": 20000,
-        "accumulate": true
-      },
-      "zones": {
-        "maskMirror": {
-          "polygon": [
-            [
-              273,
-              551
-            ],
-            [
-              285,
-              548
-            ],
-            [
-              285,
-              607
-            ],
-            [
-              272,
-              606
-            ]
-          ]
-        }
-      },
-      "cues": {
-        "active": {
-          "audio": "audio/guidance/0304-boardroom_mirror.mp3"
-        }
-      }
     },
     "hallOfHeroes": {
       "name": "Hall of Heroes",
