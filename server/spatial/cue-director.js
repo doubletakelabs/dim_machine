@@ -140,6 +140,9 @@ export class CueDirector {
           startAt: want.startAt,
           loop: !!want.loop,
           gain: want.gain ?? 1,
+          // A layer with its own crossfade fades in over it (the show's
+          // audioLayers.crossfadeMs otherwise); its fade out is `fadeMs`, below.
+          ...(want.fadeMs != null && LAYER_SLOTS.includes(slot) ? { fadeInMs: want.fadeMs } : {}),
           // Late arrivals hear the room where it actually is. A one-shot that
           // already finished is dropped by the client rather than restarted.
           seek: want.seek !== false,

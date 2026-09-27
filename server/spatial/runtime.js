@@ -42,7 +42,12 @@ const OUTPUT_LOG_CAP = 200;
 function layerDeclaration(value) {
   if (typeof value === 'string' && value) return { audio: value };
   if (value && typeof value === 'object' && typeof value.audio === 'string' && value.audio) {
-    return { audio: value.audio, ...(value.gain != null ? { gain: value.gain } : {}) };
+    return {
+      audio: value.audio,
+      ...(value.gain != null ? { gain: value.gain } : {}),
+      // Its own fade in and out, instead of the show's audioLayers.crossfadeMs.
+      ...(value.crossfadeMs != null ? { crossfadeMs: value.crossfadeMs } : {}),
+    };
   }
   return null;
 }
@@ -124,6 +129,13 @@ export class SpatialRuntime {
     /** guestId → the room last refused, so a flicker is logged once. */
     this.lastRefused = new Map();
     /**
+     * Guests an operator has placed by hand, whose phone's next reading is
+     * believed wherever it is — a fresh start, as for a phone's first fix. A
+     * placement can be wrong about where the phone really is, and judging the
+     * phone from it would strand the guest (2026-09-26).
+     */
+    this.trustNextReading = new Set();
+    /**
      * guestId → { bg: { audio, gain, since } | null, bed: since | null } — when
      * each layer began for them. A layer's startAt has to hold still while it
      * plays, or the director would restart it: the same bg carried into the
@@ -166,6 +178,7 @@ export class SpatialRuntime {
     this.furthestStage.clear();
     this.lastRoom.clear();
     this.lastRefused.clear();
+    this.trustNextReading.clear();
 
     this.coordinator = new OccupancyCoordinator({
       rooms: this.def.rooms,
@@ -294,6 +307,7 @@ export class SpatialRuntime {
     this.furthestStage.clear();
     this.lastRoom.clear();
     this.lastRefused.clear();
+    this.trustNextReading.clear();
     this.layerSince.clear();
     this.beaconHolds.clear();
     for (const link of this.experiences.values()) link.stop();
@@ -412,6 +426,7 @@ export class SpatialRuntime {
     this.furthestStage.delete(guestId);
     this.lastRoom.delete(guestId);
     this.lastRefused.delete(guestId);
+    this.trustNextReading.delete(guestId);
     this.layerSince.delete(guestId);
     this.director.dropGuest(guestId);
     this.append({ type: 'guest.left', guestId, visitId: p.visitId, roomId: occupied });
@@ -720,11 +735,17 @@ export class SpatialRuntime {
    * - a room at an earlier stage than the furthest they have reached is
    *   behind them: refused, so no room they have left plays to them again;
    * - more than one room away is refused — nobody crosses two rooms unseen;
-   * - next door within the stages they have reached moves them at once;
+   * - next door within the stages they have reached moves them after
+   *   `location.sameStageMs` (0: at once; MAD-DIM 3000, so a reading through
+   *   a museum room's wall that the phone takes back never lands);
    *   next door into a new stage holds `location.nextStageMs` (3000), as long
    *   as a door takes, because once there they cannot come back;
    * - one room skipped (a dead spot) holds `location.skipAheadMs` (5000) into
-   *   a new stage, `location.jumpTwoStepsMs` (1500) within them.
+   *   a new stage — or is refused, with `location.skipAhead: false`, when the
+   *   beacons are noisy enough that a skip is more often a misread than a
+   *   dead spot (MAD, 2026-09-26) — and `location.jumpTwoStepsMs` (1500)
+   *   within the stages reached, where a hallway with no beacons of its own
+   *   always looks like a skip.
    *
    * A room with no stage, or a show with none, keeps the older rule: holds by
    * distance (`jumpHoldMs`), never a refusal. A guest with no room yet moves at
@@ -733,6 +754,8 @@ export class SpatialRuntime {
    * @returns {{ refused?: 'behind' | 'too far', from: string|null, steps: number, holdMs: number }}
    */
   judgeMove(guestId, toRoomId) {
+    // Placed by hand since the phone last spoke: its reading is a fresh start.
+    if (this.trustNextReading.has(guestId)) return { from: null, steps: 0, holdMs: 0 };
     const here = this.coordinator.getOccupancy(guestId);
     const from = here?.occupancy === 'inside' ? here.roomId : (this.lastRoom.get(guestId) ?? null);
     const steps = from ? this.stepsBetween(from, toRoomId) : 0;
@@ -744,8 +767,10 @@ export class SpatialRuntime {
     const onward = toStage > furthest;
     const cfg = this.def?.location ?? {};
     let holdMs = 0;
-    if (steps === 1 && onward) holdMs = cfg.nextStageMs ?? 3000;
-    if (steps === 2) holdMs = onward ? (cfg.skipAheadMs ?? 5000) : (cfg.jumpTwoStepsMs ?? 1500);
+    const sameStageMs = cfg.sameStageMs ?? 0;
+    if (steps === 1) holdMs = onward ? (cfg.nextStageMs ?? 3000) : sameStageMs;
+    if (steps === 2 && onward && cfg.skipAhead === false) return { refused: 'too far', from, steps, holdMs: 0 };
+    if (steps === 2) holdMs = onward ? (cfg.skipAheadMs ?? 5000) : Math.max(cfg.jumpTwoStepsMs ?? 1500, sameStageMs);
     return { from, steps, holdMs };
   }
 
@@ -907,7 +932,10 @@ export class SpatialRuntime {
   /** @param {import('./coordinator.js').ZoneOccupancyEvent} event */
   handleOccupancyCommitted(event) {
     this.append(event);
-    if (event.occupancy === 'inside' && event.roomId) {
+    // A placement by hand says where the guest is now, not how far through
+    // the building they have come: only the phone's own readings count.
+    if (event.source === 'ble') this.trustNextReading.delete(event.guestId);
+    if (event.occupancy === 'inside' && event.roomId && !this.trustNextReading.has(event.guestId)) {
       this.lastRoom.set(event.guestId, event.roomId);
       this.lastRefused.delete(event.guestId);
       const stage = this.stageOf(event.roomId);
@@ -1089,10 +1117,31 @@ export class SpatialRuntime {
       kind: g.kind,
       position: this.displayPosition(g.guestId),
       museum: this.museum?.snapshot(g.guestId) ?? null,
+      way: this.wayThrough(g.guestId),
       walking: this.walkthrough?.walkers.has(g.guestId) ?? false,
       threshold: this.atThreshold.get(g.guestId)?.thresholdId ?? null,
       intent: this.walkthrough?.intent(g.guestId) ?? null,
     }));
+  }
+
+  /**
+   * Where a guest stands on the way through the building (`rooms.*.stage`),
+   * for the panel: the answer to "why is this person stuck?". Null in a show
+   * with no stages.
+   */
+  wayThrough(guestId) {
+    const staged = Object.values(this.def?.rooms ?? {}).some((r) => Number.isInteger(r?.stage));
+    if (!staged) return null;
+    const refused = this.lastRefused.get(guestId) ?? null;
+    const lastRefusal = refused
+      ? [...this.eventLog].reverse().find((e) => e.type === 'guest.readingRefused' && e.guestId === guestId && e.roomId === refused)
+      : null;
+    return {
+      furthestStage: this.furthestStage.get(guestId) ?? null,
+      lastRoom: this.lastRoom.get(guestId) ?? null,
+      trustNextReading: this.trustNextReading.has(guestId),
+      ignoring: refused ? { roomId: refused, reason: lastRefusal?.reason ?? null, at: lastRefusal?.at ?? null } : null,
+    };
   }
 
   getCoordinatorSnapshot() {
@@ -1201,6 +1250,8 @@ export class SpatialRuntime {
       loop: true,
       startAt: since,
       key: `${slot}:${layer.audio}:${since}`,
+      // Fades in over this, and the director fades it out over the same.
+      ...(layer.crossfadeMs != null ? { fadeMs: layer.crossfadeMs } : {}),
     });
     return {
       bg: bg ? cue('bg', bg, bg.since) : null,
@@ -1367,18 +1418,24 @@ export class SpatialRuntime {
     if (roomId == null) return this.setVirtualOccupancy(guestId, null, 'outside');
     const spot = this.standingSpot(roomId, guestId);
     if (!spot) return false;
-    // Somebody decided: back is allowed, and the way on starts from here.
+    // Somebody decided where they are now; their phone's next reading is
+    // believed wherever it is (`placedAt`).
     if (!this.setVirtualPosition(guestId, spot[0], spot[1])) return false;
     this.placedAt(guestId, roomId);
     return true;
   }
 
-  /** An operator's placement resets how far along the guest is. */
+  /**
+   * An operator's placement: the guest is in that room now, and the way
+   * through starts again from the phone's next reading, wherever it is — as
+   * for a phone's first fix. Rooms reached by hand do not count as reached.
+   */
   placedAt(guestId, roomId) {
-    const stage = this.stageOf(roomId);
-    if (stage != null) this.furthestStage.set(guestId, stage);
-    this.lastRoom.set(guestId, roomId);
+    this.furthestStage.delete(guestId);
+    this.lastRoom.delete(guestId);
+    this.lastRefused.delete(guestId);
     this.beaconHolds.delete(guestId);
+    this.trustNextReading.add(guestId);
     return true;
   }
 

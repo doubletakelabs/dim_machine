@@ -860,6 +860,29 @@ const STANDING_LABEL = {
   passingThrough: 'passing through',
 };
 
+/** "3 rooms", or "3/4" in a show that caps them (museum.limit). */
+function museumCount(m) {
+  return m.limit == null ? `${m.seen} room${m.seen === 1 ? '' : 's'}` : `${m.seen}/${m.limit}`;
+}
+
+/** What the museum remembers of a room for this guest (museum.js). */
+const MUSEUM_MEMORY = {
+  visited: 'had it — runs again, without its clips',
+  disabled: 'will not run for them (the other of a pair, or past the limit)',
+};
+
+/** The way through the building (rooms.*.stage): how far, and what is being ignored. */
+function describeWay(way) {
+  const parts = [];
+  if (way.trustNextReading) parts.push('placed by hand — the phone\'s next reading is believed wherever it is');
+  else parts.push(way.furthestStage != null ? `reached stage ${way.furthestStage}` : 'no room yet');
+  if (way.ignoring) {
+    const why = way.ignoring.reason === 'behind' ? 'behind them' : 'too far from ' + (way.lastRoom ?? 'their room');
+    parts.push(`<span class="warn">ignoring ${way.ignoring.roomId} — ${why}</span>`);
+  }
+  return parts.join('<br>');
+}
+
 function describeStanding(current) {
   if (!current) return 'not in a room';
   const why = current.reason === 'atCapacity' ? ' (full)' : '';
@@ -999,7 +1022,7 @@ function renderGuests() {
         <br><span class="muted mono" style="font-size:10px">${g.guestId}</span>
       </td>
       <td class="muted">${g.regions?.guidance ?? '—'}${
-        g.museum && g.museum.seen ? ` <span style="color:var(--accent)">· ${g.museum.seen}/${g.museum.limit}</span>` : ''}</td>
+        g.museum && g.museum.seen ? ` <span style="color:var(--accent)">· ${museumCount(g.museum)}</span>` : ''}</td>
       <td>${g.roomId ?? '<span class="muted">—</span>'}</td>
       <td class="muted">${describeIntent(g)}</td>
       <td style="color:${standingColour(g.currentRoom)}">${describeStanding(g.currentRoom)}</td>
@@ -1106,12 +1129,13 @@ function renderInspector() {
       ${phoneRows(phones.get(guest.guestId))}
       <dt>Journey</dt><dd>${guest.regions?.guidance ?? '—'}</dd>
       <dt>Museum</dt><dd>${guest.museum
-        ? `${guest.museum.seen}/${guest.museum.limit} entered${
+        ? `${museumCount(guest.museum)} entered${
             Object.keys(guest.museum.rooms).length
               ? '<br>' + Object.entries(guest.museum.rooms)
-                  .map(([r, m]) => `<span class="muted">${r}</span> ${m}`).join('<br>')
+                  .map(([r, m]) => `<span class="muted">${r}</span> ${MUSEUM_MEMORY[m] ?? m}`).join('<br>')
               : ''}`
         : '<span class="muted">—</span>'}</dd>
+      ${guest.way ? `<dt>Way through</dt><dd>${describeWay(guest.way)}</dd>` : ''}
       <dt>Eligible</dt><dd>${guest.eligibleRooms?.join(', ') || '—'}</dd>
       <dt>In room</dt><dd>${guest.roomId ?? '—'}${guest.zoneId ? ` (${guest.zoneId})` : ''}</dd>
       <dt>Standing</dt><dd style="color:${standingColour(guest.currentRoom)}">${describeStanding(guest.currentRoom)}</dd>
@@ -1143,7 +1167,7 @@ function renderInspector() {
     </div>
     <p class="muted" style="margin:6px 0 0">
       ${guest.kind === 'phone'
-        ? 'Placement, not travel — they stay put until sent again. Walking is for simulated guests only.'
+        ? 'Places them now. Their phone\'s next reading is believed wherever it is, so a wrong placement cannot strand them. Walking is for simulated guests only.'
         : 'One-shot placement. Walk drives them room to room on a timer.'}
     </p>
     ${(showMeta?.thresholds ?? []).length ? `

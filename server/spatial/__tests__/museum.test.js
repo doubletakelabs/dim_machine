@@ -31,14 +31,16 @@ museum.museum.stems = {
 
 const ENTRANCE_SECONDS = 3;
 
-function makeRuntime() {
+function makeRuntime(mutate) {
   const rt = new SpatialRuntime({
     enableTick: false,
     clock: new ManualClock(),
     // The entrance clip is three seconds long as far as scheduling cares.
     assetSeconds: () => ENTRANCE_SECONDS,
   });
-  assert.deepEqual(rt.load(museum).errors, []);
+  const def = structuredClone(museum);
+  mutate?.(def);
+  assert.deepEqual(rt.load(def).errors, []);
   rt.start();
   return rt;
 }
@@ -130,19 +132,22 @@ describe('leaving', () => {
     assert.equal(voice(rt, g.guestId), 'audio/museum/in_hallway_1.wav');
   });
 
-  it('a return is a dead room with the return clip', () => {
+  it('a return runs the room again, to use, without its entrance or in_room', () => {
     const rt = makeRuntime();
     const g = arrive(rt);
     walk(rt, g.guestId, 'faerie');
     walk(rt, g.guestId, 'museumHallway');
     walk(rt, g.guestId, 'faerie');
-    assert.equal(voice(rt, g.guestId), 'audio/museum/return_visited.wav');
-    assert.equal(roomState(rt, 'faerie'), 'idle', 'no resume — it does not wake');
-    assert.equal(snap(rt, g.guestId).seen, 1);
+    assert.equal(roomState(rt, 'faerie'), 'active', 'it runs for them again');
+    assert.equal(voice(rt, g.guestId), 'audio/museum/return_visited.wav', 'not the entrance');
+    assert.equal(bed(rt, g.guestId), null, 'no in_room — they have heard it');
+    assert.equal(snap(rt, g.guestId).seen, 1, 'a return is not another room');
+    walk(rt, g.guestId, 'museumHallway');
+    assert.equal(roomState(rt, 'faerie'), 'idle', 'and stands down when they leave');
   });
 });
 
-describe('the four', () => {
+describe('as many rooms as they like', () => {
   function spend(rt, g, rooms) {
     for (const roomId of rooms) {
       walk(rt, g.guestId, roomId);
@@ -151,26 +156,81 @@ describe('the four', () => {
     }
   }
 
-  it('a fifth room will not run — no state once, then return, no state', () => {
+  it('MAD-DIM has no limit: every room runs', () => {
     const rt = makeRuntime();
     const g = arrive(rt);
-    spend(rt, g, ['automation', 'saas', 'slop', 'kin']);
-    walk(rt, g.guestId, 'faerie');
-    assert.equal(roomState(rt, 'faerie'), 'idle', 'the room does not wake');
+    spend(rt, g, ['automation', 'saas', 'slop', 'influence', 'kin']);
+    walk(rt, g.guestId, 'consumption1');
+    assert.equal(roomState(rt, 'consumption1'), 'active', 'a sixth room runs');
+    assert.equal(voice(rt, g.guestId), 'audio/museum/entrance.wav');
+    assert.equal(snap(rt, g.guestId).limit, null);
+  });
+
+  it('a show can still set one: past it a room will not run — no state once, then return, no state', () => {
+    const rt = makeRuntime((def) => { def.museum.limit = 4; });
+    const g = arrive(rt);
+    spend(rt, g, ['automation', 'saas', 'slop', 'influence']);
+    walk(rt, g.guestId, 'consumption1');
+    assert.equal(roomState(rt, 'consumption1'), 'idle', 'the room does not wake');
     assert.equal(voice(rt, g.guestId), 'audio/museum/in_room_disabled.wav');
     walk(rt, g.guestId, 'museumHallway');
     assert.equal(voice(rt, g.guestId), 'audio/museum/in_hallway_4.wav', 'the count is unchanged');
-    walk(rt, g.guestId, 'faerie');
+    walk(rt, g.guestId, 'consumption1');
     assert.equal(voice(rt, g.guestId), 'audio/museum/return_disabled.wav');
   });
+});
 
-  it('a room they spent a slot on greets a return with return_visited', () => {
+describe('Kin or Faerie (chooseOne)', () => {
+  it('the first of the pair they enter is theirs; the other will not run for them', () => {
     const rt = makeRuntime();
     const g = arrive(rt);
-    spend(rt, g, ['automation']);
-    walk(rt, g.guestId, 'automation');
-    assert.equal(voice(rt, g.guestId), 'audio/museum/return_visited.wav');
-    assert.equal(snap(rt, g.guestId).seen, 1);
+    walk(rt, g.guestId, 'kin');
+    assert.equal(roomState(rt, 'kin'), 'active');
+    walk(rt, g.guestId, 'museumHallway');
+    walk(rt, g.guestId, 'faerie');
+    assert.equal(roomState(rt, 'faerie'), 'idle', 'faerie does not wake');
+    assert.equal(voice(rt, g.guestId), 'audio/museum/in_room_disabled.wav');
+    assert.equal(snap(rt, g.guestId).rooms.faerie, 'disabled');
+    walk(rt, g.guestId, 'museumHallway');
+    walk(rt, g.guestId, 'faerie');
+    assert.equal(voice(rt, g.guestId), 'audio/museum/return_disabled.wav');
+    walk(rt, g.guestId, 'museumHallway');
+    walk(rt, g.guestId, 'kin');
+    assert.equal(roomState(rt, 'kin'), 'active', 'their own choice still runs for them');
+  });
+
+  it('either way round', () => {
+    const rt = makeRuntime();
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'faerie');
+    walk(rt, g.guestId, 'museumHallway');
+    walk(rt, g.guestId, 'kin');
+    assert.equal(roomState(rt, 'kin'), 'idle');
+    assert.equal(snap(rt, g.guestId).rooms.kin, 'disabled');
+  });
+
+  it('a full room is not a choice', () => {
+    const rt = makeRuntime((def) => { def.rooms.kin.multiGuest = { ...def.rooms.kin.multiGuest, maxOccupants: 1 }; });
+    const a = arrive(rt);
+    const b = arrive(rt);
+    walk(rt, a.guestId, 'kin');
+    walk(rt, b.guestId, 'kin');
+    assert.equal(snap(rt, b.guestId).rooms.kin, undefined, 'refused by capacity: nothing remembered');
+    walk(rt, b.guestId, 'museumHallway');
+    walk(rt, b.guestId, 'faerie');
+    assert.equal(roomState(rt, 'faerie'), 'active', 'faerie is still theirs to choose');
+  });
+
+  it('validates the groups', () => {
+    const errorsFor = (chooseOne) => {
+      const def = structuredClone(museum);
+      def.museum.chooseOne = chooseOne;
+      return validateShowDefinition(def).errors.join('\n');
+    };
+    assert.equal(errorsFor([['kin', 'faerie']]), '');
+    assert.match(errorsFor([['kin']]), /at least two rooms/);
+    assert.match(errorsFor([['kin', 'library']]), /"library" is not one of museum\.rooms/);
+    assert.match(errorsFor([['kin', 'faerie'], ['faerie', 'slop']]), /"faerie" is in more than one group/);
   });
 });
 
@@ -320,8 +380,8 @@ describe('a room with its own clips', () => {
     assert.equal(bed(rt, g.guestId).assetId, 'ambient.wav');
 
     walk(rt, g.guestId, 'museumHallway');
-    walk(rt, g.guestId, 'faerie');
-    assert.equal(voice(rt, g.guestId), 'audio/museum/entrance.wav', 'faerie has none of its own');
+    walk(rt, g.guestId, 'slop');
+    assert.equal(voice(rt, g.guestId), 'audio/museum/entrance.wav', 'slop has none of its own here');
     assert.equal(bed(rt, g.guestId).assetId, 'audio/museum/in_room.wav');
 
     walk(rt, g.guestId, 'museumHallway');

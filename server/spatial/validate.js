@@ -196,9 +196,12 @@ function checkLayers(def, errors) {
       if (value.gain != null && !(typeof value.gain === 'number' && value.gain >= 0)) {
         errors.push(`${at}.gain must be a non-negative number`);
       }
+      if (value.crossfadeMs != null && !(typeof value.crossfadeMs === 'number' && value.crossfadeMs >= 0)) {
+        errors.push(`${at}.crossfadeMs must be a non-negative number of milliseconds`);
+      }
       return true;
     }
-    errors.push(`${at} must be an audio file name or { "audio": ..., "gain": ... }`);
+    errors.push(`${at} must be an audio file name or { "audio": ..., "gain": ..., "crossfadeMs": ... }`);
     return false;
   };
   for (const [roomId, room] of Object.entries(def.rooms ?? {})) {
@@ -1027,7 +1030,10 @@ export function validateShowDefinition(raw) {
   // How long a beacon report that jumps between unconnected spaces is held,
   // and how long a guest stands at a door before they have entered its room.
   checkStages(def.rooms ?? {}, errors, warnings);
-  for (const key of ['jumpTwoStepsMs', 'jumpFartherMs', 'doorDwellMs', 'nextStageMs', 'skipAheadMs']) {
+  if (def.location?.skipAhead != null && typeof def.location.skipAhead !== 'boolean') {
+    errors.push('location.skipAhead must be true or false');
+  }
+  for (const key of ['jumpTwoStepsMs', 'jumpFartherMs', 'doorDwellMs', 'nextStageMs', 'skipAheadMs', 'sameStageMs']) {
     const v = def.location?.[key];
     if (v != null && (typeof v !== 'number' || !Number.isFinite(v) || v < 0)) {
       errors.push(`location.${key} must be a non-negative number of milliseconds`);

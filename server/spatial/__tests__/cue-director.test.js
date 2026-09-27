@@ -229,6 +229,29 @@ describe('the mixer numbers reach the wire', () => {
     assert.equal(stop[0].fadeMs, 2000, 'the fade is the authored crossfade, not the hard default');
   });
 
+  it('a bg with its own crossfade fades in and out over that, not the show\'s', () => {
+    const { rt, cues } = makeRuntime((show) => {
+      show.guest = { ...show.guest, audioLayers: { crossfadeMs: 10000 } };
+      show.rooms.hallway.bg = { audio: 'bg/rain.mp3', crossfadeMs: 3000 };
+      show.rooms.cellar.bg = 'bg/wind.mp3';
+    });
+    const g = rt.spawnGuest();
+    walk(rt, g.guestId, AT.hallway);
+    const [rain] = forGuest(cues, g.guestId).filter((c) => c.kind === 'audio' && c.assetId === 'bg/rain.mp3');
+    assert.equal(rain.fadeInMs, 3000, 'in over its own');
+    walk(rt, g.guestId, AT.cellar);
+    const [stop] = forGuest(cues, g.guestId).filter((c) => c.kind === 'stopAudio' && c.assetId === 'bg/rain.mp3');
+    assert.equal(stop.fadeMs, 3000, 'and out over its own');
+    const [wind] = forGuest(cues, g.guestId).filter((c) => c.kind === 'audio' && c.assetId === 'bg/wind.mp3');
+    assert.equal(wind.fadeInMs, undefined, 'a bg without one takes the show\'s, on the phone');
+  });
+
+  it('refuses a crossfade that is not a length of time', () => {
+    const def = structuredClone(demo);
+    def.rooms.hallway.bg = { audio: 'bg/rain.mp3', crossfadeMs: 'quick' };
+    assert.match(validateShowDefinition(def).errors.join('\n'), /rooms\.hallway\.bg\.crossfadeMs must be a non-negative number/);
+  });
+
   it('a room clip is a voice: leaving it keeps the short tail', () => {
     const { rt, cues } = makeRuntime((show) => {
       show.guest = { ...show.guest, audioLayers: { crossfadeMs: 2000 } };

@@ -371,10 +371,11 @@ function playAudio(cue, { seekIntoLoop = false } = {}) {
   // A layer fades in over the crossfade window — walking into a room is a
   // doorway, not a channel change. Paired with the director's fade-out on the
   // slot it vacated, the handover is a crossfade without either end knowing.
-  if (LAYER_SLOTS.has(cue.slot) && mixer.crossfadeMs > 0) {
+  const fadeInMs = cue.fadeInMs ?? mixer.crossfadeMs;
+  if (LAYER_SLOTS.has(cue.slot) && fadeInMs > 0) {
     const target = cue.gain ?? 1;
     gainNode.gain.setValueAtTime(0.001, beginsAt);
-    gainNode.gain.linearRampToValueAtTime(target, beginsAt + mixer.crossfadeMs / 1000);
+    gainNode.gain.linearRampToValueAtTime(target, beginsAt + fadeInMs / 1000);
   }
 
   // A spoken line ducks the layers under it for exactly as long as it sounds.

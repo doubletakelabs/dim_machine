@@ -43,7 +43,9 @@ function show({ staged = true } = {}) {
 
 function running(opts) {
   const rt = new SpatialRuntime({ enableTick: false, clock: new ManualClock(), assetSeconds: () => 3 });
-  assert.deepEqual(rt.load(show(opts)).errors, []);
+  const def = show(opts);
+  if (opts?.location) def.location = { ...def.location, ...opts.location };
+  assert.deepEqual(rt.load(def).errors, []);
   rt.start();
   const g = rt.spawnGuest();
   return { rt, guestId: g.guestId };
@@ -60,7 +62,7 @@ describe('locating a phone by beacon', () => {
   });
 
   it('beacons in one group are one room; a move between rooms is one step', () => {
-    const { rt, guestId } = running();
+    const { rt, guestId } = running({ location: { sameStageMs: 0 } }); // no dwell: this is about groups
     rt.setGuestBeacon(guestId, 902);
     rt.setGuestBeacon(guestId, 903);
     assert.equal(roomOf(rt, guestId), 'kin');
@@ -178,8 +180,8 @@ describe('the way through the building (rooms.*.stage)', () => {
       rt.coordinator.touchLocation(guestId);
     }
   }
-  function inMaskRoom() {
-    const r = running();
+  function inMaskRoom(location) {
+    const r = running(location ? { location } : undefined);
     r.rt.setGuestBeacon(r.guestId, 906);
     assert.equal(r.rt.setGuestBeacon(r.guestId, 907).heldMs, 3000, 'a new stage holds as long as a door');
     r.rt.testAdvanceTime(3100);
@@ -197,11 +199,24 @@ describe('the way through the building (rooms.*.stage)', () => {
     assert.equal(rt.eventLog.filter((e) => e.type === 'guest.readingRefused').length, 1, 'logged once');
   });
 
-  it('rooms at one stage are free to move between, both ways', () => {
+  it('rooms at one stage are free to move between, both ways, after sameStageMs', () => {
     const { rt, guestId } = inMaskRoom();
-    assert.deepEqual(rt.setGuestBeacon(guestId, 908), { ok: true, roomId: 'maskMirror' });
-    assert.deepEqual(rt.setGuestBeacon(guestId, 907), { ok: true, roomId: 'maskRoom' });
-    rt.setGuestBeacon(guestId, 901);
+    assert.equal(rt.setGuestBeacon(guestId, 908).heldMs, 3000, 'MAD-DIM: three seconds of steady reading');
+    wait(rt, guestId, 3100);
+    assert.equal(roomOf(rt, guestId), 'maskMirror');
+    assert.equal(rt.setGuestBeacon(guestId, 907).heldMs, 3000, 'and back');
+    wait(rt, guestId, 3100);
+    assert.equal(roomOf(rt, guestId), 'maskRoom');
+  });
+
+  it('a reading through the wall that the phone takes back never moves them', () => {
+    const { rt, guestId } = inMaskRoom();
+    rt.setGuestBeacon(guestId, 908); // the mirror, heard for a moment
+    wait(rt, guestId, 2000);
+    rt.setGuestBeacon(guestId, 907); // back to the mask room
+    wait(rt, guestId, 4000);
+    assert.equal(roomOf(rt, guestId), 'maskRoom');
+    assert.equal(rt.rooms.get('maskMirror').state, 'idle', 'the mirror never woke');
   });
 
   it('a flicker into the next stage never lands, so it cannot shut them out', () => {
@@ -226,7 +241,7 @@ describe('the way through the building (rooms.*.stage)', () => {
   });
 
   it('one room skipped (a dead spot) lands after the longer hold, and shuts what it skipped', () => {
-    const { rt, guestId } = inMaskRoom();
+    const { rt, guestId } = inMaskRoom({ skipAhead: true });
     assert.equal(rt.setGuestBeacon(guestId, 905).heldMs, 5000, 'mask room → cyclorama skips the hall of heroes');
     rt.testAdvanceTime(3000);
     rt.coordinator.touchLocation(guestId);
@@ -234,6 +249,23 @@ describe('the way through the building (rooms.*.stage)', () => {
     rt.testAdvanceTime(2100);
     assert.equal(roomOf(rt, guestId), 'cyclorama');
     assert.equal(rt.setGuestBeacon(guestId, 904).reason, 'behind');
+  });
+
+  it('with skipAhead off (MAD-DIM), one room skipped is ignored too, and they stay', () => {
+    const { rt, guestId } = inMaskRoom();
+    assert.deepEqual(rt.setGuestBeacon(guestId, 905), { ok: false, reason: 'too far', roomId: 'maskRoom' }, 'mask room → cyclorama skips the hall of heroes');
+    wait(rt, guestId, 8000);
+    assert.equal(roomOf(rt, guestId), 'maskRoom');
+    assert.equal(rt.rooms.get('cyclorama').state, 'idle');
+    assert.equal(rt.setGuestBeacon(guestId, 904).heldMs, 3000, 'next door still moves them on');
+  });
+
+  it('with skipAhead off, a skip within the stages reached still moves them — the museum hallway has no beacons', () => {
+    const { rt, guestId } = running();
+    rt.setGuestBeacon(guestId, 902); // kin: a first fix
+    assert.equal(rt.setGuestBeacon(guestId, 909).heldMs, 3000, 'kin → saas, by the hallway: sameStageMs, the longer');
+    wait(rt, guestId, 3100);
+    assert.equal(roomOf(rt, guestId), 'saas');
   });
 
   it('out of contact, they are judged from the last room they were in', () => {
@@ -271,11 +303,37 @@ describe('the way through the building (rooms.*.stage)', () => {
     assert.equal(roomOf(rt, guestId), 'museumHallway', 'three seconds at it from the Cyclorama: in');
   });
 
-  it('an operator can send them back, and the way on starts again from there', () => {
+  it('an operator can send them back, and their phone is believed again from its next reading', () => {
     const { rt, guestId } = inMaskRoom();
     assert.equal(rt.sendGuestToRoom(guestId, 'entranceHallway'), true);
-    assert.equal(rt.furthestStage.get(guestId), 2);
-    assert.equal(rt.judgeMove(guestId, 'maskRoom').refused, undefined);
+    wait(rt, guestId, 3000); // out of one room, into the other, on the placement's own holds
+    assert.equal(roomOf(rt, guestId), 'entranceHallway', 'placed');
+    assert.deepEqual(rt.setGuestBeacon(guestId, 907), { ok: true, roomId: 'maskRoom' }, 'the next reading lands at once');
+    assert.equal(rt.setGuestBeacon(guestId, 906).reason, 'behind', 'and the way through runs from there');
+  });
+
+  it('a placement ahead of the phone cannot strand them (on site: stuck in the Control Room)', () => {
+    const { rt, guestId } = inMaskRoom();
+    rt.sendGuestToRoom(guestId, 'controlRoom');
+    wait(rt, guestId, 3000);
+    assert.equal(roomOf(rt, guestId), 'controlRoom');
+    assert.equal(rt.furthestStage.get(guestId), undefined, 'a room reached by hand is not reached');
+    // The phone was never there: its reading is back in the Mask Room, then on.
+    assert.deepEqual(rt.setGuestBeacon(guestId, 907), { ok: true, roomId: 'maskRoom' });
+    assert.equal(rt.setGuestBeacon(guestId, 904).heldMs, 3000, 'judged from the mask room again');
+  });
+
+  it('the panel can see why a guest is stuck', () => {
+    const { rt, guestId } = inMaskRoom();
+    rt.setGuestBeacon(guestId, 906);
+    assert.deepEqual(rt.wayThrough(guestId), {
+      furthestStage: 3, lastRoom: 'maskRoom', trustNextReading: false,
+      ignoring: { roomId: 'entranceHallway', reason: 'behind', at: rt.now() },
+    });
+    rt.sendGuestToRoom(guestId, 'hallOfHeroes');
+    assert.equal(rt.wayThrough(guestId).trustNextReading, true);
+    assert.equal(rt.wayThrough(guestId).ignoring, null);
+    assert.ok(rt.getGuestsRoster().find((g) => g.guestId === guestId).way, 'and it is on the roster');
   });
 
   it('a stage is a whole number from 1', () => {
@@ -286,5 +344,8 @@ describe('the way through the building (rooms.*.stage)', () => {
     const partial = show();
     delete partial.rooms.kin.stage;
     assert.match(rt.load(partial).warnings.join('\n'), /rooms\.kin has no stage/);
+    const badSkip = show();
+    badSkip.location = { ...badSkip.location, skipAhead: 'no' };
+    assert.match(rt.load(badSkip).errors.join('\n'), /location\.skipAhead must be true or false/);
   });
 });

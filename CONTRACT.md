@@ -41,8 +41,11 @@ Decided on site at MAD, in one day; each is written into its section.
   room they have left plays to them again, and a reading more than one room
   away is ignored rather than held. Stepping into a new stage holds
   `location.nextStageMs` (3000); one room skipped, for a dead spot, holds
-  `location.skipAheadMs` (5000). An operator's placement starts the way on
-  again from where they put the guest.
+  `location.skipAheadMs` (5000), or is ignored with `location.skipAhead:
+  false` — as MAD-DIM has it, since its beacons misread more often than they
+  go dead. An operator's placement puts the guest in a room now, and their
+  phone's next reading is believed wherever it is — rooms reached by hand do
+  not count as reached, so a wrong placement cannot strand anyone.
 - **Up and down are the guest's (§8.1, Input).** The phone hangs upside
   down on a lanyard; `guest.input.mirrorY` flips touches top-to-bottom as they
   arrive, so swipes, drags and releases report the guest's up and down.
@@ -50,6 +53,10 @@ Decided on site at MAD, in one day; each is written into its section.
   the show's assets, not all of `public/assets`, and the page decodes each
   clip when a cue first asks for it, within a memory budget — not all at load,
   which crashed the page on the venue's phones.
+- **No museum limit; Kin or Faerie (§8.1, museum clips).** A guest may
+  enter every museum room; `museum.chooseOne` lets them have Kin or Faerie,
+  not both. Going back into a room runs it again to use, without replaying
+  its clips.
 - **Placeholder sounds are gone from MAD-DIM.** No room plays `whisper.wav` or
   `ambient.wav`, and the museum stems are blank until new clips are cut.
 
@@ -469,10 +476,11 @@ connections, and against the furthest `stage` they have reached:
 |---|---|
 | at an earlier stage than the furthest reached | ignored (`behind`) — no room they have left plays to them again |
 | more than one room away | ignored (`too far`) |
-| the same room, or next door within the stages reached | moves them at once |
+| the same room | nothing to do |
+| next door within the stages reached | waits `location.sameStageMs` (0, at once; MAD-DIM 3000 — a reading through a wall that the phone takes back never lands) |
 | next door, into a new stage | waits `location.nextStageMs` (3000) |
-| one room skipped (a dead spot), into a new stage | waits `location.skipAheadMs` (5000) |
-| one room skipped, within the stages reached | waits `location.jumpTwoStepsMs` (1500) |
+| one room skipped (a dead spot), into a new stage | waits `location.skipAheadMs` (5000); ignored (`too far`) with `location.skipAhead: false` |
+| one room skipped, within the stages reached | waits `location.jumpTwoStepsMs` (1500), or `sameStageMs` if longer |
 
 Any other report in the meantime cancels a wait, so a flicker the phone takes
 back never lands — which matters, because a stage once reached cannot be left
@@ -484,8 +492,12 @@ it, and only a room's own beacons may skip a room. The dwell counts from when
 the door became a way in, so reaching the room before it does not let a door
 already heard pull the guest straight through. A guest
 with no room yet moves at once, wherever they are; a new visit (the phone
-handed on, or reset) starts again. An operator placing a guest is
-authoritative: the furthest stage becomes that room's, so they can be sent back.
+handed on, or reset) starts again. An operator placing a guest puts them in
+that room at once, but does not say how far through the building they have
+come: the way through starts again from the phone's next reading, wherever it
+is, as for a first fix (2026-09-26). A placement ahead of where the phone
+really is had left a guest's true readings all "behind" — stuck in the
+Control Room, deaf to the museum around them.
 
 **Unlikely jumps (rooms without a `stage`).** A show with no stages, or a room
 left out of them, keeps the older rule: the same room or next door moves them at
@@ -830,7 +842,9 @@ a slot replaces what was there. Voices: `room` (the room's own clips),
 }
 ```
 
-- **bg** is the room's background: a file name, or `{ "audio", "gain" }`. A
+- **bg** is the room's background: a file name, or `{ "audio", "gain",
+  "crossfadeMs" }` — `crossfadeMs` fades this one in and out over its own
+  length rather than `audioLayers.crossfadeMs` (MAD-DIM's museum rooms: 3000). A
   guest state may name its own — a sequence step's `bg`, or `bg` on any guest
   cue — which wins over the room's while the guest is in that state; the
   calibration steps each change it under their clip. Moving on to the same bg
@@ -923,6 +937,19 @@ in_room bed, return and disabled clip for every museum room, and an
 runs, with no timer, until the last guest it is running for walks out — and
 nothing its own software sends can end it (2026-09-25). A room may have its own take on any of
 the per-room stems; whatever it does not declare falls back to the shared one.
+
+**Which rooms run for a guest** (2026-09-26):
+
+- Any museum room runs the first time they walk in: entrance, then in_room.
+  `limit` still caps how many rooms a guest gets if a show sets it; MAD-DIM
+  does not.
+- `chooseOne` groups rooms a guest gets only one of — MAD-DIM:
+  `[["kin", "faerie"]]`. The first of a group they enter is theirs; the rest of
+  the group will not run for them (`inRoomDisabled` once, `returnDisabled`
+  after), as a room past the `limit` would not. A room they could not enter
+  because it was full is not a choice.
+- A return runs the room again, so they can use it, but not its entrance or
+  in_room: they hear `returnVisited` instead.
 
 ```jsonc
 "museum": {

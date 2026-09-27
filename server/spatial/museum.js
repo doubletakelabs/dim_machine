@@ -6,17 +6,21 @@
  * that will diverge again; this is the current design, wired to the runtime.
  *
  * The rules, as the team settled them (2026-09-08 … 2026-09-11; complete
- * removed 2026-09-25):
+ * removed 2026-09-25; no limit, a choice of one, and returns that run
+ * 2026-09-26):
  *
- * - Guests choose. The first `limit` museum rooms a guest enters are theirs:
- *   entering activates the room and the journey runs — entrance, then
- *   in_room the moment the entrance clip ends, for as long as they stay. The
- *   slot burns as the entrance begins. There is no completion: a room runs
- *   until every guest it is running for has walked out.
- * - A room entered after the slots are spent cannot activate: in_room_disabled
- *   once, return_disabled every entry after.
- * - Returning to any room they have been in is a dead room with the
- *   return_visited clip. Every return; no resume.
+ * - Guests go where they like. Entering a museum room activates it and the
+ *   journey runs — entrance, then in_room the moment the entrance clip ends,
+ *   for as long as they stay. There is no completion: a room runs until every
+ *   guest it is running for has walked out. A show may still cap how many
+ *   rooms a guest gets (`limit`); MAD-DIM does not.
+ * - `chooseOne` groups rooms a guest gets only one of (MAD-DIM: Kin or
+ *   Faerie). The first of a group they enter is theirs; from then on the rest
+ *   of the group — and any room past a `limit` — cannot activate for them:
+ *   in_room_disabled once, return_disabled every entry after.
+ * - Returning to a room they have had runs it again, so they can use it, but
+ *   without its entrance or in_room: they have heard those. The
+ *   return_visited clip plays instead.
  * - A full room (maxOccupants) refuses by capacity: silence, nothing burned,
  *   nothing remembered. Walking away from it can never count against anyone.
  * - A below-capacity room that is already running activates *for the joiner*
@@ -66,7 +70,13 @@ export class MuseumLayer {
     this.config = config;
     this.io = io;
     this.rooms = new Set(config.rooms ?? []);
-    this.limit = config.limit ?? 4;
+    /** How many rooms a guest gets; no `limit`, no cap. */
+    this.limit = config.limit ?? Infinity;
+    /** roomId → the other rooms of its `chooseOne` group. */
+    this.rivals = new Map();
+    for (const group of config.chooseOne ?? []) {
+      for (const roomId of group) this.rivals.set(roomId, group.filter((r) => r !== roomId));
+    }
     /** guestId → { seen, memory: Map, engagedRoom, engagedAt, visitKind, voice } */
     this.guests = new Map();
     /** roomId → Set<guestId> currently engaged (their room, running for them) */
@@ -80,6 +90,7 @@ export class MuseumLayer {
         memory: new Map(),   // roomId → 'visited' | 'disabled'
         engagedRoom: null,
         engagedAt: 0,
+        replay: false,       // engaged on a return: the room runs, its clips do not
         visitKind: null,     // what this entry was, consumed on exit
         voice: null,         // the current spoken line: { stem, assetId, startAt }
       });
@@ -102,7 +113,15 @@ export class MuseumLayer {
   wouldEngage(guestId, roomId) {
     if (!this.rooms.has(roomId)) return true; // not ours to gate
     const g = this.guest(guestId);
-    return !g.memory.has(roomId) && g.seen < this.limit;
+    const mem = g.memory.get(roomId);
+    if (mem === 'visited') return true; // a return runs the room again
+    if (mem === 'disabled') return false;
+    return g.seen < this.limit && !this.barred(g, roomId);
+  }
+
+  /** Another room of its `chooseOne` group is already theirs. */
+  barred(g, roomId) {
+    return (this.rivals.get(roomId) ?? []).some((r) => g.memory.get(r) === 'visited');
   }
 
   /** The one spatial trigger: a committed entry or exit. */
@@ -119,10 +138,19 @@ export class MuseumLayer {
     const mem = g.memory.get(roomId);
     const now = this.io.now();
 
-    // Been here before — the room is dead to them, but it remembers.
+    // Been here before: the room runs again for them to use, but without its
+    // entrance or in_room — they have heard those.
     if (mem === 'visited') {
-      g.visitKind = 'return';
-      return this.say(g, 'returnVisited', now, roomId);
+      const info = this.io.roomInfo(roomId);
+      if (info.max != null && info.count > info.max) {
+        g.visitKind = 'full';
+        return;
+      }
+      this.engage(g, guestId, roomId, now, true);
+      this.say(g, 'returnVisited', now, roomId);
+      if (!info.active) this.io.activate(guestId, roomId);
+      this.io.log?.(`museum: ${guestId} back in ${roomId}`);
+      return;
     }
     if (mem === 'disabled') {
       g.visitKind = 'return';
@@ -138,27 +166,35 @@ export class MuseumLayer {
       return;
     }
 
-    // Out of slots: the room will not run for them, and says so — once.
-    if (g.seen >= this.limit) {
+    // Out of slots, or the other of a choose-one pair already theirs: the room
+    // will not run for them, and says so — once.
+    if (g.seen >= this.limit || this.barred(g, roomId)) {
       g.memory.set(roomId, 'disabled');
       g.visitKind = 'return';
       return this.say(g, 'inRoomDisabled', now, roomId);
     }
 
-    // One of their four. The slot burns here — an entrance has begun.
+    // Theirs. The slot burns here — an entrance has begun — and a choose-one
+    // pair is decided.
     g.seen += 1;
     g.memory.set(roomId, 'visited');
-    g.engagedRoom = roomId;
-    g.engagedAt = now;
-    g.visitKind = 'engaged';
-    if (!this.engaged.has(roomId)) this.engaged.set(roomId, new Set());
-    this.engaged.get(roomId).add(guestId);
+    this.engage(g, guestId, roomId, now, false);
     this.say(g, 'entrance', now, roomId);
     // First one in wakes the room; a joiner finds it already running and the
     // room activates *for them* all the same — their own entrance, their own
     // in_room.
     if (!info.active) this.io.activate(guestId, roomId);
-    this.io.log?.(`museum: ${guestId} engaged ${roomId} (${g.seen}/${this.limit})`);
+    this.io.log?.(`museum: ${guestId} engaged ${roomId} (${g.seen}${Number.isFinite(this.limit) ? `/${this.limit}` : ''})`);
+  }
+
+  /** The room is running for them from now until they walk out. */
+  engage(g, guestId, roomId, now, replay) {
+    g.engagedRoom = roomId;
+    g.engagedAt = now;
+    g.replay = replay;
+    g.visitKind = replay ? 'return' : 'engaged';
+    if (!this.engaged.has(roomId)) this.engaged.set(roomId, new Set());
+    this.engaged.get(roomId).add(guestId);
   }
 
   handleExit(guestId, roomId) {
@@ -175,6 +211,7 @@ export class MuseumLayer {
   disengage(guestId, roomId) {
     const g = this.guest(guestId);
     g.engagedRoom = null;
+    g.replay = false;
     const set = this.engaged.get(roomId);
     set?.delete(guestId);
     if (set && set.size === 0 && this.io.roomInfo(roomId).active) {
@@ -226,7 +263,7 @@ export class MuseumLayer {
         key: `museum:${g.voice.stem}:${g.voice.startAt}`,
       };
     }
-    if (g.engagedRoom && g.engagedRoom === roomIdHere && this.io.roomInfo(roomIdHere).active) {
+    if (g.engagedRoom && g.engagedRoom === roomIdHere && !g.replay && this.io.roomInfo(roomIdHere).active) {
       // The bed starts exactly when the entrance clip ends — the server knows
       // the clip's length, so the phone just schedules it.
       const entrance = this.stemAsset('entrance', g, roomIdHere);
@@ -247,10 +284,11 @@ export class MuseumLayer {
   /** For the roster and the inspector. */
   snapshot(guestId) {
     const g = this.guests.get(guestId);
-    if (!g) return { seen: 0, limit: this.limit, rooms: {} };
+    const limit = Number.isFinite(this.limit) ? this.limit : null;
+    if (!g) return { seen: 0, limit, rooms: {} };
     return {
       seen: g.seen,
-      limit: this.limit,
+      limit,
       engagedRoom: g.engagedRoom,
       rooms: Object.fromEntries(g.memory),
     };
@@ -272,6 +310,26 @@ export function checkMuseum(museum, rooms, errors, warnings) {
   } else {
     for (const roomId of museum.rooms) {
       if (!rooms?.[roomId]) errors.push(`museum.rooms names "${roomId}", which the show does not have`);
+    }
+  }
+  if (museum.chooseOne != null) {
+    const museumRooms = new Set(Array.isArray(museum.rooms) ? museum.rooms : []);
+    const seen = new Set();
+    if (!Array.isArray(museum.chooseOne)) {
+      errors.push('museum.chooseOne must be an array of room groups, e.g. [["kin", "faerie"]]');
+    } else {
+      museum.chooseOne.forEach((group, i) => {
+        const at = `museum.chooseOne[${i}]`;
+        if (!Array.isArray(group) || group.length < 2) {
+          errors.push(`${at} must list at least two rooms`);
+          return;
+        }
+        for (const roomId of group) {
+          if (!museumRooms.has(roomId)) errors.push(`${at}: "${roomId}" is not one of museum.rooms`);
+          if (seen.has(roomId)) errors.push(`${at}: "${roomId}" is in more than one group`);
+          seen.add(roomId);
+        }
+      });
     }
   }
   if (museum.hallway != null && !rooms?.[museum.hallway]) {

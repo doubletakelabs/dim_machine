@@ -665,6 +665,10 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "bg": {
+        "audio": "audio/bg/0105_CALIBRATION4.mp3",
+        "crossfadeMs": 3000
       }
     },
     "saas": {
@@ -726,6 +730,10 @@
       },
       "thresholds": {
         "saas-door": {}
+      },
+      "bg": {
+        "audio": "audio/bg/0104_CALIBRATION3.mp3",
+        "crossfadeMs": 3000
       }
     },
     "influence": {
@@ -806,6 +814,10 @@
       },
       "thresholds": {
         "influence-door": {}
+      },
+      "bg": {
+        "audio": "audio/bg/0103_CALIBRATION2.mp3",
+        "crossfadeMs": 3000
       }
     },
     "slop": {
@@ -893,6 +905,10 @@
           "swipe"
         ],
         "maxDrivers": 1
+      },
+      "bg": {
+        "audio": "audio/bg/0102_CALIBRATION1.mp3",
+        "crossfadeMs": 3000
       }
     },
     "kin": {
@@ -951,6 +967,10 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "bg": {
+        "audio": "audio/bg/0105_CALIBRATION4.mp3",
+        "crossfadeMs": 3000
       }
     },
     "faerie": {
@@ -1024,6 +1044,10 @@
       },
       "thresholds": {
         "faerie-door": {}
+      },
+      "bg": {
+        "audio": "audio/bg/0103_CALIBRATION2.mp3",
+        "crossfadeMs": 3000
       }
     },
     "superintelligence": {
@@ -1078,6 +1102,10 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
+      },
+      "bg": {
+        "audio": "audio/bg/0102_CALIBRATION1.mp3",
+        "crossfadeMs": 3000
       }
     },
     "consumption1": {
@@ -1139,6 +1167,10 @@
       },
       "thresholds": {
         "consumption1-door": {}
+      },
+      "bg": {
+        "audio": "audio/bg/0102_CALIBRATION1.mp3",
+        "crossfadeMs": 3000
       }
     },
     "consumption2": {
@@ -1211,6 +1243,10 @@
           "hold"
         ],
         "maxDrivers": 4
+      },
+      "bg": {
+        "audio": "audio/bg/0104_CALIBRATION3.mp3",
+        "crossfadeMs": 3000
       }
     },
     "consumption3": {
@@ -1276,6 +1312,10 @@
       },
       "thresholds": {
         "consumption3-door": {}
+      },
+      "bg": {
+        "audio": "audio/bg/0103_CALIBRATION2.mp3",
+        "crossfadeMs": 3000
       }
     },
     "southCorridor": {
@@ -1871,7 +1911,8 @@
     "contactLossMs": 5000,
     "doorDwellMs": 3000,
     "nextStageMs": 3000,
-    "skipAheadMs": 5000
+    "sameStageMs": 3000,
+    "skipAhead": false
   },
   "inputBindings": {
     "tap": "TAP",
@@ -1879,7 +1920,6 @@
     "drag": "DRAG"
   },
   "museum": {
-    "limit": 4,
     "hallway": "museumHallway",
     "rooms": [
       "automation",
@@ -1892,6 +1932,12 @@
       "consumption1",
       "consumption2",
       "consumption3"
+    ],
+    "chooseOne": [
+      [
+        "kin",
+        "faerie"
+      ]
     ],
     "stems": {},
     "roomStems": {
