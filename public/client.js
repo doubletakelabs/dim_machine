@@ -181,13 +181,78 @@ window.DIM.mixerState = () => ({
 });
 
 function busFor(slot) {
-  if (!LAYER_SLOTS.has(slot) || !ctx) return ctx?.destination ?? null;
+  if (!ctx) return null;
+  if (!LAYER_SLOTS.has(slot)) return masterOut();
   if (!layerBus) {
     layerBus = ctx.createGain();
-    layerBus.connect(ctx.destination);
+    layerBus.connect(masterOut());
   }
   return layerBus;
 }
+
+// ---------------------------------------------------------------------------
+// Volume — the button in the bottom-right corner
+//
+// In the app the slider is the phone's own media volume, through the bridge:
+// the only way a guest can turn it *up*. In a browser, or an app without the
+// bridge call, it is a master gain every sound goes through, which can only
+// turn it down. Hides itself a few seconds after the last touch.
+// ---------------------------------------------------------------------------
+const VOLUME_HIDE_MS = 4000;
+let master = null;             // GainNode between everything and the speakers
+let pageVolume = 1;            // the master gain's level, 0..1, without the app
+
+const nativeVolume = typeof nativeApp?.getVolume === 'function';
+
+function masterOut() {
+  if (!master) {
+    master = ctx.createGain();
+    master.gain.value = pageVolume;
+    master.connect(ctx.destination);
+  }
+  return master;
+}
+
+function readVolume() {
+  if (nativeVolume) {
+    try { return Number(nativeApp.getVolume()); } catch { /* fall through */ }
+  }
+  return pageVolume;
+}
+
+function setVolume(level) {
+  const v = Math.min(1, Math.max(0, level));
+  if (nativeVolume) {
+    try { nativeApp.setVolume(v); return; } catch (e) { console.warn('native volume', e); }
+  }
+  pageVolume = v;
+  if (master && ctx) master.gain.setTargetAtTime(v, ctx.currentTime, 0.03);
+  const video = document.querySelector('#videoOverlay video');
+  if (video) video.volume = v;
+}
+
+function enableVolume() {
+  const box = $('volume');
+  const slider = $('volumeSlider');
+  let hideTimer = null;
+  const hideLater = () => {
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => box.classList.remove('open'), VOLUME_HIDE_MS);
+  };
+  $('volumeBtn').addEventListener('click', () => {
+    if (box.classList.toggle('open')) {
+      slider.value = String(Math.round(readVolume() * 100));
+      hideLater();
+    } else {
+      clearTimeout(hideTimer);
+    }
+  });
+  // While a finger is on it, it stays; the clock restarts from the last move.
+  slider.addEventListener('input', () => { setVolume(Number(slider.value) / 100); hideLater(); });
+  slider.addEventListener('pointerdown', () => clearTimeout(hideTimer));
+  slider.addEventListener('pointerup', hideLater);
+}
+enableVolume();
 
 /** Bring the layer bus in line with who is speaking. Safe to call anytime. */
 function applyDuck() {
@@ -678,7 +743,7 @@ function enableGestures() {
   // through the stage — which made the listener deaf at exactly the moment a
   // tap matters. Anything that fills the screen from now on has the same shape,
   // so the listener belongs above all of them.
-  const control = (e) => e.target?.closest?.('button, a, input, select, textarea');
+  const control = (e) => e.target?.closest?.('button, a, input, select, textarea, #volume');
 
   document.addEventListener('touchstart', (e) => {
     if (control(e)) return;

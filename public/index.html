@@ -82,6 +82,30 @@
          static element does nothing, which is why this needs `position`. */
       position: relative; z-index: 10; background: rgba(11, 11, 16, 0.88);
     }
+    /*
+      Volume: a button in the stage's bottom-right, and a slider that opens to
+      its left and hides itself. Inside #stage, which makes no stacking context,
+      so z-index 12 sits over the image and video overlays (7, 8), under flash.
+      Horizontal on purpose: on a lanyard up and down are flipped, left and
+      right are not.
+    */
+    #volume {
+      position: absolute; right: 16px; bottom: 16px; z-index: 12;
+      display: flex; align-items: center; gap: 10px; flex-direction: row-reverse;
+    }
+    #volumeBtn {
+      width: 52px; height: 52px; border-radius: 50%; border: 1px solid #34345a;
+      background: rgba(28, 28, 48, 0.85); color: #e8e8f0;
+      display: flex; align-items: center; justify-content: center; padding: 0;
+    }
+    #volumeBtn svg { width: 26px; height: 26px; }
+    #volumeBtn:active { background: #6c5ce7; }
+    #volumePanel {
+      display: none; align-items: center; height: 52px; padding: 0 18px;
+      border-radius: 26px; border: 1px solid #34345a; background: rgba(28, 28, 48, 0.92);
+    }
+    #volume.open #volumePanel { display: flex; }
+    #volumeSlider { width: min(56vw, 240px); height: 40px; accent-color: #6c5ce7; }
     .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #e74c3c; margin-right: 4px; }
     .dot.ok { background: #2ecc71; }
   </style>
@@ -101,6 +125,14 @@
       <div class="page-title">DIM MACHINE</div>
       <button id="join">Join Show</button>
       <div id="loading" class="page-hint" style="display:none">loading assets…</div>
+    </div>
+    <div id="volume">
+      <button id="volumeBtn" aria-label="Volume">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>
+        </svg>
+      </button>
+      <div id="volumePanel"><input id="volumeSlider" type="range" min="0" max="100" step="1" aria-label="Volume"></div>
     </div>
   </div>
   <div id="status">
