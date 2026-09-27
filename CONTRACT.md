@@ -966,7 +966,10 @@ per room. Validated: the room must be one of `museum.rooms`, and each key a
 per-room stem naming an asset.
 
 The zone editor (`/zones.html`) edits these, a room's doors (§4.2c) and its
-beacons (§4.2d) in its side panel, picking clips from
+beacons (§4.2d) in its side panel — beacons and doors take effect in the
+running show the moment they are saved, and every connected phone is sent the
+new list (`assets`), so a threshold tuned on site needs no reload and sends
+no guest back to the start (2026-09-26); the rest waits for the next load — picking clips from
 `GET /api/assets/audio` — every sound under `public/assets`. Its save
 (`POST /api/shows/:file/zones`) writes only zones, and the thresholds and room
 clips of the rooms it names; everything else is merged from the file on disk.

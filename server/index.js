@@ -259,10 +259,20 @@ app.post('/api/shows/:file/zones', (req, res) => {
   if (result.errors.length) return res.status(400).json(result);
   try {
     writeFileSync(showPath(file), `${JSON.stringify(def, null, 2)}\n`);
-    res.json({ ok: true, warnings: result.warnings });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
+  // Beacons and doors take effect at once in the show that is running, and
+  // reach every connected phone: a threshold tuned on site must not wait for
+  // a reload that sends every guest back to the start (2026-09-26). The rest
+  // of an edit — geometry, clips — still applies on the next load.
+  let live = false;
+  if (file === loadedShowFile && runtime.def && (hasBeacons || Object.keys(thresholds).length)) {
+    const doors = Object.fromEntries(Object.keys(thresholds).map((roomId) => [roomId, def.rooms[roomId]?.thresholds ?? null]));
+    live = runtime.applyLocationEdits(hasBeacons ? (def.beacons ?? null) : undefined, doors);
+    if (live) sendAssetsToPhones();
+  }
+  res.json({ ok: true, warnings: result.warnings, live });
 });
 
 /** Virtual walkthrough — set guest floor-plan position (Phase A1). */
@@ -471,6 +481,12 @@ function loadShow(file) {
   assetProblems = missingAssets();
   for (const asset of assetProblems) opLog(`✗ missing asset: ${asset}`);
   for (const loop of badLoops(def)) opLog(`⚠ ${loop} — that is a tick, not a texture`);
+  sendAssetsToPhones();
+  sendRoster();
+}
+
+/** What every connected phone holds from the show: assets, mixer, input, beacons. */
+function sendAssetsToPhones() {
   broadcast({
     type: 'assets',
     assets: currentAssets(),
@@ -478,7 +494,6 @@ function loadShow(file) {
     input: runtime.def?.guest?.input ?? null,
     beacons: runtime.def?.beacons ?? null,
   }, 'phones');
-  sendRoster();
 }
 
 function send(ws, obj) {

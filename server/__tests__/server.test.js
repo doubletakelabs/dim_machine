@@ -526,6 +526,35 @@ describe('the Android app locating a phone', () => {
     op.close();
   });
 
+  it('a beacon saved in the zone editor reaches the running show and every phone at once', async () => {
+    const op = await openOperator(server);
+    await runShow(op);
+    const phone = await openPhone(server);
+    const save = (beacons) => fetch(`${server.url}/api/shows/MAD-DIM.json/zones`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ zones: {}, beacons }),
+    });
+    const original = phone.welcome.beacons;
+    const tuned = { ...original, 801: { ...original['801'], rssi: -58 }, 802: { at: [3, 3], room: 'library', rssi: -70 } };
+    const res = await save(tuned);
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).live, true, 'applied to the show that is running');
+    const pushed = await phone.waitFor((m) => m.type === 'assets' && m.beacons?.['802'], {
+      describe: 'the new list pushed to the phone, no reload, no reset',
+    });
+    assert.equal(pushed.beacons['801'].rssi, -58, 'the tuned threshold');
+
+    phone.send({ type: 'location', major: 802 });
+    await phone.waitFor((m) => m.type === 'state' && /^library · /.test(m.state), {
+      describe: 'the new beacon placing the phone straight away',
+    });
+
+    assert.equal((await save(original)).status, 200); // as it was, for the tests after
+    phone.close();
+    op.close();
+  });
+
   it('serves the content manifest a handset syncs on charge', async () => {
     const op = await openOperator(server);
     await runShow(op);

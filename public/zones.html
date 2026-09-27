@@ -1036,7 +1036,10 @@ async function save() {
   beaconsTouched = false;
   $('dirtyPill').style.display = 'none';
   const warned = (result.warnings ?? []).filter((w) => /overlap/.test(w));
-  setStatus(warned.length ? `saved, with warnings: ${warned.join(' · ')}` : 'saved');
+  // Beacons and doors apply to the running show at once and reach every
+  // phone; the rest of an edit waits for the next load.
+  const saved = result.live ? 'saved — beacons and doors live on every phone' : 'saved';
+  setStatus(warned.length ? `${saved}, with warnings: ${warned.join(' · ')}` : saved);
   render();
   return true;
 }

@@ -845,6 +845,32 @@ export class SpatialRuntime {
     return this.setGuestThreshold(guestIdOrToken, beacon.door);
   }
 
+  /**
+   * Beacon and door edits from the zone editor, applied to the running show
+   * (the server then sends phones the new list). `beacons` undefined leaves
+   * them as they are; `doors` is roomId → that room's thresholds, or null.
+   * Where guests are is untouched: a door they stand at that no longer
+   * exists simply stops being one on their next reading.
+   */
+  applyLocationEdits(beacons, doors = {}) {
+    if (!this.def) return false;
+    if (beacons !== undefined) {
+      if (beacons) this.def.beacons = beacons;
+      else delete this.def.beacons;
+    }
+    for (const [roomId, thresholds] of Object.entries(doors)) {
+      const room = this.def.rooms?.[roomId];
+      if (!room) continue;
+      if (thresholds && Object.keys(thresholds).length) room.thresholds = thresholds;
+      else delete room.thresholds;
+    }
+    this._warnedBeacons?.clear();
+    this.append({ type: 'show.locationEdited' });
+    this.io.log?.('beacons and doors updated from the zone editor — live');
+    this.notifyChange();
+    return true;
+  }
+
   /** Once per major: a beacon the show cannot place is an install fault to fix. */
   warnUnplacedBeacon(major, beacon) {
     this._warnedBeacons ??= new Set();
