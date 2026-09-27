@@ -402,6 +402,38 @@ describe('a room piece moving its room on (event)', () => {
     assert.equal(rt.rooms.get('influence').state, 'active.main');
   });
 
+  it('a state can change the room\'s background — together, in a room on one timeline', () => {
+    // 2026-09-27: Slop's track player. The track a guest picks becomes the
+    // room's background on every phone inside, in step; stopping it goes back.
+    const { rt, server } = makeRuntime({
+      mutate: (show) => {
+        phases(show);
+        show.rooms.influence.audio = { timing: 'together' };
+        show.rooms.influence.bg = 'audio/test/influence-bg.mp3';
+        show.rooms.influence.machine.states.active.on.TRACK_STOP = '.main';
+        show.rooms.influence.cues['active.phase2'].bg = { audio: 'audio/test/track.mp3', crossfadeMs: 3000 };
+      },
+    });
+    const first = driverIn(rt);
+    assert.equal(rt.desiredCues(first.guestId).get('bg')?.assetId, 'audio/test/influence-bg.mp3');
+
+    rt.testAdvanceTime(4000);
+    server.latest().reply({ t: 'event', name: 'PHASE_2' });
+    const began = rt.now();
+    const bg = rt.desiredCues(first.guestId).get('bg');
+    assert.equal(bg.assetId, 'audio/test/track.mp3');
+    assert.equal(bg.startAt, began, 'from the state\'s own moment');
+    assert.equal(bg.fadeMs, 3000);
+
+    rt.testAdvanceTime(5000);
+    const late = driverIn(rt);
+    assert.equal(rt.desiredCues(late.guestId).get('bg')?.startAt, began, 'a late arrival joins it partway through');
+    assert.equal(rt.desiredCues(first.guestId).get('bg')?.startAt, began, 'and it runs on unbroken');
+
+    server.latest().reply({ t: 'event', name: 'TRACK_STOP' });
+    assert.equal(rt.desiredCues(first.guestId).get('bg')?.assetId, 'audio/test/influence-bg.mp3', 'back to the room\'s own');
+  });
+
   it('an idle room is not started by its piece', () => {
     const { rt, server } = makeRuntime({ mutate: phases });
     server.latest().reply({ t: 'event', name: 'PHASE_2' });

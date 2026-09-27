@@ -786,19 +786,17 @@
             }
           },
           "active": {
-            "initial": "background1",
+            "initial": "base",
             "on": {
               "RELEASE": "idle",
-              "BACKGROUND_1": ".background1",
-              "BACKGROUND_2": ".background2",
-              "BACKGROUND_3": ".background3",
-              "BACKGROUND_4": ".background4"
+              "TRACK_1": ".track1",
+              "TRACK_2": ".track2",
+              "TRACK_STOP": ".base"
             },
             "states": {
-              "background1": {},
-              "background2": {},
-              "background3": {},
-              "background4": {}
+              "base": {},
+              "track1": {},
+              "track2": {}
             }
           }
         }
@@ -836,6 +834,20 @@
       "bg": {
         "audio": "audio/bg/0102_CALIBRATION1.mp3",
         "crossfadeMs": 3000
+      },
+      "cues": {
+        "active.track1": {
+          "bg": {
+            "audio": "audio/bg/slop/Captcha Funeral.mp3",
+            "crossfadeMs": 3000
+          }
+        },
+        "active.track2": {
+          "bg": {
+            "audio": "audio/bg/slop/Content Farm.mp3",
+            "crossfadeMs": 3000
+          }
+        }
       }
     },
     "kin": {

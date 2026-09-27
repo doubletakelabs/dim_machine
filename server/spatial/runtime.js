@@ -4,7 +4,7 @@ import { OccupancyCoordinator } from './coordinator.js';
 import { VirtualLocationAdapter } from './virtual-location.js';
 import { RoomActor } from './room-actor.js';
 import {
-  CueDirector, roomCueFor, guestCueFor, guestBgFor, audioPart, screenPart,
+  CueDirector, roomCueFor, roomBgFor, guestCueFor, guestBgFor, audioPart, screenPart,
 } from './cue-director.js';
 import { Guest } from './guest.js';
 import { GuestActor } from './guest-actor.js';
@@ -1263,6 +1263,8 @@ export class SpatialRuntime {
 
     /** slot → the resolved declaration behind it, before it is split. */
     const resolved = { room: null, guidance: null, adherence: null };
+    /** The room state's own bg, and — in a room on one timeline — when it began. */
+    let roomBg = null;
 
     const here = actor.currentRoom();
     if (here) {
@@ -1281,6 +1283,10 @@ export class SpatialRuntime {
           ? room.stateSince
           : Math.max(arrived ?? room.stateSince, room.stateSince);
         resolved.room = roomCueFor(def, room.state, here.standing, startAt);
+        const stateBg = roomBgFor(def, room.state);
+        if (stateBg != null) {
+          roomBg = { bg: stateBg, since: audioTiming(def) === 'together' ? room.stateSince : null };
+        }
       }
     }
     const regions = actor.regions();
@@ -1300,7 +1306,7 @@ export class SpatialRuntime {
       if (museum.guidance) desired.set('guidance', audioPart(museum.guidance));
     }
 
-    const layers = this.layersFor(guestId, here?.roomId ?? null, guestBgFor(this.def, regions));
+    const layers = this.layersFor(guestId, here?.roomId ?? null, guestBgFor(this.def, regions), roomBg);
     desired.set('bg', layers.bg);
     desired.set('bed', layers.bed);
 
@@ -1322,7 +1328,9 @@ export class SpatialRuntime {
    * The two layers under the voices, for a guest standing in `roomId`.
    *
    * bg is the guest's own state's if it names one (a calibration step), else
-   * the room's (`rooms.<id>.bg`). Moving on to the same one carries it on
+   * the room state's (`rooms.<id>.cues[state].bg`, `roomBg`), else the room's
+   * (`rooms.<id>.bg`). A room state's bg in a room on one timeline starts at
+   * the state's own moment, so everyone inside hears it together. Moving on to the same one carries it on
    * unbroken; a room with none fades it out. Standing in no room at all —
    * between zones, or a phone out of contact — keeps whatever was playing,
    * because that is a gap in the sensing and not a place.
@@ -1330,13 +1338,17 @@ export class SpatialRuntime {
    * The bed (`guest.bed`) begins the first time they stand in its `from` room
    * and runs under everything after.
    */
-  layersFor(guestId, roomId, stateBg) {
+  layersFor(guestId, roomId, stateBg, roomBg = null) {
     const was = this.layerSince.get(guestId) ?? { bg: null, bed: null };
     const now = this.now();
     let { bg } = was;
     if (stateBg != null || roomId != null) {
-      const want = layerDeclaration(stateBg ?? this.def.rooms?.[roomId]?.bg);
-      bg = !want ? null : want.audio === bg?.audio ? bg : { ...want, since: now };
+      const fromRoomState = stateBg == null && roomBg != null;
+      const want = layerDeclaration(stateBg ?? roomBg?.bg ?? this.def.rooms?.[roomId]?.bg);
+      const since = (fromRoomState && roomBg.since) || now;
+      bg = !want ? null
+        : want.audio === bg?.audio && (!fromRoomState || !roomBg.since || bg.since === since) ? bg
+        : { ...want, since };
     }
     const bedDef = layerDeclaration(this.def.guest?.bed);
     const bed = was.bed ?? (bedDef && roomId === this.def.guest.bed.from ? now : null);

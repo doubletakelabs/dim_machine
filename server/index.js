@@ -393,6 +393,12 @@ function currentAssets() {
   }
   for (const room of Object.values(runtime.def?.rooms ?? {})) {
     collect(room.cues);
+    // A room state's own bg (Slop's tracks).
+    for (const declared of Object.values(room.cues ?? {})) {
+      for (const option of [].concat(declared)) {
+        collect({ bg: typeof option?.bg === 'string' ? { audio: option.bg } : option?.bg });
+      }
+    }
     // A room's bg and the show's bed are layers rather than cues, but a phone
     // plays them all the same.
     collect({ bg: typeof room.bg === 'string' ? { audio: room.bg } : room.bg });

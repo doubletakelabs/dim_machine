@@ -211,6 +211,13 @@ function checkLayers(def, errors) {
   for (const [key, cue] of Object.entries(isObject(def.guest?.cues) ? def.guest.cues : {})) {
     if (cue?.bg != null) layer(cue.bg, `guest.cues["${key}"].bg`);
   }
+  for (const [roomId, room] of Object.entries(def.rooms ?? {})) {
+    for (const [state, declared] of Object.entries(isObject(room?.cues) ? room.cues : {})) {
+      [].concat(declared).forEach((cue, i) => {
+        if (cue?.bg != null) layer(cue.bg, `rooms.${roomId}.cues["${state}"]${Array.isArray(declared) ? `[${i}]` : ''}.bg`);
+      });
+    }
+  }
   const bed = def.guest?.bed;
   if (bed == null) return;
   if (!layer(bed, 'guest.bed')) return;

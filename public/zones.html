@@ -706,7 +706,11 @@ function editCue(roomId, el) {
       else if (el.checked) entry.loop = true; else delete entry.loop;
     } else if (field === 'audio') {
       if (el.value) room.cues[state] = { ...(room.cues[state] ?? {}), audio: el.value };
-      else delete room.cues[state];
+      else if (room.cues[state]?.bg != null) {
+        // A state's own background (Slop's tracks) outlives its clip.
+        delete room.cues[state].audio;
+        delete room.cues[state].loop;
+      } else delete room.cues[state];
     } else if (room.cues[state]) {
       if (el.checked) room.cues[state].loop = true; else delete room.cues[state].loop;
     }

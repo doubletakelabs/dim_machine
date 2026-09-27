@@ -228,6 +228,19 @@ export function screenPart(cue) {
 }
 
 /**
+ * The bg a room's current state asks for, if any (`rooms.<id>.cues[state].bg`)
+ * — Slop's track player swapping the room's background for the track a guest
+ * picked (2026-09-27). A state that names none leaves `rooms.<id>.bg`.
+ *
+ * @returns {string|object|undefined}
+ */
+export function roomBgFor(room, state) {
+  const declared = pickDeclared(room?.cues, state);
+  const option = Array.isArray(declared) ? declared.find((o) => o?.bg != null) : declared;
+  return option?.bg ?? undefined;
+}
+
+/**
  * The bg a guest's own state asks for, if any — a calibration step changing
  * the background under its clip. Guidance first, as it is for the screen; a
  * state that names none leaves the room's bg to decide.

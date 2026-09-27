@@ -33,8 +33,12 @@ Decided on site at MAD, in one day; each is written into its section.
   their own timeline unless the room says `together`.
 - **A room's piece can move its room on (§8.1).** `{ "t": "event", "name" }`
   on the experience link goes to the room's statechart; a new state is a new
-  clip for everyone inside. Slop sends `BACKGROUND_1`–`4` (dim_rooms
-  `08_slop/ROOM-NOTES.md`); its address is in `installations/mad.json`.
+  clip for everyone inside. Slop sends `TRACK_1`, `TRACK_2` and `TRACK_STOP`
+  from its track player (dim_rooms `08_slop/ROOM-NOTES.md`); its address is in
+  `installations/mad.json`.
+- **A room state can swap the room's background (§8.1).** `bg` on a room cue
+  (`rooms.<id>.cues[state].bg`) replaces `rooms.<id>.bg` while the room is in
+  that state — Slop's chosen track, heard together (2026-09-27).
 - **A way through the building (§4.2d).** A room's `stage` is its place in
   the order guests walk; rooms they move between freely share one. A reading
   of a room behind the furthest stage a guest has reached is ignored, so no
@@ -925,6 +929,14 @@ current state handles it the room moves — a nested state such as
 each guest inside gets the new clip from its top (or the room's shared moment,
 if `together`). An unhandled or malformed name changes nothing, and an idle
 room ignores its piece. Logged as `room.experienceEvent`.
+
+A room cue may also carry `bg` — a layer, like `rooms.<id>.bg` — which
+replaces the room's background while the room is in that state, crossfading
+over its `crossfadeMs`; leaving the state brings the room's own back. In a
+`together` room it starts at the state's own moment, so everyone inside hears
+it in step and a late arrival joins partway. Slop (2026-09-27): its track
+player sends `TRACK_1` / `TRACK_2` / `TRACK_STOP`, and `active.track1` and
+`active.track2` each name a track (`audio/bg/slop/…`) as their `bg`.
 
 A fourth slot, `screen`, holds an image rather than a sound — a phone has one
 screen, so the sources compete for it instead of mixing. Guidance takes it first,
