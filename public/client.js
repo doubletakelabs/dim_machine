@@ -1006,6 +1006,7 @@ function connect() {
         // provides the show's map (not yet — the app falls back to its own copy).
         tellNative('onWelcome', msg.guestId ?? '', msg.label ?? '');
         if ('beacons' in msg) tellNative('onBeacons', JSON.stringify(msg.beacons ?? null));
+        if ('hallways' in msg) tellNative('onHallways', JSON.stringify(msg.hallways ?? {}));
         // Inside the app there is nobody to press Join: a handset on a lanyard
         // is in the show the moment it is unplugged. The app lets media play
         // without a gesture, so the AudioContext unlocks on its own. Joined
@@ -1019,6 +1020,7 @@ function connect() {
         mixer = mixerConfig(msg.audioLayers);
         mirrorY = msg.input?.mirrorY === true;
         if ('beacons' in msg) tellNative('onBeacons', JSON.stringify(msg.beacons ?? null));
+        if ('hallways' in msg) tellNative('onHallways', JSON.stringify(msg.hallways ?? {}));
         applyDuck();
         if (joined) await preload(assetList);
         break;

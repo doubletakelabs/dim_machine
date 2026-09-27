@@ -57,6 +57,10 @@ Decided on site at MAD, in one day; each is written into its section.
   enter every museum room; `museum.chooseOne` lets them have Kin or Faerie,
   not both. Going back into a room runs it again to use, without replaying
   its clips.
+- **The Museum Hallway is inferred (§4.2d).** It has no beacons; a phone
+  hearing two or more of its rooms, none at its threshold, reports it by name
+  (`{ "type": "location", "room" }`). The app (0.2.2+) also no longer picks a
+  room below its threshold.
 - **Placeholder sounds are gone from MAD-DIM.** No room plays `whisper.wav` or
   `ambient.wav`, and the museum stems are blank until new clips are cut.
 
@@ -466,6 +470,13 @@ own socket, only when something changes:
   places nobody (logged once per major).
 - `{ "type": "door", "major": 31 }` / `{ "type": "door", "major": null }` — at
   a door beacon / away from it; three seconds there enters its room (§4.2c).
+- `{ "type": "location", "room": "museumHallway" }` — a hallway with no room
+  beacons of its own, which the phone infers (2026-09-26). `welcome` and
+  `assets` carry `hallways`: `{ "<id>": { "rooms": [...], "minHeard": 2 } }`,
+  every `kind: "hallway"` room with no beacons and two or more beaconed rooms
+  around it (MAD-DIM: the Museum Hallway). A phone hearing `minHeard` of those
+  rooms, none at its `rssi`, reports the hallway by name; the server judges it
+  like any reading. Only an implied hallway may be named.
 
 **The way through (rooms with a `stage`).** The phone is the sensor; the
 server decides. A report is weighed against the room the guest is in — or, out

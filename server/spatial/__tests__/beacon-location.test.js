@@ -45,6 +45,7 @@ function running(opts) {
   const rt = new SpatialRuntime({ enableTick: false, clock: new ManualClock(), assetSeconds: () => 3 });
   const def = show(opts);
   if (opts?.location) def.location = { ...def.location, ...opts.location };
+  for (const major of opts?.dropBeacons ?? []) delete def.beacons[major];
   assert.deepEqual(rt.load(def).errors, []);
   rt.start();
   const g = rt.spawnGuest();
@@ -334,6 +335,24 @@ describe('the way through the building (rooms.*.stage)', () => {
     assert.equal(rt.wayThrough(guestId).trustNextReading, true);
     assert.equal(rt.wayThrough(guestId).ignoring, null);
     assert.ok(rt.getGuestsRoster().find((g) => g.guestId === guestId).way, 'and it is on the roster');
+  });
+
+  it('the museum hallway, which has no beacons, is implied by the rooms around it', () => {
+    const { rt } = running({ dropBeacons: [901] }); // as at MAD: the hallway has none of its own
+    const implied = rt.impliedHallways();
+    assert.deepEqual(Object.keys(implied), ['museumHallway'], 'only a hallway with no beacons of its own');
+    assert.deepEqual(running().rt.impliedHallways(), {}, 'give it a beacon and it is an ordinary room');
+    assert.ok(implied.museumHallway.rooms.includes('kin'));
+    assert.equal(implied.museumHallway.minHeard, 2);
+  });
+
+  it('a phone may place itself in an implied hallway, judged like any reading', () => {
+    const { rt, guestId } = running({ dropBeacons: [901] });
+    rt.setGuestBeacon(guestId, 902); // kin
+    assert.equal(rt.setGuestHallway(guestId, 'museumHallway').heldMs, 3000, 'kin → hallway, the same-stage dwell');
+    wait(rt, guestId, 3100);
+    assert.equal(roomOf(rt, guestId), 'museumHallway');
+    assert.equal(rt.setGuestHallway(guestId, 'maskRoom').ok, false, 'only a hallway the server implies');
   });
 
   it('a stage is a whole number from 1', () => {

@@ -668,8 +668,9 @@ export class SpatialRuntime {
 
   /** Off a door that held them: wherever the phone last said. */
   applyRoomReading(guestId) {
-    const major = this.lastRoomBeacon.get(guestId);
-    if (major != null) this.setGuestBeacon(guestId, major);
+    const reading = this.lastRoomBeacon.get(guestId);
+    if (typeof reading === 'string' && reading.startsWith('hallway:')) this.setGuestHallway(guestId, reading.slice(8));
+    else if (reading != null) this.setGuestBeacon(guestId, reading);
   }
 
   /**
@@ -691,18 +692,38 @@ export class SpatialRuntime {
       return { ok: false, reason: beacon?.door ? 'door beacon' : 'unknown beacon' };
     }
     this.lastRoomBeacon.set(guestId, major);
+    return this.readRoom(guestId, beacon.room);
+  }
+
+  /**
+   * The phone placing itself in a hallway that has no beacons of its own
+   * (`impliedHallways`): it hears several of the hallway's rooms, none at its
+   * threshold. Judged like any reading.
+   *
+   * @returns {{ ok: boolean, roomId?: string, reason?: string }}
+   */
+  setGuestHallway(guestIdOrToken, roomId) {
+    const guestId = this.resolveGuestId(guestIdOrToken);
+    if (!guestId || !this.running || !this.coordinator) return { ok: false, reason: 'not running' };
+    if (!this.impliedHallways()[roomId]) return { ok: false, reason: 'not an implied hallway' };
+    this.lastRoomBeacon.set(guestId, `hallway:${roomId}`);
+    return this.readRoom(guestId, roomId);
+  }
+
+  /** A room reading, from a beacon or a hallway, weighed and acted on. */
+  readRoom(guestId, roomId) {
     const door = this.atThreshold.get(guestId);
-    if (door?.entered && door.roomId !== beacon.room) {
+    if (door?.entered && door.roomId !== roomId) {
       this.beaconHolds.delete(guestId);
       return { ok: true, roomId: door.roomId, heldByDoor: door.thresholdId };
     }
-    const zoneId = Object.keys(this.def.rooms[beacon.room]?.zones ?? {})[0] ?? null;
+    const zoneId = Object.keys(this.def.rooms[roomId]?.zones ?? {})[0] ?? null;
 
     // Behind them, or too far on: ignored, and any hold already running for a
     // real move keeps running.
-    const move = this.judgeMove(guestId, beacon.room);
+    const move = this.judgeMove(guestId, roomId);
     if (move.refused) {
-      this.refuseReading(guestId, beacon.room, move);
+      this.refuseReading(guestId, roomId, move);
       return { ok: false, reason: move.refused, roomId: this.guests.get(guestId)?.roomId ?? null };
     }
 
@@ -710,19 +731,39 @@ export class SpatialRuntime {
     // keeps its hold running; anything else replaces it — so a flicker to a
     // far room that the phone takes back before the hold runs out never lands.
     const held = this.beaconHolds.get(guestId);
-    if (held?.roomId === beacon.room) return { ok: true, roomId: beacon.room, heldMs: held.dueAt - this.now() };
+    if (held?.roomId === roomId) return { ok: true, roomId, heldMs: held.dueAt - this.now() };
     this.beaconHolds.delete(guestId);
     const { from, steps, holdMs } = move;
     if (holdMs > 0) {
-      this.beaconHolds.set(guestId, { roomId: beacon.room, zoneId, fromRoomId: from, steps, dueAt: this.now() + holdMs });
+      this.beaconHolds.set(guestId, { roomId, zoneId, fromRoomId: from, steps, dueAt: this.now() + holdMs });
       const label = this.guests.get(guestId)?.label ?? guestId;
       const apart = Number.isFinite(steps) ? `${steps} steps apart` : 'not connected';
-      this.append({ type: 'guest.unlikelyJump', guestId, fromRoomId: from, roomId: beacon.room, steps: Number.isFinite(steps) ? steps : null, holdMs });
-      this.io.log?.(`${label}: ${from} → ${beacon.room}, ${apart} — holding ${holdMs / 1000}s`);
-      return { ok: true, roomId: beacon.room, heldMs: holdMs };
+      this.append({ type: 'guest.unlikelyJump', guestId, fromRoomId: from, roomId, steps: Number.isFinite(steps) ? steps : null, holdMs });
+      this.io.log?.(`${label}: ${from} → ${roomId}, ${apart} — holding ${holdMs / 1000}s`);
+      return { ok: true, roomId, heldMs: holdMs };
     }
-    this.coordinator.ingestImmediate(guestId, beacon.room, 'inside', 'ble', zoneId);
-    return { ok: true, roomId: beacon.room };
+    this.coordinator.ingestImmediate(guestId, roomId, 'inside', 'ble', zoneId);
+    return { ok: true, roomId };
+  }
+
+  /**
+   * Hallways with no room beacons of their own, and the rooms around them
+   * that have some — MAD-DIM's Museum Hallway. A phone that hears two or more
+   * of those rooms, none at its threshold, is between them: in the hallway.
+   * Sent to phones (`welcome`, `assets`); the phone applies it (2026-09-26).
+   *
+   * @returns {Record<string, { rooms: string[], minHeard: number }>}
+   */
+  impliedHallways() {
+    const rooms = this.def?.rooms ?? {};
+    const beaconed = new Set(Object.values(this.def?.beacons ?? {}).map((b) => b?.room).filter(Boolean));
+    const out = {};
+    for (const [id, room] of Object.entries(rooms)) {
+      if (room?.kind !== 'hallway' || beaconed.has(id)) continue;
+      const around = (room.adjacent ?? []).filter((r) => beaconed.has(r));
+      if (around.length >= 2) out[id] = { rooms: around, minHeard: 2 };
+    }
+    return out;
   }
 
   /**

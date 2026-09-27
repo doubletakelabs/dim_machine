@@ -493,6 +493,7 @@ function sendAssetsToPhones() {
     audioLayers: runtime.def?.guest?.audioLayers ?? null,
     input: runtime.def?.guest?.input ?? null,
     beacons: runtime.def?.beacons ?? null,
+    hallways: runtime.impliedHallways(),
   }, 'phones');
 }
 
@@ -889,6 +890,8 @@ wss.on('connection', (ws) => {
           rooms: runtime.roomChoices(),
           // What each beacon means, for the Android app's locator (keyed by major).
           beacons: runtime.def?.beacons ?? null,
+          // Hallways without beacons, and the rooms around them (the app infers them).
+          hallways: runtime.impliedHallways(),
           snapshot: phoneSnapshot(token),
         });
         sendRelaySync(token);
@@ -953,8 +956,15 @@ wss.on('connection', (ws) => {
       case 'location': {
         // The Android app's beacon reading, through this page's socket:
         // { major } of the strongest room group it hears.
+        // Or { room } — a hallway with no beacons, inferred by the phone from
+        // the rooms it hears around it (runtime.impliedHallways).
         const guest = runtime.getGuestByToken(token);
-        if (!guest || msg.major == null) return;
+        if (!guest) return;
+        if (typeof msg.room === 'string') {
+          if (runtime.setGuestHallway(guest.guestId, msg.room).ok) sendRoster();
+          return;
+        }
+        if (msg.major == null) return;
         if (runtime.setGuestBeacon(guest.guestId, msg.major).ok) sendRoster();
         return;
       }
