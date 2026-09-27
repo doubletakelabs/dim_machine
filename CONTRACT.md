@@ -1181,7 +1181,12 @@ Unchanged from v0.2. Actions of the form
 | `playAudio` | `assetId`, `gain?` (0–1), `loop?`, `leadTimeMs?` |
 | `stopAudio` | `assetId?` (default `"*"`), `fadeMs?` |
 | `playVideo` | `assetId`, `loop?`, `leadTimeMs?` |
-| `haptic` | `pattern` (ms array) |
+| `haptic` | `pattern` (ms array), or `effect` — a named vibration: `"purr"` |
+
+`{ "type": "faerieFlash" }`, sent to a phone, plays the `purr` (2026-09-27):
+the faerie room's flash, felt. The phone is ready for it; nothing on the
+server sends it yet. The app plays `purr` with strength, where the motor
+can; a browser plays the same rhythm on and off.
 
 The v0.2 page framework — `showPage`, `setVar`, display variables and a set of
 built-in page types — has been **removed**. Each screen the show needs is now

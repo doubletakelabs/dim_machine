@@ -625,7 +625,20 @@ function clearImage(assetId) {
 }
 let shownImage = null;
 
-function haptic(pattern) {
+/**
+ * Named vibrations. In the app each is a waveform the app holds, with
+ * strength (`DIMNative.haptic`); elsewhere, the same rhythm on and off.
+ * `purr` is the faerie room's flash (2026-09-27): a rough, uneven second.
+ */
+const HAPTIC_EFFECTS = {
+  purr: Array.from({ length: 20 }, () => 50),
+};
+
+function haptic(pattern, effect = null) {
+  if (effect) {
+    try { if (nativeApp?.haptic?.(effect)) return; } catch { /* fall back */ }
+    pattern = HAPTIC_EFFECTS[effect] ?? pattern;
+  }
   try { navigator.vibrate?.(pattern); } catch {}
 }
 
@@ -661,7 +674,7 @@ function runCue(cue, opts = {}) {
     case 'clearImage': clearImage(cue.assetId); break;
     case 'experience': openExperience(cue); break;
     case 'endExperience': closeExperience(); break;
-    case 'haptic': haptic(cue.pattern ?? [200]); break;
+    case 'haptic': haptic(cue.pattern ?? [200], cue.effect ?? null); break;
     case 'flash': scheduleFlash(cue); break;
     case 'synctest': scheduleFlash(cue); playAudio({ ...cue, kind: 'audio', assetId: 'click.wav' }); break;
   }
@@ -1130,6 +1143,11 @@ function connect() {
         break;
       case 'relaySync':
         if (joined) applyRelaySync(msg.channels);
+        break;
+      case 'faerieFlash':
+        // The faerie room's flash, felt: the purr. The server side that sends
+        // it is still to come (2026-09-27); `{ type: 'faerieFlash' }`.
+        if (joined) haptic([200], 'purr');
         break;
       case 'displaced':
         // This guest was picked up somewhere else — another tab, another
