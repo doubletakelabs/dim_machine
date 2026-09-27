@@ -83,15 +83,14 @@
       position: relative; z-index: 10; background: rgba(11, 11, 16, 0.88);
     }
     /*
-      Volume: a button in the stage's bottom-right, and a slider that opens to
-      its left and hides itself. Inside #stage, which makes no stacking context,
-      so z-index 12 sits over the image and video overlays (7, 8), under flash.
-      Horizontal on purpose: on a lanyard up and down are flipped, left and
-      right are not.
+      Volume: a button in the stage's bottom-right, and a vertical slider that
+      opens above it (louder at the top) and hides itself. Inside #stage, which
+      makes no stacking context, so z-index 12 sits over the image and video
+      overlays (7, 8), under flash.
     */
     #volume {
       position: absolute; right: 16px; bottom: 16px; z-index: 12;
-      display: flex; align-items: center; gap: 10px; flex-direction: row-reverse;
+      display: flex; align-items: center; gap: 10px; flex-direction: column-reverse;
     }
     #volumeBtn {
       width: 52px; height: 52px; border-radius: 50%; border: 1px solid #34345a;
@@ -101,11 +100,15 @@
     #volumeBtn svg { width: 26px; height: 26px; }
     #volumeBtn:active { background: #6c5ce7; }
     #volumePanel {
-      display: none; align-items: center; height: 52px; padding: 0 18px;
+      display: none; justify-content: center; width: 52px; padding: 18px 0;
       border-radius: 26px; border: 1px solid #34345a; background: rgba(28, 28, 48, 0.92);
     }
     #volume.open #volumePanel { display: flex; }
-    #volumeSlider { width: min(56vw, 240px); height: 40px; accent-color: #6c5ce7; }
+    /* Vertical, bottom to top: quiet at the bottom, loud at the top. */
+    #volumeSlider {
+      writing-mode: vertical-lr; direction: rtl;
+      height: min(40vh, 240px); width: 40px; accent-color: #6c5ce7;
+    }
     .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #e74c3c; margin-right: 4px; }
     .dot.ok { background: #2ecc71; }
   </style>
