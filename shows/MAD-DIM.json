@@ -122,7 +122,8 @@
       "seen": {
         "dwellMs": 8000,
         "accumulate": true
-      }
+      },
+      "bg": "audio/bg/0102_CALIBRATION1.mp3"
     },
     "entranceHallway": {
       "name": "Entrance Hallway",
@@ -416,7 +417,8 @@
         "active": {
           "audio": "audio/guidance/0501-cyc.mp3"
         }
-      }
+      },
+      "bg": "audio/bg/0501_CYC_WALL.mp3"
     },
     "museumHallway": {
       "name": "Museum Hallway",
@@ -530,7 +532,8 @@
       },
       "thresholds": {
         "museumHallway-door": {}
-      }
+      },
+      "bg": "audio/bg/0102_CALIBRATION1.mp3"
     },
     "automation": {
       "name": "Automation",
@@ -594,7 +597,7 @@
         "accumulate": true
       },
       "bg": {
-        "audio": "audio/bg/0105_CALIBRATION4.mp3",
+        "audio": "audio/bg/0701_PISS.mp3",
         "crossfadeMs": 3000
       }
     },
@@ -659,7 +662,7 @@
         "saas-door": {}
       },
       "bg": {
-        "audio": "audio/bg/0104_CALIBRATION3.mp3",
+        "audio": "audio/bg/1001_SAAS.mp3",
         "crossfadeMs": 3000
       }
     },
@@ -743,7 +746,7 @@
         "influence-door": {}
       },
       "bg": {
-        "audio": "audio/bg/0103_CALIBRATION2.mp3",
+        "audio": "audio/bg/1201_INFLUENCE.mp3",
         "crossfadeMs": 3000
       }
     },
@@ -832,7 +835,7 @@
         "maxDrivers": 1
       },
       "bg": {
-        "audio": "audio/bg/0102_CALIBRATION1.mp3",
+        "audio": "audio/bg/0901_SLOP.mp3",
         "crossfadeMs": 1000
       },
       "cues": {
@@ -908,7 +911,7 @@
         "accumulate": true
       },
       "bg": {
-        "audio": "audio/bg/0105_CALIBRATION4.mp3",
+        "audio": "audio/bg/1101_KIN.mp3",
         "crossfadeMs": 3000
       }
     },
@@ -985,7 +988,7 @@
         "faerie-door": {}
       },
       "bg": {
-        "audio": "audio/bg/0103_CALIBRATION2.mp3",
+        "audio": "audio/bg/1501_FAIRY.mp3",
         "crossfadeMs": 3000
       }
     },
@@ -1043,7 +1046,7 @@
         "accumulate": true
       },
       "bg": {
-        "audio": "audio/bg/0102_CALIBRATION1.mp3",
+        "audio": "audio/bg/1602_SUPERINTELLIGENCE.mp3",
         "crossfadeMs": 3000
       }
     },
@@ -1313,7 +1316,8 @@
       },
       "thresholds": {
         "southCorridor-door": {}
-      }
+      },
+      "bg": "audio/bg/0102_CALIBRATION1.mp3"
     },
     "warehouse": {
       "name": "Warehouse",
@@ -1387,7 +1391,8 @@
         "active": {
           "audio": "audio/guidance/1902-warehouse.mp3"
         }
-      }
+      },
+      "bg": "audio/bg/1901_WAREHOUSE_5MIN.mp3"
     },
     "adminOffice": {
       "name": "Admin Office",
@@ -1450,7 +1455,8 @@
       },
       "thresholds": {
         "adminOffice-door": {}
-      }
+      },
+      "bg": "audio/bg/1701_BACK_OFFICE.mp3"
     },
     "dataCenter": {
       "name": "Data Center",
@@ -1516,7 +1522,8 @@
         "active": {
           "audio": "audio/guidance/1801-datacenter.mp3"
         }
-      }
+      },
+      "bg": "audio/bg/1801_DATACENTER.mp3"
     },
     "controlRoom": {
       "name": "Control Room",
@@ -1582,7 +1589,8 @@
         "active": {
           "audio": "audio/guidance/2102-controlroom_table.mp3"
         }
-      }
+      },
+      "bg": "audio/bg/2101_CONTROLROOM.mp3"
     },
     "library": {
       "name": "Library",
@@ -1667,7 +1675,8 @@
       },
       "thresholds": {
         "library-door": {}
-      }
+      },
+      "bg": "audio/bg/2401_LIBRARY.mp3"
     },
     "westHallway": {
       "name": "West Hallway",
@@ -1701,7 +1710,8 @@
       },
       "thresholds": {
         "westHallway-door": {}
-      }
+      },
+      "bg": "audio/bg/0102_CALIBRATION1.mp3"
     },
     "griefbot": {
       "name": "Griefbot",
@@ -1758,7 +1768,8 @@
             ]
           ]
         }
-      }
+      },
+      "bg": "audio/bg/0102_CALIBRATION1.mp3"
     }
   },
   "guest": {
@@ -1855,10 +1866,6 @@
       "guidance.ending": {
         "audio": "chime.wav"
       }
-    },
-    "bed": {
-      "audio": "audio/bg/DEAD_BATH_5MIN.mp3",
-      "from": "calibration"
     }
   },
   "location": {
