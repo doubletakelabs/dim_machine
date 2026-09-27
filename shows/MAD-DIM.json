@@ -839,13 +839,13 @@
         "active.track1": {
           "bg": {
             "audio": "audio/bg/slop/Captcha Funeral.mp3",
-            "crossfadeMs": 1000
+            "crossfadeMs": 0
           }
         },
         "active.track2": {
           "bg": {
             "audio": "audio/bg/slop/Content Farm.mp3",
-            "crossfadeMs": 1000
+            "crossfadeMs": 0
           }
         }
       }
