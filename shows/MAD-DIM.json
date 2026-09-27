@@ -1331,7 +1331,7 @@
         "westHallway",
         "griefbot"
       ],
-      "stage": 7,
+      "stage": 6,
       "zones": {
         "southCorridor": {
           "polygon": [
@@ -1385,7 +1385,7 @@
         "southCorridor",
         "adminOffice"
       ],
-      "stage": 7,
+      "stage": 6,
       "zones": {
         "warehouse": {
           "polygon": [
@@ -1461,7 +1461,7 @@
         "dataCenter",
         "museumHallway"
       ],
-      "stage": 7,
+      "stage": 6,
       "zones": {
         "adminOffice": {
           "polygon": [
@@ -1522,7 +1522,7 @@
         "adminOffice",
         "museumHallway"
       ],
-      "stage": 7,
+      "stage": 6,
       "zones": {
         "dataCenter": {
           "polygon": [
@@ -1588,7 +1588,7 @@
         "southCorridor",
         "library"
       ],
-      "stage": 7,
+      "stage": 6,
       "zones": {
         "controlRoom": {
           "polygon": [
@@ -1654,7 +1654,7 @@
         "controlRoom",
         "westHallway"
       ],
-      "stage": 8,
+      "stage": 7,
       "zones": {
         "library": {
           "polygon": [
@@ -1739,7 +1739,7 @@
         "southCorridor",
         "library"
       ],
-      "stage": 7,
+      "stage": 6,
       "zones": {
         "westHallway": {
           "polygon": [
@@ -1772,7 +1772,7 @@
       "adjacent": [
         "southCorridor"
       ],
-      "stage": 7,
+      "stage": 6,
       "machine": {
         "id": "griefbot",
         "initial": "idle",
@@ -2342,7 +2342,7 @@
         616
       ],
       "room": "saas",
-      "rssi": -74
+      "rssi": -76
     },
     "57344": {
       "at": [
