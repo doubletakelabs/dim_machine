@@ -948,6 +948,13 @@ in the `screen` slot; a cue may declare either or both), `loop`, `gain`,
 `fadeMs` (applied when the slot is vacated), `audience` (room cues only),
 `seek` (default true — see below), and `offset`/`duration` (below).
 
+**Audio endings.** An audio name is read as the clip, not the exact file: if
+`audio/guidance/0102-calibration1.mp3` is not on disk but `…calibration1.m4a`
+is, the show plays that — or the other way round, trying `.mp3`, `.m4a`,
+`.wav`, `.aac`, `.ogg` in turn. This covers every audio name in the show (cues,
+`bg`, the bed, museum stems, doors), resolved when the show loads and logged
+(`audio: … → …`). The show file keeps the name as written.
+
 **Segments.** `offset` and `duration`, in seconds, play a slice of a longer file
 rather than all of it:
 

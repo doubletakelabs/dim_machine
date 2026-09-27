@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, basename, resolve, sep } from 'node:path';
 import { SpatialRuntime, validateShowDefinition, ScaledClock } from './spatial/index.js';
 import { applyInstallation } from './spatial/installation.js';
+import { resolveAudioNames } from './asset-names.js';
 import * as relay from './relay.js';
 
 // Not 4000: dim_central (the deploy dashboard) runs there on the same machine.
@@ -278,7 +279,10 @@ app.post('/api/shows/:file/zones', (req, res) => {
   // of an edit — geometry, clips — still applies on the next load.
   let live = false;
   if (file === loadedShowFile && runtime.def && (hasBeacons || hasPhone || Object.keys(thresholds).length)) {
-    const doors = Object.fromEntries(Object.keys(thresholds).map((roomId) => [roomId, def.rooms[roomId]?.thresholds ?? null]));
+    const doors = resolveAudioNames(
+      Object.fromEntries(Object.keys(thresholds).map((roomId) => [roomId, def.rooms[roomId]?.thresholds ?? null])),
+      assetOnDisk,
+    ).def;
     live = runtime.applyLocationEdits(
       hasBeacons ? (def.beacons ?? null) : undefined,
       doors,
@@ -424,8 +428,10 @@ function currentAssets() {
  * renamed screen shipped straight through — so this is deliberately reported at
  * load, where a name is still a thing somebody just typed.
  */
+const assetOnDisk = (asset) => existsSync(join(assetsDir, asset));
+
 function missingAssets() {
-  return currentAssets().filter((asset) => !existsSync(join(assetsDir, asset)));
+  return currentAssets().filter((asset) => !assetOnDisk(asset));
 }
 let assetProblems = [];
 
@@ -490,6 +496,11 @@ function loadShow(file) {
   for (const w of placed.warnings) opLog(`⚠ ${w}`);
   if (placed.errors.length) return;
   notInstalled = placed.notInstalled;
+
+  // A clip named .mp3 plays the .m4a on disk, and the other way round.
+  const audio = resolveAudioNames(def, assetOnDisk);
+  def = audio.def;
+  for (const { from, to } of audio.swaps) opLog(`audio: ${from} → ${to}`);
 
   const result = runtime.load(def);
   for (const w of result.warnings ?? []) opLog(`⚠ ${w}`);

@@ -17,6 +17,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { advanceForStep } from '../server/spatial/sequence.js';
+import { resolveAudioNames } from '../server/asset-names.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const assetsDir = join(root, 'public', 'assets');
@@ -27,7 +28,11 @@ if (!showName) {
   process.exit(1);
 }
 
-const show = JSON.parse(readFileSync(join(root, 'shows', `${showName}.json`), 'utf8'));
+// As the server plays it: a clip named .mp3 may be the .m4a on disk.
+const show = resolveAudioNames(
+  JSON.parse(readFileSync(join(root, 'shows', `${showName}.json`), 'utf8')),
+  (asset) => existsSync(join(assetsDir, asset)),
+).def;
 
 /** Every `sequence` in the guest machine, with the path that names it. */
 function findSequences(states, path = []) {
