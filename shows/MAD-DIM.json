@@ -508,7 +508,9 @@
         "consumption1",
         "consumption2",
         "consumption3",
-        "southCorridor"
+        "southCorridor",
+        "adminOffice",
+        "dataCenter"
       ],
       "stage": 6,
       "zones": {
@@ -1456,7 +1458,8 @@
       "adjacent": [
         "southCorridor",
         "warehouse",
-        "dataCenter"
+        "dataCenter",
+        "museumHallway"
       ],
       "stage": 7,
       "zones": {
@@ -1516,7 +1519,8 @@
       "name": "Data Center",
       "kind": "shared",
       "adjacent": [
-        "adminOffice"
+        "adminOffice",
+        "museumHallway"
       ],
       "stage": 7,
       "zones": {
@@ -2110,8 +2114,8 @@
     },
     "47104": {
       "at": [
-        559,
-        833
+        557,
+        841
       ],
       "rssi": -60,
       "door": "southCorridor-door"
@@ -2142,11 +2146,11 @@
     },
     "48128": {
       "at": [
-        654,
-        653
+        656,
+        656
       ],
       "room": "kin",
-      "rssi": -72
+      "rssi": -74
     },
     "48384": {
       "at": [
@@ -2217,7 +2221,7 @@
         637,
         753
       ],
-      "rssi": -71,
+      "rssi": -73,
       "door": "consumption2-door"
     },
     "50688": {
@@ -2330,7 +2334,7 @@
         719
       ],
       "room": "consumption2",
-      "rssi": -71
+      "rssi": -73
     },
     "57088": {
       "at": [
@@ -2443,8 +2447,8 @@
     },
     "60928": {
       "at": [
-        433,
-        837
+        438,
+        843
       ],
       "rssi": -60,
       "door": "southCorridor-door"
