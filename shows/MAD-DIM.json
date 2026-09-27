@@ -1870,7 +1870,8 @@
     "sameStageMs": 3000,
     "skipAhead": false,
     "phone": {
-      "switchMarginDb": 6
+      "switchMarginDb": 6,
+      "nearDb": 3
     }
   },
   "inputBindings": {
@@ -2043,10 +2044,10 @@
     },
     "46848": {
       "at": [
-        519,
-        338
+        525,
+        339
       ],
-      "rssi": -68,
+      "rssi": -70,
       "door": "cyclorama-door"
     },
     "46849": {
@@ -2083,10 +2084,10 @@
     },
     "47872": {
       "at": [
-        399,
+        398,
         656
       ],
-      "rssi": -72,
+      "rssi": -76,
       "door": "hallOfHeroes-door"
     },
     "48128": {
@@ -2191,7 +2192,7 @@
         631
       ],
       "room": "hallOfHeroes",
-      "rssi": -72
+      "rssi": -66
     },
     "51456": {
       "at": [
@@ -2287,7 +2288,7 @@
         497
       ],
       "room": "hallOfHeroes",
-      "rssi": -65
+      "rssi": -70
     },
     "56832": {
       "at": [
