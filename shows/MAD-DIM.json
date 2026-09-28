@@ -1779,7 +1779,7 @@
       }
     },
     "audioLayers": {
-      "duckTo": 0.25,
+      "duckTo": 1,
       "duckMs": 300,
       "crossfadeMs": 10000,
       "loopCrossfadeMs": 10000
