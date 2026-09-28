@@ -1085,9 +1085,6 @@ wss.on('connection', (ws) => {
         const u = users.get(token);
         if (u) {
           u.telemetry = {
-            offset: msg.offset,
-            rtt: msg.rtt,
-            jitter: msg.jitter,
             phone: cleanPhoneStatus(msg.phone),
             at: Date.now(),
           };

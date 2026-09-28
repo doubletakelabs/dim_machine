@@ -262,14 +262,14 @@ describe('who is allowed to drive the show', () => {
 
     phone.send({ type: 'input', event: { type: 'tap' } });
     phone.send({ type: 'ready' });
-    phone.send({ type: 'telemetry', offset: 4, rtt: 20, jitter: 1 });
+    phone.send({ type: 'telemetry', phone: { battery: 80 } });
 
     const roster = await op.waitFor(
       (m) => m.type === 'roster' && m.users.some((u) => u.guestId === phone.welcome.guestId && u.telemetry),
       { since: op.mark(), describe: 'the roster carrying this phone\'s telemetry' },
     );
     const mine = roster.users.find((u) => u.guestId === phone.welcome.guestId);
-    assert.equal(mine.telemetry.rtt, 20);
+    assert.equal(mine.telemetry.phone.battery, 80);
 
     phone.close();
     op.close();
@@ -451,7 +451,7 @@ describe('the Android app locating a phone', () => {
     const phone = await openPhone(server, undefined, { device: '23' });
     assert.equal(phone.welcome.label, '#23', 'the phone with 23 on its case');
     const since = op.mark();
-    phone.send({ type: 'telemetry', offset: 1, rtt: 20, jitter: 2, phone: {
+    phone.send({ type: 'telemetry', phone: {
       battery: 84, charging: false, wifiRssi: -58, blePerSec: 41.5, content: '2b86ab0ee9a07e7f',
       map: 'server', mapSize: 60, room: 'kin', roomMajor: 14, estimated: false,
       app: '0.1.0', injected: '<script>', battery2: 'x',

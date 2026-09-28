@@ -192,8 +192,8 @@
       body, #companion, .cmp-view, .cmp-chrome { transition: none; }
     }
 
-    /* In the app, the debug readouts stay hidden until the corner hold. */
-    html.native:not(.debug) #status { display: none; }
+    /* The debug readouts stay hidden until the corner hold, in the app or not. */
+    html:not(.debug) #status { display: none; }
     .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #e74c3c; margin-right: 4px; }
     .dot.ok { background: #2ecc71; }
   </style>
@@ -220,9 +220,6 @@
   <div id="status">
     <span><span class="dot" id="connDot"></span><span id="connText">connecting</span></span>
     <span id="stateName"></span>
-    <span>offset <b id="offset">–</b></span>
-    <span>rtt <b id="rtt">–</b></span>
-    <span>drift <b id="drift">–</b></span>
     <span>gesture <b id="gesture">–</b></span>
     <span>awake <b id="awake">–</b></span>
     <span>link <b id="link">–</b></span>

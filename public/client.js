@@ -440,7 +440,6 @@ function playAudio(cue, { seekIntoLoop = false } = {}) {
   if (plan.action === 'schedule') {
     const when = ctxTimeFor(plan.at);
     beginsAt = Math.max(when, ctx.currentTime);
-    reportCueAt(cue, when);
   }
 
   const entry = { sources: new Set(), gainNode };
@@ -636,16 +635,6 @@ function haptic(pattern, effect = null) {
   try { navigator.vibrate?.(pattern); } catch {}
 }
 
-function reportCueAt(cue, ctxWhen) {
-  const targetLocal = clock.toLocal(cue.startAt);
-  setTimeout(() => {
-    const actualLocal = Date.now() + (ctxWhen - ctx.currentTime) * 1000;
-    const drift = actualLocal - targetLocal;
-    $('drift').textContent = `${drift.toFixed(1)}ms`;
-    sendMsg({ type: 'cueReport', cueId: cue.cueId, targetAt: cue.startAt, actualAt: cue.startAt + drift });
-  }, Math.max(0, targetLocal - Date.now()) + 50);
-}
-
 function scheduleFlash(cue) {
   const el = $('flash');
   (function tick() {
@@ -654,7 +643,6 @@ function scheduleFlash(cue) {
     if (remaining < -500) return;
     el.style.transition = 'none';
     el.style.opacity = '1';
-    sendMsg({ type: 'cueReport', cueId: cue.cueId, targetAt: cue.startAt, actualAt: Date.now() + clock.offset });
     setTimeout(() => { el.style.transition = 'opacity 400ms'; el.style.opacity = '0'; }, 120);
   })();
 }
@@ -1058,6 +1046,8 @@ function connect() {
     // told is long dead. Ask for the whole picture again.
     if (joined) resync();
     clearInterval(pingTimer);
+    // Pings keep the clock in step (timed and shared audio) and are how the
+    // server knows this phone is still here (contactLossMs), so they stay.
     let burst = 8;
     const ping = () => sendMsg({ type: 'ping', t0: Date.now() });
     const burstTimer = setInterval(() => { ping(); if (--burst <= 0) clearInterval(burstTimer); }, 150);
@@ -1109,16 +1099,9 @@ function connect() {
         break;
       case 'pong':
         clock.addSample(msg.t0, msg.server, Date.now());
-        $('offset').textContent = `${clock.offset.toFixed(1)}ms`;
-        $('rtt').textContent = `${clock.rtt.toFixed(0)}ms`;
-        sendMsg({
-          type: 'telemetry',
-          offset: Math.round(clock.offset * 10) / 10,
-          rtt: Math.round(clock.rtt),
-          jitter: Math.round(clock.jitter * 10) / 10,
-          // The app's view of the handset: battery, Wi-Fi, beacons, content.
-          ...(nativeApp?.status ? { phone: nativeStatus() } : {}),
-        });
+        // The app's view of the handset — battery, Wi-Fi, beacons, content —
+        // for the operator panel. A browser has none to send.
+        if (nativeApp?.status) sendMsg({ type: 'telemetry', phone: nativeStatus() });
         break;
       case 'state': {
         lastState = msg.state;
