@@ -28,6 +28,9 @@ museum.museum.stems = {
   returnDisabled: 'audio/museum/return_disabled.wav',
   inHallway: [1, 2, 3, 4].map((n) => `audio/museum/in_hallway_${n}.wav`),
 };
+// Nor the show's own per-room takes, which win over those as rooms get their
+// clips (Kin's in-room, 2026-09-28): the tests of a room's own clips set theirs.
+museum.museum.roomStems = {};
 
 const ENTRANCE_SECONDS = 3;
 
