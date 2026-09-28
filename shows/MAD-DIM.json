@@ -664,6 +664,16 @@
       "bg": {
         "audio": "audio/bg/1001_SAAS.mp3",
         "crossfadeMs": 3000
+      },
+      "experience": {
+        "experienceId": "saasisdead-human-captcha",
+        "inputMode": "stream",
+        "inputs": [
+          "swipe",
+          "drag",
+          "tap"
+        ],
+        "maxDrivers": 1
       }
     },
     "influence": {
