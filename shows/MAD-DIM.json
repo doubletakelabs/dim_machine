@@ -1787,6 +1787,10 @@
     "input": {
       "mirrorY": true
     },
+    "companion": {
+      "introUntil": "entranceHallway",
+      "closingRoom": "library"
+    },
     "timers": {
       "museumTime": {
         "sinceEntering": "guidance.museum",

@@ -146,9 +146,9 @@ app.get('/api/assets/audio', (_req, res) => {
  * does; each file carries its size and sha256 so only what changed is fetched
  * (from the same URL the page uses) and a download can be checked.
  */
-const PHONE_PAGE_FILES = ['index.html', 'client.js', 'gestures.js', 'clock-sync.js', 'cue-plan.js', 'mixer.js'];
-/** Assets the page itself loads, whatever the show: index.html's keep-awake video. */
-const PHONE_PAGE_ASSETS = ['keepawake.mp4'];
+const PHONE_PAGE_FILES = ['index.html', 'client.js', 'companion.js', 'gestures.js', 'clock-sync.js', 'cue-plan.js', 'mixer.js'];
+/** Assets the page itself loads, whatever the show: the keep-awake video, the companion's fonts. */
+const PHONE_PAGE_ASSETS = ['keepawake.mp4', 'fonts/raleway-latin.woff2', 'fonts/jetbrains-mono-latin.woff2'];
 /** absolute path → { size, mtimeMs, sha256 }: a hash is recomputed only when the file changed. */
 const hashCache = new Map();
 
@@ -670,6 +670,56 @@ function phoneState(token) {
   return here ? `${here.roomId} · ${here.standing}` : 'outside';
 }
 
+// ---------------------------------------------------------------------------
+// Room words (2026-09-27)
+//
+// Each room with a word (poster/words.json) shows it on a guest's phone the
+// moment they are in that room — every time, a return included. The words a
+// visit collects are kept for the receipt poster.
+// ---------------------------------------------------------------------------
+function loadRoomWords() {
+  try {
+    const bank = JSON.parse(readFileSync(join(root, 'poster', 'words.json'), 'utf8'));
+    return Object.fromEntries(Object.entries(bank.rooms ?? {}).map(([roomId, r]) => [roomId, r?.word]).filter(([, w]) => w));
+  } catch (err) {
+    console.warn(`room words: ${err.message}`);
+    return {};
+  }
+}
+const ROOM_WORDS = loadRoomWords();
+/** visitId → [{ roomId, word, at }], in the order shown. */
+const visitWords = new Map();
+/** token → the room its phone was last told about, so a word pops only on arrival. */
+const lastPhoneRoom = new Map();
+
+function phoneRoom(token) {
+  const guest = runtime.getGuestByToken(token);
+  return guest ? runtime.guestActors.get(guest.guestId)?.currentRoom()?.roomId ?? null : null;
+}
+
+function companionPhase(token) {
+  const guest = runtime.getGuestByToken(token);
+  return guest ? runtime.companionPhase(guest.guestId) : null;
+}
+
+function lastWordOf(token) {
+  const visitId = runtime.getGuestByToken(token)?.visitId;
+  const words = visitId ? visitWords.get(visitId) : null;
+  return words?.length ? words[words.length - 1].word : null;
+}
+
+/** The guest has just arrived in `roomId`: its word, if it has one. */
+function showRoomWord(token, roomId) {
+  const word = ROOM_WORDS[roomId];
+  if (!word) return;
+  const visitId = runtime.getGuestByToken(token)?.visitId;
+  if (visitId) {
+    if (!visitWords.has(visitId)) visitWords.set(visitId, []);
+    visitWords.get(visitId).push({ roomId, word, at: Date.now() });
+  }
+  sendToUser(token, { type: 'word', word, roomId, at: Date.now() });
+}
+
 /**
  * Push that line whenever it changes. The client has always handled a `state`
  * message; nothing ever sent one, so the readout was fixed at whatever was true
@@ -679,13 +729,20 @@ const lastPhoneState = new Map();
 function pushPhoneStates() {
   for (const [token, u] of users.entries()) {
     if (!u.ws) continue;
-    const next = phoneState(token);
+    const room = phoneRoom(token);
+    if (room && lastPhoneRoom.get(token) !== room) showRoomWord(token, room);
+    if (room) lastPhoneRoom.set(token, room);
+    const phase = companionPhase(token);
+    const next = `${phoneState(token)}|${phase}`;
     if (lastPhoneState.get(token) === next) continue;
     lastPhoneState.set(token, next);
-    sendToUser(token, { type: 'state', state: next });
+    sendToUser(token, { type: 'state', state: phoneState(token), phase });
   }
   for (const token of lastPhoneState.keys()) {
     if (!users.has(token)) lastPhoneState.delete(token);
+  }
+  for (const token of lastPhoneRoom.keys()) {
+    if (!users.has(token)) lastPhoneRoom.delete(token);
   }
 }
 
@@ -694,6 +751,9 @@ function phoneSnapshot(token) {
   return {
     serverTime: Date.now(),
     state: phoneState(token),
+    // The companion screen: which phase, and the last word shown (for idle).
+    phase: companionPhase(token),
+    lastWord: lastWordOf(token),
     spatial: guest
       ? {
           pathId: guest.pathId,

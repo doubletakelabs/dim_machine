@@ -1202,6 +1202,23 @@ Unchanged from v0.2. Actions of the form
 | `playVideo` | `assetId`, `loop?`, `leadTimeMs?` |
 | `haptic` | `pattern` (ms array), or `effect` — a named vibration: `"purr"` |
 
+**The companion screen (2026-09-27).** The phone page's own screen
+(`public/companion.js`): the pulsing DIM, then an idle word on a cycling
+colour, full-screen room words, and — when the wearer lifts the phone to read
+it — telemetry, help and volume; hanging on the lanyard it is drawn turned 180°
+for the people in front. The show drives it with:
+
+- `guest.companion`: `{ "introUntil": "<room>", "closingRoom": "<room>" }` —
+  the intro runs until the guest reaches `introUntil` (stood in it, or its
+  stage or beyond); the closing screen from `closingRoom` on. MAD-DIM: the
+  Entrance Hallway and the Library.
+- `{ "type": "state", "state", "phase" }` — `phase` is `intro`, `show` or
+  `closing` (null without `guest.companion`); the welcome snapshot carries it
+  too, with `lastWord`.
+- `{ "type": "word", "word", "roomId", "at" }` — the guest has just arrived in
+  a room with a word (`poster/words.json`), every time, a return included. The
+  server keeps each visit's words, in order, for the receipt poster.
+
 `{ "type": "faerieFlash" }`, sent to a phone, plays the `purr` (2026-09-27):
 the faerie room's flash, felt. The phone is ready for it; nothing on the
 server sends it yet. The app plays `purr` with strength, where the motor

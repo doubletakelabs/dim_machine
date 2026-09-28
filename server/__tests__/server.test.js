@@ -390,6 +390,32 @@ describe('the Android app locating a phone', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it('the companion screen: a room\'s word on arrival, and the phase the phone is in', async () => {
+    const op = await openOperator(server);
+    await runShow(op);
+    const phone = await openPhone(server);
+    assert.equal(phone.welcome.snapshot.lastWord, null, 'no word yet');
+
+    phone.send({ type: 'setRoom', roomId: 'calibration' });
+    const word = await phone.waitFor((m) => m.type === 'word', { describe: 'calibration\'s word' });
+    assert.equal(word.word, 'FOCUS');
+    assert.equal(word.roomId, 'calibration');
+    const state = await phone.waitFor((m) => m.type === 'state' && /^calibration/.test(m.state));
+    assert.equal(state.phase, 'intro', 'the DIM intro until the Entrance Hallway');
+
+    const again = await openPhone(server, phone.welcome.token);
+    assert.equal(again.welcome.snapshot.lastWord, 'FOCUS', 'a reconnect knows the last word, for idle');
+    again.close();
+    phone.close();
+
+    const late = await openPhone(server);
+    late.send({ type: 'location', major: 801 });
+    const closing = await late.waitFor((m) => m.type === 'state' && /^library/.test(m.state));
+    assert.equal(closing.phase, 'closing', 'DONE, from the Library');
+    late.close();
+    op.close();
+  });
+
   it('hands the phone the beacon list, places it by major, and marks a door', async () => {
     const op = await openOperator(server);
     await runShow(op);

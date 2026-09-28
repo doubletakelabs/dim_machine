@@ -82,33 +82,118 @@
          static element does nothing, which is why this needs `position`. */
       position: relative; z-index: 10; background: rgba(11, 11, 16, 0.88);
     }
-    /*
-      Volume: a button in the stage's bottom-right, and a vertical slider that
-      opens above it (louder at the top) and hides itself. Inside #stage, which
-      makes no stacking context, so z-index 12 sits over the image and video
-      overlays (7, 8), under flash.
-    */
-    #volume {
-      position: absolute; right: 16px; bottom: 16px; z-index: 12;
-      display: flex; align-items: center; gap: 10px; flex-direction: column-reverse;
+    /* ---------------------------------------------------------------- companion
+       The phone's own screen (companion.js; visual_refs/DIM-APP-SPEC.md).
+       Over the page, under the join screen (5) and the image/video overlays. */
+    @font-face { font-family: 'Raleway'; font-weight: 100 900; font-display: block;
+      src: url(assets/fonts/raleway-latin.woff2) format('woff2'); }
+    @font-face { font-family: 'JetBrains Mono'; font-weight: 100 800; font-display: block;
+      src: url(assets/fonts/jetbrains-mono-latin.woff2) format('woff2'); }
+    #companion {
+      position: absolute; inset: 0; z-index: 4; overflow: hidden;
+      background: #000; color: #fff; font-family: 'Raleway', sans-serif;
+      transition: background-color .3s ease, color .3s ease;
+      -webkit-tap-highlight-color: transparent;
     }
-    #volumeBtn {
-      width: 52px; height: 52px; border-radius: 50%; border: 1px solid #34345a;
-      background: rgba(28, 28, 48, 0.85); color: #e8e8f0;
-      display: flex; align-items: center; justify-content: center; padding: 0;
+    /* Hanging by the lanyard, top down: the whole page turned, so the people
+       in front read it right way up. */
+    html.cmp-hanging body { transform: rotate(180deg); }
+    body { transition: opacity .18s ease; }
+    html.cmp-turning body { opacity: 0; }
+    .cmp-view {
+      position: absolute; inset: 0; padding: 24px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; opacity: 0; pointer-events: none; transition: opacity .35s ease;
     }
-    #volumeBtn svg { width: 26px; height: 26px; }
-    #volumeBtn:active { background: #6c5ce7; }
-    #volumePanel {
-      display: none; justify-content: center; width: 52px; padding: 18px 0;
-      border-radius: 26px; border: 1px solid #34345a; background: rgba(28, 28, 48, 0.92);
+    .cmp-view.active { opacity: 1; pointer-events: auto; }
+    .cmp-big {
+      font-weight: 900; text-transform: uppercase; line-height: .86; letter-spacing: -.01em;
+      width: 100%; overflow-wrap: anywhere; text-wrap: balance;
     }
-    #volume.open #volumePanel { display: flex; }
-    /* Vertical, bottom to top: quiet at the bottom, loud at the top. */
-    #volumeSlider {
-      writing-mode: vertical-lr; direction: rtl;
-      height: min(40vh, 240px); width: 40px; accent-color: #6c5ce7;
+    .cmp-mark { font-size: 25.65vw; animation: cmp-pulse 1.8s ease-in-out infinite; }
+    .cmp-idle-word { font-size: 16vw; animation: cmp-breathe 3.6s ease-in-out infinite; transition: opacity .3s ease; }
+    .cmp-word-text { font-size: 17vw; animation: cmp-word-in .35s cubic-bezier(.2, .9, .3, 1); }
+    .cmp-close-mark { font-size: 13vw; }
+    .cmp-close-sub {
+      margin-top: 20px; font-size: 12px; font-weight: 500; letter-spacing: .1em; line-height: 1.7;
+      text-transform: uppercase; opacity: .6; max-width: 80%;
     }
+    .cmp-spinner {
+      margin-top: 28px; width: 22px; height: 22px; border-radius: 50%;
+      border: 3px solid color-mix(in srgb, currentColor 20%, transparent); border-top-color: currentColor;
+      animation: cmp-spin 1s linear infinite;
+    }
+    @keyframes cmp-pulse { 0%, 100% { opacity: .18; } 50% { opacity: 1; } }
+    @keyframes cmp-breathe { 0%, 100% { opacity: .5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.03); } }
+    @keyframes cmp-word-in { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
+    @keyframes cmp-spin { to { transform: rotate(360deg); } }
+
+    .cmp-help { background: #000; color: #fff; align-items: stretch; justify-content: flex-start; text-align: left; padding: 0; }
+    .cmp-help-inner { padding: calc(env(safe-area-inset-top, 0px) + 150px) 26px 32px 26px; overflow-y: auto; height: 100%; padding-right: 74px; }
+    .cmp-help h2 { font-weight: 900; text-transform: uppercase; font-size: 28px; margin: 0 0 22px; }
+    .cmp-help p, .cmp-step span { font-size: 13px; line-height: 1.65; font-weight: 400; margin: 0 0 16px; }
+    .cmp-step { display: flex; gap: 14px; margin-bottom: 18px; align-items: flex-start; }
+    .cmp-step b {
+      font-weight: 800; font-size: 12px; color: #000; background: #fff; border-radius: 50%;
+      width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; flex: none; margin-top: 1px;
+    }
+    .cmp-help-foot { margin-top: 28px !important; opacity: .45; }
+
+    /* Held up: telemetry, help and volume fade in. Hanging: only the word. */
+    .cmp-chrome { position: absolute; z-index: 2; opacity: 1; transition: opacity .4s ease; }
+    html.cmp-hanging .cmp-chrome { opacity: 0; pointer-events: none; }
+    .cmp-top {
+      top: 0; left: 0; right: 0; padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px 10px;
+      display: flex; align-items: flex-start; justify-content: space-between;
+    }
+    .cmp-help:is(.active) ~ .cmp-top, .cmp-help:is(.active) ~ .cmp-vol { color: #fff; }
+    .cmp-sys {
+      font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 9px; line-height: 1.6;
+      letter-spacing: .04em; opacity: .55; text-transform: uppercase; font-variant-numeric: tabular-nums;
+    }
+    .cmp-sys div { white-space: nowrap; }
+    .cmp-dot {
+      display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: currentColor;
+      margin-right: 5px; vertical-align: middle; animation: cmp-blink 2s ease-in-out infinite;
+    }
+    @keyframes cmp-blink { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+    .cmp-icon-btn {
+      width: 36px; height: 36px; border-radius: 50%; border: 2px solid currentColor; padding: 0;
+      background: transparent; color: inherit; display: flex; align-items: center; justify-content: center;
+    }
+    .cmp-icon-btn svg, .cmp-vol-icon svg { width: 20px; height: 20px; display: block; }
+    .cmp-icon-btn:active { transform: scale(.92); }
+
+    /* Volume: the mockup's dock, stood on end down the right edge. */
+    .cmp-vol {
+      right: 12px; top: 50%; transform: translateY(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 10px 6px;
+    }
+    .cmp-vol-slider {
+      -webkit-appearance: none; appearance: none; writing-mode: vertical-lr; direction: rtl;
+      width: 22px; height: min(42vh, 280px); margin: 0; background: transparent; color: inherit;
+    }
+    .cmp-vol-slider::-webkit-slider-runnable-track {
+      width: 4px; border-radius: 0;
+      background: linear-gradient(to top, currentColor 0%, currentColor var(--fill, 50%),
+        color-mix(in srgb, currentColor 35%, transparent) var(--fill, 50%), color-mix(in srgb, currentColor 35%, transparent) 100%);
+    }
+    .cmp-vol-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 18px; height: 18px; margin-left: -7px; border-radius: 50%;
+      background: currentColor; border: none;
+    }
+    .cmp-vol-slider:active::-webkit-slider-thumb { transform: scale(1.2); }
+
+    /* The hidden debug hold: top-left as the screen reads. */
+    .cmp-hotspot { position: absolute; top: 0; left: 0; width: 80px; height: 80px; z-index: 3; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .cmp-mark, .cmp-idle-word, .cmp-word-text, .cmp-dot { animation: none; }
+      body, #companion, .cmp-view, .cmp-chrome { transition: none; }
+    }
+
+    /* In the app, the debug readouts stay hidden until the corner hold. */
+    html.native:not(.debug) #status { display: none; }
     .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #e74c3c; margin-right: 4px; }
     .dot.ok { background: #2ecc71; }
   </style>
@@ -123,19 +208,13 @@
     style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;bottom:0;left:0"></video>
   <div id="stage">
     <div id="page"></div>
+    <div id="companion"></div>
     <div id="joinScreen">
       <div id="label" class="page-hint"></div>
       <div class="page-title">DIM MACHINE</div>
       <button id="join">Join Show</button>
       <div id="loading" class="page-hint" style="display:none">loading assets…</div>
     </div>
-    <div id="volume">
-      <button id="volumeBtn" aria-label="Volume">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>
-        </svg>
-      </button>
-      <div id="volumePanel"><input id="volumeSlider" type="range" min="0" max="100" step="1" aria-label="Volume"></div>
     </div>
   </div>
   <div id="status">

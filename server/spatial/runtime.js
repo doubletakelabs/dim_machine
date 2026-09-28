@@ -838,6 +838,32 @@ export class SpatialRuntime {
     return Number.isInteger(stage) ? stage : null;
   }
 
+  /**
+   * Which of the companion screen's phases a guest's phone is in
+   * (`guest.companion`, 2026-09-27): `intro` — the pulsing DIM — until they
+   * reach `introUntil`; `closing` once they reach `closingRoom`; `show` in
+   * between. Reached means stood in it, or got to its stage or beyond, so a
+   * phone that skipped the room itself still moves on. Null in a show without
+   * a companion block.
+   *
+   * @returns {'intro'|'show'|'closing'|null}
+   */
+  companionPhase(guestId) {
+    const companion = this.def?.guest?.companion;
+    if (!companion) return null;
+    const here = this.guestActors.get(guestId)?.currentRoom()?.roomId ?? null;
+    const furthest = this.furthestStage.get(guestId) ?? 0;
+    const reached = (roomId) => {
+      if (!roomId) return false;
+      if (here === roomId) return true;
+      const stage = this.stageOf(roomId);
+      return stage != null && furthest >= stage;
+    };
+    if (reached(companion.closingRoom)) return 'closing';
+    if (companion.introUntil && !reached(companion.introUntil)) return 'intro';
+    return 'show';
+  }
+
   /** A reading the way through rules out: logged once until it changes. */
   refuseReading(guestId, roomId, move) {
     if (this.lastRefused.get(guestId) === roomId) return;

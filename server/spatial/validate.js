@@ -731,6 +731,21 @@ function checkGuest(guest, rooms, errors, warnings) {
 
   // How the handset is worn (2026-09-26): hung upside down on a lanyard, the
   // glass's top is the guest's bottom.
+  // The phone's companion screen (2026-09-27): the DIM intro until a guest
+  // reaches introUntil, the closing screen from closingRoom.
+  if (guest.companion !== undefined) {
+    if (!isObject(guest.companion)) {
+      errors.push('guest.companion must be an object');
+    } else {
+      for (const key of ['introUntil', 'closingRoom']) {
+        const roomId = guest.companion[key];
+        if (roomId !== undefined && (typeof roomId !== 'string' || !rooms?.[roomId])) {
+          errors.push(`guest.companion.${key} must name a room`);
+        }
+      }
+    }
+  }
+
   if (guest.input !== undefined) {
     if (!isObject(guest.input)) {
       errors.push('guest.input must be an object');

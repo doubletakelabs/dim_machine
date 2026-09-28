@@ -4,6 +4,7 @@
 'use strict';
 
 import { createGestureRecogniser, createRepeatGuard } from './gestures.js';
+import { createCompanion } from './companion.js';
 import { createClock } from './clock-sync.js';
 import { planAudio } from './cue-plan.js';
 import {
@@ -191,14 +192,13 @@ function busFor(slot) {
 }
 
 // ---------------------------------------------------------------------------
-// Volume — the button in the bottom-right corner
+// Volume — the slider on the companion screen (companion.js)
 //
 // In the app the slider is the phone's own media volume, through the bridge:
 // the only way a guest can turn it *up*. In a browser, or an app without the
 // bridge call, it is a master gain every sound goes through, which can only
-// turn it down. Hides itself a few seconds after the last touch.
+// turn it down.
 // ---------------------------------------------------------------------------
-const VOLUME_HIDE_MS = 4000;
 let master = null;             // GainNode between everything and the speakers
 let pageVolume = 1;            // the master gain's level, 0..1, without the app
 
@@ -231,28 +231,22 @@ function setVolume(level) {
   if (video) video.volume = v;
 }
 
-function enableVolume() {
-  const box = $('volume');
-  const slider = $('volumeSlider');
-  let hideTimer = null;
-  const hideLater = () => {
-    clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => box.classList.remove('open'), VOLUME_HIDE_MS);
-  };
-  $('volumeBtn').addEventListener('click', () => {
-    if (box.classList.toggle('open')) {
-      slider.value = String(Math.round(readVolume() * 100));
-      hideLater();
-    } else {
-      clearTimeout(hideTimer);
-    }
-  });
-  // While a finger is on it, it stays; the clock restarts from the last move.
-  slider.addEventListener('input', () => { setVolume(Number(slider.value) / 100); hideLater(); });
-  slider.addEventListener('pointerdown', () => clearTimeout(hideTimer));
-  slider.addEventListener('pointerup', hideLater);
-}
-enableVolume();
+// ---------------------------------------------------------------------------
+// The companion screen: word, colour, and — held up — telemetry, help and
+// volume (companion.js). The debug readouts (the status bar here, the app's
+// own strip and Reset) hide in the app until a 3 s hold in the corner.
+// ---------------------------------------------------------------------------
+if (nativeApp) document.documentElement.classList.add('native');
+const companion = createCompanion({
+  root: $('companion'),
+  readVolume,
+  setVolume,
+  onDebug: (on) => {
+    document.documentElement.classList.toggle('debug', on);
+    tellNative('setDebugVisible', on);
+  },
+});
+window.DIM.companion = companion; // for the console and the harness
 
 /** Bring the layer bus in line with who is speaking. Safe to call anytime. */
 function applyDuck() {
@@ -712,7 +706,8 @@ let inputMode = 'gestures';
  * phone is worn. Left and right are unchanged.
  */
 let mirrorY = false;
-const touchY = (y) => (mirrorY ? innerHeight - y : y);
+// Only while it hangs: held up to read, the screen is the right way round.
+const touchY = (y) => (mirrorY && companion.hanging ? innerHeight - y : y);
 let experience = null;   // { ws, endpoint, driverId, hue, accepts }
 
 const repeatGuard = createRepeatGuard();
@@ -756,7 +751,7 @@ function enableGestures() {
   // through the stage — which made the listener deaf at exactly the moment a
   // tap matters. Anything that fills the screen from now on has the same shape,
   // so the listener belongs above all of them.
-  const control = (e) => e.target?.closest?.('button, a, input, select, textarea, #volume');
+  const control = (e) => e.target?.closest?.('button, a, input, select, textarea, .cmp-control');
 
   document.addEventListener('touchstart', (e) => {
     if (control(e)) return;
@@ -1133,8 +1128,13 @@ function connect() {
         const select = $('roomPick');
         const roomId = msg.state === 'outside' ? '' : String(msg.state).split(' ')[0];
         if (select && document.activeElement !== select) select.value = roomId;
+        if ('phase' in msg) companion.setPhase(msg.phase);
         break;
       }
+      case 'word':
+        // Walked into a room with a word: every time, a return included.
+        companion.showWord(msg.word);
+        break;
       case 'cue':
         if (joined) runCue(msg.cue);
         break;
@@ -1174,6 +1174,8 @@ function connect() {
 async function applySnapshot(snap) {
   lastState = snap.state;
   $('stateName').textContent = snap.state ?? '';
+  companion.setPhase(snap.phase);
+  companion.setLastWord(snap.lastWord);
   if (!joined) { pendingSnapshot = snap; return; }
   await preload(assetList);
   await restoreFromSnapshot(snap);
@@ -1187,6 +1189,7 @@ function restoreFromSnapshot(snap) {
 }
 
 function setConn(ok) {
+  companion.setConnected(ok);
   $('connDot').className = 'dot' + (ok ? ' ok' : '');
   $('connText').textContent = ok ? 'connected' : 'reconnecting';
   tellNative('onConnection', ok);

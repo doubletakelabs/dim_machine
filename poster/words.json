@@ -1,0 +1,120 @@
+{
+  "about": [
+    "The receipt poster's words (from Lance's poster_words.json, restructured 2026-09-27).",
+    "rooms: keyed by the show's room ids (shows/MAD-DIM.json). Each room gives every guest the same word; a return gives nothing new.",
+    "roles: which templates the word can go in (noun, verb, adj, quant); plural makes {IS} read 'are'.",
+    "poster.templates: one line per saved word; two nouns visited one after the other may share a noun_pair line (pairChance). The lines are then shuffled.",
+    "In a template: {W} / {W1} {W2} are room words, {IS} / {IS1} {IS2} is/are to match them, and every other {slot} is filler from the category poster.slots names.",
+    "categories: filler only. Room words are left out of them, so no room's word is ever filler."
+  ],
+  "rooms": {
+    "calibration": { "word": "FOCUS", "roles": ["noun", "verb"] },
+    "maskRoom": { "word": "MASK", "roles": ["noun", "verb"] },
+    "hallOfHeroes": { "word": "HERO", "roles": ["noun"] },
+    "cyclorama": { "word": "COOL", "roles": ["adj"] },
+    "consumption1": { "word": "LIES", "roles": ["noun"], "plural": true },
+    "automation": { "word": "PISS", "roles": ["noun"] },
+    "slop": { "word": "SLOP", "roles": ["noun"] },
+    "saas": { "word": "TEETH", "roles": ["noun"], "plural": true },
+    "influence": { "word": "VIBES", "roles": ["noun"], "plural": true },
+    "kin": { "word": "PREY", "roles": ["noun", "verb"] },
+    "consumption2": { "word": "EAT", "roles": ["verb"] },
+    "faerie": { "word": "MORE", "roles": ["quant"] },
+    "consumption3": { "word": "POWER", "roles": ["noun", "verb"] },
+    "dataCenter": { "word": "STRESS", "roles": ["noun", "verb"] },
+    "controlRoom": { "word": "FUN", "roles": ["noun", "adj"] },
+    "warehouse": { "word": "WORKER", "roles": ["noun"] }
+  },
+  "poster": {
+    "minWords": 4,
+    "pairChance": 0.35,
+    "slots": {
+      "sym": "symbols",
+      "desc": "descriptive",
+      "prep": "prepositions",
+      "sv": "slop_verbs",
+      "sn": "slop_nouns",
+      "concept": "concepts",
+      "verb": "verbs"
+    },
+    "templates": {
+      "noun": [
+        "{sv} the {W}.", "In a world of {W}, be the {sym}.", "Your {W} {IS} your {sn}.",
+        "{W} {IS} not a destination — it's a {sn}.", "Every {sym} begins with {W}.",
+        "{sv} your inner {W}.", "Find your {W} {prep} the {sym}.",
+        "The {sym} does not fear {W}. Neither should you.", "{W} {IS} just {sn} waiting to {verb}."
+      ],
+      "noun_pair": [
+        "Where there {IS1} {W1}, there {IS2} {W2}.", "It's not about {W1}. It's about {W2}.",
+        "{W1} {prep} {W2}. {sv} both.", "{W1} {IS1} temporary. {W2} {IS2} forever.",
+        "Trade your {W1} for {W2}."
+      ],
+      "verb": [
+        "{W} {prep} the {sym}.", "Dream. {W}. Repeat.", "{W} like nobody is watching.",
+        "Those who {W} will {verb}.", "{W} today. {verb} tomorrow."
+      ],
+      "adj": [
+        "Stay {W}. Stay {desc}.", "Be {W} {prep} the {sym}.", "{desc} hearts stay {W}.",
+        "The {sym} is always {W} to those who {verb}."
+      ],
+      "quant": [
+        "Less {concept}. {W} {sn}.", "Always choose {W}.", "{W} {sym}. {W} {sn}. {W} you.",
+        "You deserve {W}."
+      ]
+    }
+  },
+  "categories": {
+    "articles": ["A", "AN", "THE"],
+    "prepositions": [
+      "ABOUT", "ABOVE", "ACROSS", "AFTER", "AGAINST", "ALONG", "AMONG", "AROUND", "AT", "BEFORE",
+      "BEHIND", "BELOW", "BENEATH", "BESIDE", "BETWEEN", "BEYOND", "BY", "DESPITE", "DOWN", "DURING",
+      "FOR", "FROM", "IN", "INSIDE", "INTO", "LIKE", "NEAR", "OF", "OFF", "ON", "ONTO", "OUT",
+      "OUTSIDE", "OVER", "PAST", "THROUGH", "THROUGHOUT", "TO", "TOWARD", "UNDER", "UNTIL", "UP",
+      "UPON", "WITH", "WITHIN", "WITHOUT"
+    ],
+    "conjunctions": ["AND", "AS", "BECAUSE", "BUT", "IF", "NOR", "OR", "SO", "THAN", "UNLESS", "WHEN", "WHILE", "YET"],
+    "pronouns": [
+      "EVERYONE", "EVERYTHING", "I", "IT", "ME", "MY", "NOTHING", "OUR", "SOMETHING", "THEM", "THEY",
+      "US", "WE", "YOU", "YOUR"
+    ],
+    "descriptive": [
+      "BEST", "BETTER", "BOLD", "BRAVE", "BRIGHT", "CALM", "FEARLESS", "FIERCE", "FREE", "GOOD",
+      "GREAT", "HAPPY", "HUMBLE", "HUNGRY", "KIND", "LIMITLESS", "POSITIVE", "PURE", "REAL",
+      "RELENTLESS", "STRONG", "TRUE", "UNSTOPPABLE", "WILD", "WISE"
+    ],
+    "quantifiers_and_intensifiers": [
+      "AGAIN", "ALL", "ALWAYS", "ENOUGH", "EVEN", "EVERY", "JUST", "LESS", "MOST", "NEVER", "NO",
+      "ONLY", "STILL", "VERY"
+    ],
+    "time": ["DAILY", "FOREVER", "NOW", "ONCE", "SOON", "TODAY", "TOMORROW", "TONIGHT"],
+    "symbols": [
+      "ANCHOR", "BRIDGE", "BUTTERFLY", "COMPASS", "CROWN", "DOOR", "EAGLE", "EYES", "FIRE", "FIST",
+      "FLAME", "FLOWER", "HEART", "HORIZON", "KEY", "LADDER", "LIGHT", "LION", "LOTUS", "MOON",
+      "MOUNTAIN", "OCEAN", "PATH", "PEAK", "RAINBOW", "RIVER", "ROAD", "ROOTS", "SEED", "SHARK",
+      "SHIELD", "SKY", "STAR", "STARS", "STORM", "SUMMIT", "SUN", "SUNRISE", "SUNSET", "TREE",
+      "WAVE", "WOLF"
+    ],
+    "concepts": [
+      "BALANCE", "COURAGE", "DISCIPLINE", "DREAMS", "ENERGY", "FAITH", "FREEDOM", "GROWTH", "HOPE",
+      "LOVE", "PASSION", "PEACE", "PERSISTENCE", "PURPOSE", "STRENGTH", "SUCCESS", "TEAMWORK",
+      "TRUTH", "VISION"
+    ],
+    "roles": [
+      "BELIEVER", "BOSS", "CHAMPION", "CREW", "DREAMER", "HUNTER", "LEADER", "LEGEND", "PREDATOR",
+      "TEAM", "VILLAIN", "WARRIOR", "WINNER"
+    ],
+    "verbs": [
+      "ACHIEVE", "BELIEVE", "BITE", "CLIMB", "CREATE", "DREAM", "GRIND", "HUNT", "HUSTLE", "LEAD",
+      "LEARN", "PUSH", "RISE", "SHINE", "START", "WIN", "WORK"
+    ],
+    "irreverent": [],
+    "slop_verbs": [
+      "CULTIVATE", "ELEVATE", "EMBRACE", "EMPOWER", "HARNESS", "IGNITE", "MANIFEST", "NAVIGATE",
+      "UNLEASH", "UNLOCK"
+    ],
+    "slop_nouns": [
+      "ABUNDANCE", "DESTINY", "ESSENCE", "GREATNESS", "JOURNEY", "LEGACY", "MINDSET", "POTENTIAL",
+      "SYNERGY", "TAPESTRY"
+    ]
+  }
+}
