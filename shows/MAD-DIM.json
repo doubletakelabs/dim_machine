@@ -792,38 +792,10 @@
             "initial": "base",
             "on": {
               "RELEASE": "idle",
-              "TRACK_STOP": ".base",
-              "TRACK_1": ".track1",
-              "TRACK_2": ".track2",
-              "TRACK_3": ".track3",
-              "TRACK_4": ".track4",
-              "TRACK_5": ".track5",
-              "TRACK_6": ".track6",
-              "TRACK_7": ".track7",
-              "TRACK_8": ".track8",
-              "TRACK_9": ".track9",
-              "TRACK_10": ".track10",
-              "TRACK_11": ".track11",
-              "TRACK_12": ".track12",
-              "TRACK_13": ".track13",
-              "TRACK_14": ".track14"
+              "TRACK_STOP": ".base"
             },
             "states": {
-              "base": {},
-              "track1": {},
-              "track2": {},
-              "track3": {},
-              "track4": {},
-              "track5": {},
-              "track6": {},
-              "track7": {},
-              "track8": {},
-              "track9": {},
-              "track10": {},
-              "track11": {},
-              "track12": {},
-              "track13": {},
-              "track14": {}
+              "base": {}
             }
           }
         }
@@ -862,91 +834,10 @@
         "audio": "audio/bg/0901_SLOP.mp3",
         "crossfadeMs": 1000
       },
-      "cues": {
-        "active.track1": {
-          "bg": {
-            "audio": "audio/bg/slop/01slop_song.mp3",
-            "crossfadeMs": 0
-          }
-        },
-        "active.track2": {
-          "bg": {
-            "audio": "audio/bg/slop/02slop_song.mp3",
-            "crossfadeMs": 0
-          }
-        },
-        "active.track3": {
-          "bg": {
-            "audio": "audio/bg/slop/03slop_song.mp3",
-            "crossfadeMs": 0
-          }
-        },
-        "active.track4": {
-          "bg": {
-            "audio": "audio/bg/slop/04slop_song.mp3",
-            "crossfadeMs": 0
-          }
-        },
-        "active.track5": {
-          "bg": {
-            "audio": "audio/bg/slop/05slop_song.mp3",
-            "crossfadeMs": 0
-          }
-        },
-        "active.track6": {
-          "bg": {
-            "audio": "audio/bg/slop/06slop_song.mp3",
-            "crossfadeMs": 0
-          }
-        },
-        "active.track7": {
-          "bg": {
-            "audio": "audio/bg/slop/07slop_song.mp3",
-            "crossfadeMs": 0
-          }
-        },
-        "active.track8": {
-          "bg": {
-            "audio": "audio/bg/slop/08slop_song.mp3",
-            "crossfadeMs": 0
-          }
-        },
-        "active.track9": {
-          "bg": {
-            "audio": "audio/bg/slop/09slop_song.mp3",
-            "crossfadeMs": 0
-          }
-        },
-        "active.track10": {
-          "bg": {
-            "audio": "audio/bg/slop/11slop_song.mp3",
-            "crossfadeMs": 0
-          }
-        },
-        "active.track11": {
-          "bg": {
-            "audio": "audio/bg/slop/12slop_song.mp3",
-            "crossfadeMs": 0
-          }
-        },
-        "active.track12": {
-          "bg": {
-            "audio": "audio/bg/slop/13slop_song.mp3",
-            "crossfadeMs": 0
-          }
-        },
-        "active.track13": {
-          "bg": {
-            "audio": "audio/bg/slop/14slop_song.mp3",
-            "crossfadeMs": 0
-          }
-        },
-        "active.track14": {
-          "bg": {
-            "audio": "audio/bg/slop/15slop_song.mp3",
-            "crossfadeMs": 0
-          }
-        }
+      "tracks": {
+        "folder": "audio/bg/slop",
+        "in": "active",
+        "crossfadeMs": 0
       }
     },
     "kin": {

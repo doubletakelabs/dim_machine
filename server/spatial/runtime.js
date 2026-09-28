@@ -1499,11 +1499,15 @@ export class SpatialRuntime {
       const previous = this._roomStateWas.get(roomId);
       this._roomStateWas.set(roomId, state);
 
+      // A room whose songs come from a folder (rooms.<id>.tracks) tells its
+      // piece how many there are and how long each runs.
+      const tracks = this.def?.rooms?.[roomId]?.tracks?.list;
       link.reconcile({
         lifecycle: this.experienceLifecycle(roomId),
         drivers: this.experienceDrivers(roomId).map(({ driverId, hue, secret }) => ({
           driverId, hue, secret,
         })),
+        ...(Array.isArray(tracks) ? { tracks: tracks.map(({ n, seconds }) => ({ n, seconds })) } : {}),
       });
 
       // The room has come back to rest, so whatever the last guest built should

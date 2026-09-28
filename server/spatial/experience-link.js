@@ -90,12 +90,17 @@ export class ExperienceLink {
    * What the experience should believe right now. Idempotent: sending the same
    * thing twice puts nothing on the wire.
    *
-   * @param {{ lifecycle: string, drivers: Array<object> }} desired
+   * `tracks` is for a room that plays songs from a folder (Slop): each song's
+   * number and length, so the piece rotates through however many there are.
+   * Left out for every other room, which then hears nothing about tracks.
+   *
+   * @param {{ lifecycle: string, drivers: Array<object>, tracks?: Array<{ n: number, seconds: number|null }> }} desired
    */
   reconcile(desired) {
     this._desired = {
       lifecycle: EXPERIENCE_LIFECYCLE.includes(desired.lifecycle) ? desired.lifecycle : 'attract',
       drivers: desired.drivers ?? [],
+      ...(Array.isArray(desired.tracks) ? { tracks: desired.tracks } : {}),
     };
     this._flush();
   }
@@ -123,6 +128,7 @@ export class ExperienceLink {
     if (this.state !== 'ready') return;
     this._sendIfChanged('lifecycle', { t: 'lifecycle', state: this._desired.lifecycle });
     this._sendIfChanged('drivers', { t: 'drivers', drivers: this._desired.drivers });
+    if (this._desired.tracks) this._sendIfChanged('tracks', { t: 'tracks', tracks: this._desired.tracks });
   }
 
   _sendIfChanged(key, message) {

@@ -310,6 +310,42 @@ describe('the link to a room experience', () => {
   });
 });
 
+describe('telling a piece its tracks (rooms.<id>.tracks)', () => {
+  // What track-folders.js leaves on a room once it has read the folder.
+  const withTracks = (show) => {
+    show.rooms.influence.tracks = {
+      folder: 'audio/bg/test',
+      list: [
+        { n: 1, audio: 'audio/bg/test/01.mp3', seconds: 29.39 },
+        { n: 2, audio: 'audio/bg/test/02.mp3', seconds: null },
+      ],
+    };
+  };
+
+  it('says how many there are and how long each runs, when the link comes up', () => {
+    const { server } = makeRuntime({ mutate: withTracks });
+    assert.deepEqual(server.latest().last('tracks').tracks, [
+      { n: 1, seconds: 29.39 },
+      { n: 2, seconds: null },
+    ], 'numbers and lengths only; where the files live is the phones\' business');
+  });
+
+  it('says it once, and again to a piece that reconnects', () => {
+    const { rt, server } = makeRuntime({ mutate: withTracks });
+    for (let i = 0; i < 5; i++) rt.notifyChange();
+    assert.equal(server.latest().of('tracks').length, 1);
+    server.latest().drop();
+    rt.testAdvanceTime(2000);
+    server.latest().accept();
+    assert.equal(server.latest().of('tracks').length, 1, 'a power-cycled piece hears it first thing');
+  });
+
+  it('tells a room without tracks nothing about them', () => {
+    const { server } = makeRuntime();
+    assert.equal(server.latest().last('tracks'), null);
+  });
+});
+
 describe('handing a phone to an experience', () => {
   const experienceCues = (cues) => cues.filter((c) => c.kind === 'experience');
 

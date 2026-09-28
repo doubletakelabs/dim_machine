@@ -10,6 +10,8 @@ import { dirname, join, basename, resolve, sep } from 'node:path';
 import { SpatialRuntime, validateShowDefinition, ScaledClock } from './spatial/index.js';
 import { applyInstallation } from './spatial/installation.js';
 import { resolveAudioNames } from './asset-names.js';
+import { expandTrackFolders } from './track-folders.js';
+import { execFileSync } from 'node:child_process';
 import * as relay from './relay.js';
 
 // Not 4000: dim_central (the deploy dashboard) runs there on the same machine.
@@ -430,6 +432,45 @@ function currentAssets() {
  */
 const assetOnDisk = (asset) => existsSync(join(assetsDir, asset));
 
+/** A folder's file names, under public/assets; null if there is no such folder. */
+function listAssetFolder(folder) {
+  const dir = join(assetsDir, folder);
+  if (!dir.startsWith(assetsDir + sep)) return null; // stays inside the assets
+  try {
+    return readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * An audio file's length in seconds, by ffprobe, or null without it. Kept per
+ * file and size, so reloading a show does not measure every song again.
+ */
+const measured = new Map();
+function audioSeconds(asset) {
+  const path = join(assetsDir, asset);
+  let key;
+  try {
+    const st = statSync(path);
+    key = `${path}:${st.size}:${st.mtimeMs}`;
+  } catch {
+    return null;
+  }
+  if (!measured.has(key)) {
+    let seconds = null;
+    try {
+      const out = execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path], {
+        encoding: 'utf8', timeout: 5000, env: { ...process.env, PATH: `${process.env.PATH ?? ''}:/usr/local/bin:/opt/homebrew/bin` },
+      });
+      const n = Number.parseFloat(out);
+      seconds = Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+    } catch { /* no ffprobe here: the piece falls back to its own lengths */ }
+    measured.set(key, seconds);
+  }
+  return measured.get(key);
+}
+
 function missingAssets() {
   return currentAssets().filter((asset) => !assetOnDisk(asset));
 }
@@ -496,6 +537,13 @@ function loadShow(file) {
   for (const w of placed.warnings) opLog(`⚠ ${w}`);
   if (placed.errors.length) return;
   notInstalled = placed.notInstalled;
+
+  // A room's songs, read from its folder (rooms.<id>.tracks): whatever is in
+  // it now is in the rotation.
+  const tracks = expandTrackFolders(def, { list: listAssetFolder, seconds: audioSeconds });
+  def = tracks.def;
+  for (const note of tracks.notes) opLog(note);
+  for (const problem of tracks.problems) opLog(`⚠ ${problem}`);
 
   // A clip named .mp3 plays the .m4a on disk, and the other way round.
   const audio = resolveAudioNames(def, assetOnDisk);

@@ -207,6 +207,15 @@ function checkLayers(def, errors) {
   };
   for (const [roomId, room] of Object.entries(def.rooms ?? {})) {
     if (room?.bg != null) layer(room.bg, `rooms.${roomId}.bg`);
+    // Songs from a folder (server/track-folders.js), built into states at load.
+    const tracks = room?.tracks;
+    if (tracks == null) continue;
+    const at = `rooms.${roomId}.tracks`;
+    if (!isObject(tracks) || typeof tracks.folder !== 'string' || !tracks.folder) {
+      errors.push(`${at} must be { "folder": ..., "in": ..., "crossfadeMs": ... }`);
+    } else if (tracks.crossfadeMs != null && !(typeof tracks.crossfadeMs === 'number' && tracks.crossfadeMs >= 0)) {
+      errors.push(`${at}.crossfadeMs must be a non-negative number of milliseconds`);
+    }
   }
   for (const [key, cue] of Object.entries(isObject(def.guest?.cues) ? def.guest.cues : {})) {
     if (cue?.bg != null) layer(cue.bg, `guest.cues["${key}"].bg`);
