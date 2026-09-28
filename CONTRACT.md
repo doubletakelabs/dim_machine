@@ -33,7 +33,7 @@ Decided on site at MAD, in one day; each is written into its section.
   their own timeline unless the room says `together`.
 - **A room's piece can move its room on (§8.1).** `{ "t": "event", "name" }`
   on the experience link goes to the room's statechart; a new state is a new
-  clip for everyone inside. Slop sends `TRACK_1`, `TRACK_2` and `TRACK_STOP`
+  clip for everyone inside. Slop sends `TRACK_1` … `TRACK_14` and `TRACK_STOP`
   from its track player (dim_rooms `08_slop/ROOM-NOTES.md`); its address is in
   `installations/mad.json`.
 - **A room state can swap the room's background (§8.1).** `bg` on a room cue
@@ -934,9 +934,10 @@ A room cue may also carry `bg` — a layer, like `rooms.<id>.bg` — which
 replaces the room's background while the room is in that state, crossfading
 over its `crossfadeMs`; leaving the state brings the room's own back. In a
 `together` room it starts at the state's own moment, so everyone inside hears
-it in step and a late arrival joins partway. Slop (2026-09-27): its track
-player sends `TRACK_1` / `TRACK_2` / `TRACK_STOP`, and `active.track1` and
-`active.track2` each name a track (`audio/bg/slop/…`) as their `bg`.
+it in step and a late arrival joins partway. Slop (2026-09-28): its track
+player sends `TRACK_1` … `TRACK_14` / `TRACK_STOP`, each selection the next
+track in turn and back to 1 after 14; `active.track1` … `active.track14` each
+name a track (`audio/bg/slop/01slop_song.mp3` …) as their `bg`, in file order.
 
 A fourth slot, `screen`, holds an image rather than a sound — a phone has one
 screen, so the sources compete for it instead of mixing. Guidance takes it first,
