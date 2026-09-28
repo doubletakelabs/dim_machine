@@ -247,6 +247,8 @@ const companion = createCompanion({
   },
 });
 window.DIM.companion = companion; // for the console and the harness
+// The app's accelerometer, a few times a second: which way up the phone is.
+window.DIM.onGravity = (y) => companion.gravity(Number(y));
 
 /** Bring the layer bus in line with who is speaking. Safe to call anytime. */
 function applyDuck() {

@@ -10,8 +10,8 @@
  *   4.2 s.
  * - **Held** (the wearer lifts it to look): the page turns back, the colour
  *   stops cycling where it is, and the telemetry, help and volume fade in.
- *   A browser with no motion sensor is always held (`?hanging=1` to try the
- *   other).
+ *   Which way up comes from the app's own sensor (`DIM.onGravity`); a browser
+ *   with none is always held (`?hanging=1` to try the other).
  *
  * Phases, from the show (`guest.companion`, sent as `phase`): `intro` — the
  * pulsing DIM, through calibration until the Entrance Hallway; `show` — idle
@@ -187,16 +187,20 @@ export function createCompanion({ root, readVolume, setVolume, onDebug }) {
 
   let candidate = null;
   let candidateSince = 0;
-  addEventListener('devicemotion', (e) => {
-    const y = e.accelerationIncludingGravity?.y;
-    if (typeof y !== 'number') return;
-    // Upright: gravity along +y. Hanging by the lanyard, top down: along −y.
+  /**
+   * Gravity along the phone's length, m/s²: upright it is about +9.8, hanging
+   * top down about −9.8. From the app (`DIM.onGravity`), because Chrome gives a
+   * page on plain http no motion sensor; from `devicemotion` where it does.
+   */
+  function gravity(y) {
+    if (typeof y !== 'number' || !Number.isFinite(y)) return;
     const want = y < -TURN_GRAVITY ? true : y > TURN_GRAVITY ? false : null;
     if (want === null || want === hanging) { candidate = null; return; }
     const now = performance.now();
     if (candidate !== want) { candidate = want; candidateSince = now; return; }
     if (now - candidateSince >= TURN_SETTLE_MS) { candidate = null; setHanging(want); }
-  });
+  }
+  addEventListener('devicemotion', (e) => gravity(e.accelerationIncludingGravity?.y));
   html.classList.toggle('cmp-hanging', hanging);
 
   // ------------------------------------------------------------- help
@@ -276,5 +280,6 @@ export function createCompanion({ root, readVolume, setVolume, onDebug }) {
     /** The last word, from a reconnect's snapshot: idle shows it, nothing pops. */
     setLastWord(word) { if (word) { lastWord = String(word).toUpperCase(); if (view === 'idle') rest(); } },
     get hanging() { return hanging; },
+    gravity,
   };
 }
