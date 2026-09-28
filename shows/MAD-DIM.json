@@ -1386,7 +1386,7 @@
       },
       "cues": {
         "active": {
-          "audio": "audio/guidance/1902-warehouse.mp3"
+          "audio": "audio/guidance/1901-warehouse.mp3"
         }
       },
       "bg": "audio/bg/1901_WAREHOUSE_5MIN.mp3"
@@ -1673,7 +1673,12 @@
       "thresholds": {
         "library-door": {}
       },
-      "bg": "audio/bg/2401_LIBRARY.mp3"
+      "bg": "audio/bg/2401_LIBRARY.mp3",
+      "cues": {
+        "active": {
+          "audio": "audio/guidance/2401-library_receipt.mp3"
+        }
+      }
     },
     "westHallway": {
       "name": "West Hallway",
@@ -1918,6 +1923,9 @@
       },
       "influence": {
         "inRoom": "audio/guidance/1201-Influence.mp3"
+      },
+      "kin": {
+        "inRoom": "audio/guidance/1101-kin.mp3"
       }
     }
   },
