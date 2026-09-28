@@ -856,6 +856,29 @@ describe('saving zones', () => {
     assert.equal(after.rooms.cyclorama.cues, undefined);
   });
 
+  it('saves a room\'s background for the rooms named, and only those', async () => {
+    const before = await onDisk();
+    const post = (body) => fetch(`${server.url}/api/shows/MAD-DIM.json/zones`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ zones: {}, ...body }),
+    });
+    let res = await post({ bg: { cyclorama: 'whisper.wav', kin: { audio: 'ambient.wav', crossfadeMs: 3000 } } });
+    assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+    let after = await onDisk();
+    assert.equal(after.rooms.cyclorama.bg, 'whisper.wav');
+    assert.deepEqual(after.rooms.kin.bg, { audio: 'ambient.wav', crossfadeMs: 3000 }, 'its own crossfade kept');
+    assert.deepEqual(after.rooms.saas.bg, before.rooms.saas.bg, 'rooms not named keep theirs');
+
+    res = await post({ bg: { cyclorama: null } });
+    assert.equal(res.status, 200);
+    after = await onDisk();
+    assert.equal(after.rooms.cyclorama.bg, undefined, 'null removes it');
+
+    res = await post({ bg: { kin: 5 } });
+    assert.equal(res.status, 400, 'a bg that is not a file is refused');
+  });
+
   it('refuses clips for a room that is not a museum room', async () => {
     const res = await fetch(`${server.url}/api/shows/MAD-DIM.json/zones`, {
       method: 'POST',

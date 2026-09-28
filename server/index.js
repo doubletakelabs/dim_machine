@@ -212,10 +212,13 @@ app.post('/api/shows/:file/zones', (req, res) => {
   const thresholds = req.body?.thresholds ?? {};
   const cues = req.body?.cues ?? {};
   const roomStems = req.body?.roomStems ?? {};
+  // A room's background (rooms.<id>.bg), for the rooms the editor names:
+  // a file name, { audio, … }, or null to remove it.
+  const bg = req.body?.bg ?? {};
   const hasPhone = req.body != null && Object.prototype.hasOwnProperty.call(req.body, 'phone');
   const phone = req.body?.phone ?? null;
   const isMap = (v) => v && typeof v === 'object' && !Array.isArray(v);
-  if (!isMap(zones) || !isMap(thresholds) || !isMap(cues) || !isMap(roomStems) || (beacons != null && !isMap(beacons)) || (phone != null && !isMap(phone))) {
+  if (!isMap(zones) || !isMap(thresholds) || !isMap(cues) || !isMap(roomStems) || !isMap(bg) || (beacons != null && !isMap(beacons)) || (phone != null && !isMap(phone))) {
     return res.status(400).json({
       error: 'body must be { zones: { roomId: { zoneId: { polygon, ble? } } }, thresholds?: { roomId: {…} }, roomStems?: { roomId: {…} } }',
     });
@@ -228,7 +231,7 @@ app.post('/api/shows/:file/zones', (req, res) => {
   }
   // A room the disk copy does not have is a stale editor talking about a world
   // that moved — exactly the situation this route exists to refuse loudly.
-  const named = new Set([...Object.keys(zones), ...Object.keys(thresholds), ...Object.keys(cues), ...Object.keys(roomStems)]);
+  const named = new Set([...Object.keys(zones), ...Object.keys(thresholds), ...Object.keys(cues), ...Object.keys(roomStems), ...Object.keys(bg)]);
   const unknown = [...named].filter((roomId) => !def.rooms?.[roomId]);
   if (unknown.length) {
     return res.status(400).json({ error: `rooms not in the show on disk: ${unknown.join(', ')} — reload the editor` });
@@ -252,6 +255,10 @@ app.post('/api/shows/:file/zones', (req, res) => {
   for (const [roomId, doors] of Object.entries(thresholds)) {
     if (empty(doors)) delete def.rooms[roomId].thresholds;
     else def.rooms[roomId].thresholds = doors;
+  }
+  for (const [roomId, layer] of Object.entries(bg)) {
+    if (layer == null || layer === '') delete def.rooms[roomId].bg;
+    else def.rooms[roomId].bg = layer;
   }
   // A room's own audio, by state (§8.1), for the rooms the editor names.
   for (const [roomId, roomCues] of Object.entries(cues)) {
