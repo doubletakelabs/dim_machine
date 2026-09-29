@@ -64,7 +64,12 @@
         "dwellMs": 8000,
         "accumulate": true
       },
-      "bg": "audio/bg/0101_PRECALIBRATION.mp3"
+      "bg": "audio/bg/0101_PRECALIBRATION.mp3",
+      "cues": {
+        "active": {
+          "audio": "audio/guidance/1-precalibration.mp3"
+        }
+      }
     },
     "calibration": {
       "name": "Calibration",
@@ -168,7 +173,7 @@
       },
       "cues": {
         "idle": {
-          "audio": "audio/guidance/0201-entry_hall.mp3"
+          "audio": "audio/guidance/2-entry_hall.mp3"
         }
       },
       "bg": "audio/bg/0301-02_MASK_SEQUENCE_5MIN.mp3"
@@ -233,11 +238,6 @@
       "seen": {
         "dwellMs": 20000,
         "accumulate": true
-      },
-      "cues": {
-        "active": {
-          "audio": "audio/guidance/0301-maskroom.mp3"
-        }
       },
       "thresholds": {
         "maskRoom-door": {}
@@ -326,7 +326,7 @@
       },
       "cues": {
         "active": {
-          "audio": "audio/guidance/0401-hallofheroes_crosstalk.mp3"
+          "audio": "audio/guidance/4-hallofheroes_crosstalk.mp3"
         }
       },
       "bg": "audio/bg/0401_HALL_OF_HEROS.mp3"
@@ -415,7 +415,7 @@
       },
       "cues": {
         "active": {
-          "audio": "audio/guidance/0501-cyc.mp3"
+          "audio": "audio/guidance/5-cyc.mp3"
         }
       },
       "bg": "audio/bg/0501_CYC_WALL.mp3"
@@ -1453,7 +1453,12 @@
       "thresholds": {
         "adminOffice-door": {}
       },
-      "bg": "audio/bg/1701_BACK_OFFICE.mp3"
+      "bg": "audio/bg/1701_BACK_OFFICE.mp3",
+      "cues": {
+        "active": {
+          "audio": "audio/guidance/X-backoffice.mp3"
+        }
+      }
     },
     "dataCenter": {
       "name": "Data Center",
@@ -1517,7 +1522,8 @@
       },
       "cues": {
         "active": {
-          "audio": "audio/guidance/1801-datacenter.mp3"
+          "audio": "audio/guidance/_19-datacenter.mp3",
+          "loop": true
         }
       },
       "bg": "audio/bg/1801_DATACENTER.mp3"
@@ -1676,7 +1682,7 @@
       "bg": "audio/bg/2401_LIBRARY.mp3",
       "cues": {
         "active": {
-          "audio": "audio/guidance/2401-library_receipt.mp3"
+          "audio": "audio/guidance/025-library_receipt.mp3"
         }
       }
     },
@@ -1713,7 +1719,12 @@
       "thresholds": {
         "westHallway-door": {}
       },
-      "bg": "audio/bg/0102_CALIBRATION1.mp3"
+      "bg": "audio/bg/0102_CALIBRATION1.mp3",
+      "cues": {
+        "idle": {
+          "audio": "audio/guidance/023-west_hallway.mp3"
+        }
+      }
     },
     "griefbot": {
       "name": "Griefbot",
@@ -1771,7 +1782,12 @@
           ]
         }
       },
-      "bg": "audio/bg/0102_CALIBRATION1.mp3"
+      "bg": "audio/bg/0102_CALIBRATION1.mp3",
+      "cues": {
+        "active": {
+          "audio": "audio/guidance/Y-griefbot.mp3"
+        }
+      }
     }
   },
   "guest": {
@@ -1812,7 +1828,8 @@
             "states": {
               "arrive": {
                 "on": {
-                  "entered.calibration": "calibration"
+                  "entered.calibration": "calibration",
+                  "entered.maskRoom": "maskRoom"
                 }
               },
               "calibration": {
@@ -1821,28 +1838,51 @@
                 },
                 "sequence": [
                   {
-                    "audio": "audio/guidance/0102-calibration1.mp3",
+                    "audio": "audio/guidance/1A-calibration1.mp3",
                     "advance": "tap",
                     "bg": "audio/bg/0102_CALIBRATION1.mp3"
                   },
                   {
-                    "audio": "audio/guidance/0103-calibration2.mp3",
+                    "audio": "audio/guidance/1B-calibration2.mp3",
                     "advance": "swipe",
                     "bg": "audio/bg/0103_CALIBRATION2.mp3"
                   },
                   {
-                    "audio": "audio/guidance/0104-calibration3.mp3",
+                    "audio": "audio/guidance/1C-calibration3.mp3",
                     "advance": "drag",
                     "bg": "audio/bg/0104_CALIBRATION3.mp3"
                   },
                   {
-                    "audio": "audio/guidance/0105-calibration4.mp3",
+                    "audio": "audio/guidance/1D-calibration4.mp3",
                     "advance": "none",
                     "bg": "audio/bg/0105_CALIBRATION4.mp3"
                   }
                 ]
               },
-              "done": {}
+              "done": {
+                "on": {
+                  "entered.maskRoom": "maskRoom"
+                }
+              },
+              "maskRoom": {
+                "initial": "listening",
+                "on": {
+                  "entered.hallOfHeroes": "pastMaskRoom"
+                },
+                "states": {
+                  "listening": {
+                    "on": {
+                      "TAP": "tapped"
+                    },
+                    "after": {
+                      "274640": "heard"
+                    }
+                  },
+                  "tapped": {},
+                  "heard": {}
+                }
+              },
+              "pastMaskRoom": {}
             }
           },
           "museum": {
@@ -1871,6 +1911,12 @@
       },
       "guidance.ending": {
         "audio": "chime.wav"
+      },
+      "guidance.prologue.maskRoom.listening": {
+        "audio": "audio/guidance/3-maskroom.mp3"
+      },
+      "guidance.prologue.maskRoom.tapped": {
+        "audio": "audio/guidance/3A-tap_maskroom.mp3"
       }
     }
   },
@@ -1915,9 +1961,6 @@
     "doneAfterMs": 5000,
     "stems": {},
     "roomStems": {
-      "saas": {
-        "inRoom": "audio/guidance/1001-saas.mp3"
-      },
       "slop": {
         "inRoom": "audio/guidance/0901-slop.mp3"
       },
@@ -1926,6 +1969,15 @@
       },
       "kin": {
         "inRoom": "audio/guidance/1101-kin.mp3"
+      },
+      "consumption1": {
+        "inRoom": "audio/guidance/0801-consumption1.mp3"
+      },
+      "superintelligence": {
+        "inRoom": "audio/guidance/1602-superintelligence.mp3"
+      },
+      "automation": {
+        "inRoom": "audio/guidance/07-piss.mp3"
       }
     }
   },
@@ -1936,7 +1988,7 @@
         716
       ],
       "room": "library",
-      "rssi": -70
+      "rssi": -73
     },
     "24577": {
       "at": [
@@ -1948,8 +2000,8 @@
     },
     "24833": {
       "at": [
-        517,
-        131
+        516,
+        132
       ],
       "room": "cyclorama",
       "rssi": -72
@@ -1961,6 +2013,14 @@
       ],
       "room": "library",
       "rssi": -70
+    },
+    "42752": {
+      "at": [
+        429,
+        682
+      ],
+      "room": "hallOfHeroes",
+      "rssi": -68
     },
     "43008": {
       "at": [
@@ -2016,7 +2076,7 @@
         814
       ],
       "room": "superintelligence",
-      "rssi": -70
+      "rssi": -75
     },
     "46080": {
       "at": [
@@ -2103,7 +2163,7 @@
         398,
         656
       ],
-      "rssi": -76,
+      "rssi": -20,
       "door": "hallOfHeroes-door"
     },
     "48128": {
@@ -2112,12 +2172,12 @@
         656
       ],
       "room": "kin",
-      "rssi": -70
+      "rssi": -77
     },
     "48384": {
       "at": [
-        610,
-        340
+        609,
+        339
       ],
       "rssi": -68,
       "door": "cyclorama-door"
@@ -2127,7 +2187,7 @@
         280,
         828
       ],
-      "rssi": -70,
+      "rssi": -72,
       "door": "controlRoom-door"
     },
     "48896": {
@@ -2148,10 +2208,10 @@
     },
     "49408": {
       "at": [
-        460,
-        725
+        443,
+        737
       ],
-      "rssi": -71,
+      "rssi": -73,
       "door": "faerie-door"
     },
     "49664": {
@@ -2208,14 +2268,14 @@
         631
       ],
       "room": "hallOfHeroes",
-      "rssi": -66
+      "rssi": -50
     },
     "51456": {
       "at": [
         129,
         992
       ],
-      "rssi": -70,
+      "rssi": -74,
       "door": "warehouse-door"
     },
     "51712": {
@@ -2224,7 +2284,7 @@
         1097
       ],
       "room": "warehouse",
-      "rssi": -70
+      "rssi": -74
     },
     "52224": {
       "at": [
@@ -2252,18 +2312,18 @@
     },
     "54016": {
       "at": [
-        365,
-        764
+        359,
+        766
       ],
       "room": "controlRoom",
-      "rssi": -70
+      "rssi": -74
     },
     "54528": {
       "at": [
         190,
         825
       ],
-      "rssi": -70,
+      "rssi": -72,
       "room": "griefbot"
     },
     "55040": {
@@ -2272,23 +2332,23 @@
         1026
       ],
       "room": "adminOffice",
-      "rssi": -70
+      "rssi": -73
     },
     "55296": {
       "at": [
         106,
         734
       ],
-      "rssi": -70,
+      "rssi": -72,
       "door": "library-door"
     },
     "55552": {
       "at": [
         658,
-        668
+        674
       ],
       "room": "kin",
-      "rssi": -70
+      "rssi": -78
     },
     "56320": {
       "at": [
@@ -2304,7 +2364,7 @@
         497
       ],
       "room": "hallOfHeroes",
-      "rssi": -70
+      "rssi": -40
     },
     "56832": {
       "at": [
@@ -2405,15 +2465,15 @@
         772
       ],
       "room": "faerie",
-      "rssi": -71
+      "rssi": -74
     },
     "60416": {
       "at": [
-        421,
-        531
+        419,
+        529
       ],
       "room": "hallOfHeroes",
-      "rssi": -65
+      "rssi": -40
     },
     "60673": {
       "at": [
@@ -2433,11 +2493,11 @@
     },
     "61184": {
       "at": [
-        395,
-        815
+        393,
+        817
       ],
       "room": "superintelligence",
-      "rssi": -60
+      "rssi": -75
     }
   }
 }

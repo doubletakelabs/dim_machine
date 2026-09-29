@@ -122,7 +122,7 @@ describe('expanding a sequence into a machine', () => {
   it('generates the cue for each step, with the bg under it', () => {
     const { def } = expand();
     assert.deepEqual(def.guest.cues['guidance.prologue.calibration.step1'], {
-      audio: 'audio/guidance/0102-calibration1.mp3',
+      audio: 'audio/guidance/1A-calibration1.mp3',
       bg: 'audio/bg/0102_CALIBRATION1.mp3',
     });
   });
@@ -130,7 +130,7 @@ describe('expanding a sequence into a machine', () => {
   it('pairs a screen with its clip when a step has both', () => {
     const { def } = expand((show) => { sequenceOf(show)[0].image = 'img/calibration_01_ontap.png'; });
     assert.deepEqual(def.guest.cues['guidance.prologue.calibration.step1'], {
-      audio: 'audio/guidance/0102-calibration1.mp3',
+      audio: 'audio/guidance/1A-calibration1.mp3',
       image: 'img/calibration_01_ontap.png',
       bg: 'audio/bg/0102_CALIBRATION1.mp3',
     });
@@ -181,7 +181,7 @@ describe('the calibration sequence, running', () => {
 
     walkTo(rt, g.guestId, 'calibration');
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1');
-    assert.deepEqual(heard(cues), ['audio/guidance/0102-calibration1.mp3']);
+    assert.deepEqual(heard(cues), ['audio/guidance/1A-calibration1.mp3']);
   });
 
   it('waits on the guest, however long they take', () => {
@@ -194,7 +194,7 @@ describe('the calibration sequence, running', () => {
 
     rt.guestInput(g.guestId, 'tap');
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step2');
-    assert.deepEqual(heard(cues), ['audio/guidance/0103-calibration2.mp3']);
+    assert.deepEqual(heard(cues), ['audio/guidance/1B-calibration2.mp3']);
   });
 
   it('wants the gesture each step asked for, and only one of it', () => {
@@ -214,7 +214,7 @@ describe('the calibration sequence, running', () => {
     rt.guestInput(g.guestId, 'drag');
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step4');
     assert.deepEqual(heard(cues), [
-      'audio/guidance/0103-calibration2.mp3', 'audio/guidance/0104-calibration3.mp3', 'audio/guidance/0105-calibration4.mp3',
+      'audio/guidance/1B-calibration2.mp3', 'audio/guidance/1C-calibration3.mp3', 'audio/guidance/1D-calibration4.mp3',
     ]);
   });
 
@@ -231,7 +231,7 @@ describe('the calibration sequence, running', () => {
     walkTo(rt, g.guestId, 'entranceHallway');
     assert.equal(guidance(rt, g.guestId), 'prologue.done');
     assert.ok(
-      cues.some((c) => c.kind === 'stopAudio' && c.assetId === 'audio/guidance/0105-calibration4.mp3'),
+      cues.some((c) => c.kind === 'stopAudio' && c.assetId === 'audio/guidance/1D-calibration4.mp3'),
       'and its clip stops rather than following them out',
     );
   });
@@ -272,7 +272,7 @@ describe('the calibration sequence, running', () => {
     assert.equal(guidance(rt, b.guestId), 'prologue.calibration.step1');
     // A's gestures must not have moved B. This is the whole reason the sequence
     // lives on the guest and not in the room machine.
-    assert.deepEqual(heard(cues.filter((c) => c.guestId === b.guestId)), ['audio/guidance/0102-calibration1.mp3']);
+    assert.deepEqual(heard(cues.filter((c) => c.guestId === b.guestId)), ['audio/guidance/1A-calibration1.mp3']);
   });
 
   it('plays a reconnecting phone the clip it should be on', () => {
@@ -283,7 +283,7 @@ describe('the calibration sequence, running', () => {
     cues.length = 0;
 
     rt.resyncCues(g.guestId);
-    assert.deepEqual(heard(cues), ['audio/guidance/0104-calibration3.mp3'], 'a step is a state, not an event');
+    assert.deepEqual(heard(cues), ['audio/guidance/1C-calibration3.mp3'], 'a step is a state, not an event');
   });
 
   it('ignores a gesture the show binds to nothing', () => {
@@ -291,5 +291,42 @@ describe('the calibration sequence, running', () => {
     const g = arrive(rt, cues);
     assert.equal(rt.guestInput(g.guestId, 'shake'), false);
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1');
+  });
+});
+
+describe('the Mask Room, answered with a tap', () => {
+  /** Through calibration and the entrance hallway, into the Mask Room. */
+  function inMaskRoom() {
+    const { rt, cues } = makeRuntime();
+    const g = arrive(rt, cues);
+    for (const input of ['tap', 'swipe', 'drag']) rt.guestInput(g.guestId, input);
+    walkTo(rt, g.guestId, 'entranceHallway');
+    walkTo(rt, g.guestId, 'maskRoom');
+    return { rt, g, voice: () => rt.desiredCues(g.guestId).get('guidance')?.assetId ?? null };
+  }
+
+  it('plays the room\'s clip, and a tap during it plays the answer', () => {
+    const { rt, g, voice } = inMaskRoom();
+    assert.equal(voice(), 'audio/guidance/3-maskroom.mp3');
+    rt.testAdvanceTime(60_000);
+    rt.guestInput(g.guestId, 'tap');
+    assert.equal(voice(), 'audio/guidance/3A-tap_maskroom.mp3');
+    rt.guestInput(g.guestId, 'tap');
+    assert.equal(guidance(rt, g.guestId), 'prologue.maskRoom.tapped', 'a second tap changes nothing');
+  });
+
+  it('once the clip has played through, a tap plays nothing', () => {
+    const { rt, g, voice } = inMaskRoom();
+    rt.testAdvanceTime(276_000);
+    assert.equal(guidance(rt, g.guestId), 'prologue.maskRoom.heard');
+    rt.guestInput(g.guestId, 'tap');
+    assert.equal(voice(), null, 'no answer to a question they already heard out');
+  });
+
+  it('ends when they walk on into Hall of Heroes', () => {
+    const { rt, g, voice } = inMaskRoom();
+    walkTo(rt, g.guestId, 'hallOfHeroes');
+    assert.equal(guidance(rt, g.guestId), 'prologue.pastMaskRoom');
+    assert.equal(voice(), null, 'neither clip follows them out');
   });
 });
