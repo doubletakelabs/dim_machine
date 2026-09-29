@@ -530,6 +530,24 @@ describe('the Android app locating a phone', () => {
     op.close();
   });
 
+  it('sends a phone still connected across a show load back in, on a fresh visit', async () => {
+    const op = await openOperator(server);
+    await runShow(op);
+    const phone = await openPhone(server, undefined, { device: 'mad0905' });
+    await runShow(op); // every guest goes with the old show
+    for (let i = 0; i < 50 && !phone.closed; i++) await new Promise((r) => setTimeout(r, 20));
+    assert.equal(phone.closed?.code, 1012, 'told to reconnect rather than left outside the show');
+    // What the page does next: reconnect, saying who it was.
+    const back = await openPhone(server, phone.welcome.token, { device: 'mad0905' });
+    assert.equal(back.welcome.guestId, 'mad0905');
+    assert.notEqual(back.welcome.visitId, phone.welcome.visitId);
+    const since = op.mark();
+    const roster = await op.waitFor((m) => m.type === 'roster' && m.users.some((u) => u.guestId === 'mad0905'), { since, describe: 'the phone back on the roster' });
+    assert.ok(roster.users.find((u) => u.guestId === 'mad0905').regions, 'and in the show');
+    back.close();
+    op.close();
+  });
+
   it('displaces a page still open on the old visit', async () => {
     const op = await openOperator(server);
     await runShow(op);

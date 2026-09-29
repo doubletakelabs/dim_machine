@@ -564,6 +564,18 @@ function loadShow(file) {
     return;
   }
   loadedShowFile = basename(file);
+  // Every guest went with the old show, but a phone still connected does not
+  // know: its socket stayed up, so it never says hello again and sits outside
+  // the show — no room, no audio, "Waiting for the show…" (#14, 2026-09-28).
+  // Close those sockets; the page reconnects at once, and its hello starts a
+  // fresh visit (on the same guestId, for a handset that names itself).
+  for (const [t, u] of [...users]) {
+    if (runtime.getGuestByToken(t)) continue;
+    users.delete(t);
+    if (u.ws) {
+      try { u.ws.close(1012, 'show loaded'); } catch { /* already gone */ }
+    }
+  }
   assetProblems = missingAssets();
   for (const asset of assetProblems) opLog(`✗ missing asset: ${asset}`);
   for (const loop of badLoops(def)) opLog(`⚠ ${loop} — that is a tick, not a texture`);
