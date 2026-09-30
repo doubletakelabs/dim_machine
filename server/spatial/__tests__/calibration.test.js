@@ -119,11 +119,10 @@ describe('expanding a sequence into a machine', () => {
     assert.deepEqual(calibration(def).states.step4.after, { 5000: '#guest.guidance.prologue.done' });
   });
 
-  it('generates the cue for each step, with the bg under it', () => {
+  it('generates the cue for each step', () => {
     const { def } = expand();
     assert.deepEqual(def.guest.cues['guidance.prologue.calibration.step1'], {
       audio: 'audio/guidance/1A-calibration1.mp3',
-      bg: 'audio/bg/0102_CALIBRATION1.mp3',
     });
   });
 
@@ -132,7 +131,6 @@ describe('expanding a sequence into a machine', () => {
     assert.deepEqual(def.guest.cues['guidance.prologue.calibration.step1'], {
       audio: 'audio/guidance/1A-calibration1.mp3',
       image: 'img/calibration_01_ontap.png',
-      bg: 'audio/bg/0102_CALIBRATION1.mp3',
     });
   });
 
@@ -236,18 +234,16 @@ describe('the calibration sequence, running', () => {
     );
   });
 
-  it('changes the bg with each step, and hands it to the room at the hallway', () => {
+  it('plays the calibration room\'s own bg under every step, unbroken', () => {
     const { rt, cues } = makeRuntime();
     const g = arrive(rt, cues);
-    const bg = () => rt.desiredCues(g.guestId).get('bg')?.assetId;
-    assert.equal(bg(), 'audio/bg/0102_CALIBRATION1.mp3');
-    rt.guestInput(g.guestId, 'tap');
-    assert.equal(bg(), 'audio/bg/0103_CALIBRATION2.mp3');
-    rt.guestInput(g.guestId, 'swipe');
-    rt.guestInput(g.guestId, 'drag');
-    assert.equal(bg(), 'audio/bg/0105_CALIBRATION4.mp3');
-    walkTo(rt, g.guestId, 'entranceHallway');
-    assert.equal(bg(), museum.rooms.entranceHallway.bg, 'the room\'s own, once calibration is done');
+    const bg = () => rt.desiredCues(g.guestId).get('bg');
+    const first = bg();
+    assert.equal(first.assetId, museum.rooms.calibration.bg);
+    for (const input of ['tap', 'swipe', 'drag']) {
+      rt.guestInput(g.guestId, input);
+      assert.equal(bg().key, first.key, 'the same bg, never restarted, as the steps go by');
+    }
   });
 
   it('ends early for a guest who walks out partway through', () => {
