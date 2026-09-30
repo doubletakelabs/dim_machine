@@ -1097,6 +1097,7 @@ function connect() {
           token: msg.token,
         };
         $('label').textContent = msg.label;
+        showBattery();
         fillRoomPicker(msg.rooms ?? []);
         assetList = msg.assets ?? [];
         mixer = mixerConfig(msg.audioLayers);
@@ -1242,5 +1243,18 @@ async function join() {
 }
 
 $('join').addEventListener('click', join);
+
+// The battery, small under the phone's number on START DIM: whoever hands the
+// phone over can see it is charged. From the app; a browser's own if it has one.
+async function showBattery() {
+  if (joined) return;
+  let pct = nativeStatus()?.battery;
+  if (typeof pct !== 'number' && navigator.getBattery) {
+    try { pct = Math.round((await navigator.getBattery()).level * 100); } catch {}
+  }
+  $('battery').textContent = typeof pct === 'number' ? `battery ${pct}%` : '';
+}
+showBattery();
+setInterval(showBattery, 20000);
 
 connect();
