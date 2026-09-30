@@ -1109,12 +1109,15 @@ function connect() {
         if ('hallways' in msg) tellNative('onHallways', JSON.stringify(msg.hallways ?? {}));
         if ('adjacent' in msg) tellNative('onAdjacent', JSON.stringify(msg.adjacent ?? {}));
         if ('locator' in msg) tellNative('onLocator', JSON.stringify(msg.locator ?? null));
-        // Inside the app there is nobody to press Join: a handset on a lanyard
-        // is in the show the moment it is unplugged. The app lets media play
-        // without a gesture, so the AudioContext unlocks on its own. Joined
-        // here, after welcome, so `ready` goes out on an open socket with the
-        // asset list already known — the same moment a person would tap.
-        if (nativeApp && !joined) join();
+        // Nobody joins by themselves any more — not even in the app, which used
+        // to join the moment it was welcomed (2026-09-30). START DIM, pressed by
+        // the guest after unplugging, is the only way in, so a handset on the
+        // charger or in a pocket plays nothing. Pressable from here, once
+        // `ready` would go out on an open socket with the asset list known.
+        if (!joined) {
+          $('join').disabled = false;
+          $('join').textContent = 'START DIM';
+        }
         break;
       case 'assets':
         assetList = msg.assets ?? [];
