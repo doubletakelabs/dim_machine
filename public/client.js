@@ -1116,8 +1116,9 @@ function connect() {
         // charger or in a pocket plays nothing. Pressable from here, once
         // `ready` would go out on an open socket with the asset list known.
         if (!joined) {
-          $('join').disabled = false;
+          startReady = true;
           $('join').textContent = 'START DIM';
+          updateStart();
         }
         break;
       case 'assets':
@@ -1218,6 +1219,7 @@ function setConn(ok) {
 // ---------------------------------------------------------------------------
 async function join() {
   if (joined || $('join').disabled) return;
+  startReady = false;           // pressed: never pressable again while joining
   $('join').disabled = true;
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   await ctx.resume();
@@ -1244,9 +1246,49 @@ async function join() {
 
 $('join').addEventListener('click', join);
 
+// START DIM in red and not pressable, with the progress small below, while
+// this handset's copy of the show is not the server's current one
+// (2026-09-30): a phone handed over half-synced streams — or goes silent —
+// mid-show.
+let serverContent = null;
+let startReady = false;       // welcomed: `ready` would go out on an open socket
+let unsynced = false;
+function updateStart() {
+  $('join').disabled = !startReady || unsynced;
+  $('join').classList.toggle('unsynced', unsynced && startReady);
+}
+// The server's current version, every 15 s: a whole manifest is too much to
+// ask for every few seconds from every phone waiting at the door.
+async function fetchServerContent() {
+  if (joined || !nativeApp) return;
+  try {
+    const res = await fetch('/api/content', { cache: 'no-store' });
+    if (res.ok) serverContent = (await res.json()).version ?? serverContent;
+  } catch {}
+  showSync();
+}
+function showSync() {
+  if (joined || !nativeApp) return;
+  const s = nativeStatus() ?? {};
+  let note = '';
+  if (s.syncing) {
+    note = typeof s.syncTotal === 'number' && s.syncTotal > 0 ? `syncing ${s.syncDone ?? 0} / ${s.syncTotal}` : 'syncing…';
+  } else if (s.syncError) {
+    note = `sync failed: ${s.syncError}`;
+  } else if (!s.content) {
+    note = 'no content — put on charge to sync';
+  } else if (serverContent && s.content !== serverContent) {
+    note = 'content out of date — put on charge to sync';
+  }
+  unsynced = !!note;
+  $('syncNote').textContent = note;
+  updateStart();
+}
+
 // The battery, small under the phone's number on START DIM: whoever hands the
 // phone over can see it is charged. From the app; a browser's own if it has one.
 async function showBattery() {
+  showSync();
   if (joined) return;
   let pct = nativeStatus()?.battery;
   if (typeof pct !== 'number' && navigator.getBattery) {
@@ -1256,5 +1298,8 @@ async function showBattery() {
 }
 showBattery();
 setInterval(showBattery, 20000);
+setInterval(showSync, 3000);
+fetchServerContent();
+setInterval(fetchServerContent, 15000);
 
 connect();

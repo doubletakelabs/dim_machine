@@ -35,6 +35,9 @@
     #join:disabled { background: #222; color: #666; font-size: 7vw; }
     #joinScreen .page-hint { color: #666; font-family: 'JetBrains Mono', ui-monospace, monospace; }
     #joinScreen #battery { margin-top: -20px; font-size: 11px; color: #555; }
+    /* Red, and not pressable, while this handset's copy of the show is not the server's. */
+    #join.unsynced, #join.unsynced:disabled { background: #e8241a; color: #fff; font-size: 13vw; }
+    #joinScreen #syncNote { margin-top: -20px; font-size: 11px; color: #e8241a; }
     #page { position: absolute; inset: 0; }
 
     .page-center {
@@ -222,6 +225,7 @@
       <button id="join" disabled>Connecting…</button>
       <div id="label" class="page-hint"></div>
       <div id="battery" class="page-hint"></div>
+      <div id="syncNote" class="page-hint"></div>
       <div id="loading" class="page-hint" style="display:none">loading assets…</div>
     </div>
     </div>
