@@ -1671,6 +1671,11 @@ export class SpatialRuntime {
     if (!actor || !this.running) return false;
     const event = this.def?.inputBindings?.[input];
     if (!event) return false;
+    // A step that has not yet asked for its gesture (a sequence step's
+    // `listenFrom`) does not take one.
+    const step = actor.regions().guidance;
+    const gate = step ? this.def.guest?.inputGates?.[`guidance.${step}`] : null;
+    if (gate != null && this.now() - actor.regionSince('guidance') < gate) return false;
     actor.send(event);
     this.notifyChange();
     return true;

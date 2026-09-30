@@ -305,3 +305,38 @@ describe('the Mask Room', () => {
     assert.notEqual(clip(), 'audio/guidance/3-maskroom.mp3', 'it does not follow them out');
   });
 });
+
+describe('a step that only listens once its clip has asked (listenFrom)', () => {
+  const withListenFrom = (seconds) => (show) => {
+    show.guest.machine.guidance.states.prologue.states.calibration.sequence[0].listenFrom = seconds;
+  };
+
+  it('ignores the gesture before the clip asks for it, and takes it after', () => {
+    const { rt, cues } = makeRuntime(withListenFrom(60));
+    const g = arrive(rt, cues);
+    rt.testAdvanceTime(30_000);
+    assert.equal(rt.guestInput(g.guestId, 'tap'), false, 'half way through the clip');
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1');
+    rt.testAdvanceTime(31_000);
+    rt.guestInput(g.guestId, 'tap');
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step2', 'once it has asked');
+  });
+
+  it('holds only that step: the next ones take their gesture at once', () => {
+    const { rt, cues } = makeRuntime(withListenFrom(60));
+    const g = arrive(rt, cues);
+    rt.testAdvanceTime(61_000);
+    rt.guestInput(g.guestId, 'tap');
+    rt.guestInput(g.guestId, 'swipe');
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step3');
+  });
+
+  it('is checked: seconds, 0 or more', () => {
+    const { errors } = expandSequences((() => {
+      const show = structuredClone(museum);
+      withListenFrom(-1)(show);
+      return show;
+    })());
+    assert.match(errors.join('\n'), /sequence\[0\]\.listenFrom must be a number of seconds/);
+  });
+});

@@ -92,6 +92,7 @@ export function expandSequences(def) {
   if (!expanded.guest.cues) expanded.guest.cues = {};
   const ctx = {
     cues: expanded.guest.cues,
+    guest: expanded.guest,
     bindings: expanded.inputBindings ?? {},
     errors,
     warnings,
@@ -114,7 +115,7 @@ function walk(states, path, ctx) {
 
 const stepId = (i) => `step${i + 1}`;
 
-function expandOne(state, path, { cues, bindings, errors, warnings }) {
+function expandOne(state, path, { cues, guest, bindings, errors, warnings }) {
   const at = path.join('.');
   const steps = state.sequence;
   if (!steps.length) {
@@ -152,6 +153,19 @@ function expandOne(state, path, { cues, bindings, errors, warnings }) {
       return;
     }
     generated[stepId(i)] = advanceNode(advance, last ? done : stepId(i + 1), stepAt, bindings, errors);
+
+    // `listenFrom`: seconds into the step (its clip) before its gesture counts
+    // — a clip that asks for a tap near its end must not be skipped by a tap
+    // before it has asked (calibration 1, 2026-09-30). Kept on the guest as
+    // `inputGates`, keyed by the step's state; the runtime drops a gesture
+    // that arrives earlier.
+    if (step.listenFrom != null) {
+      if (!(typeof step.listenFrom === 'number' && step.listenFrom >= 0)) {
+        errors.push(`${stepAt}.listenFrom must be a number of seconds, 0 or more`);
+      } else {
+        guest.inputGates = { ...(guest.inputGates ?? {}), [`${at}.${stepId(i)}`]: Math.round(step.listenFrom * 1000) };
+      }
+    }
     cues[`${at}.${stepId(i)}`] = cueFor(step);
   });
 

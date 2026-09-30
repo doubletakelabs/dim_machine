@@ -1145,6 +1145,11 @@ places that can disagree. `"advance": "swipe"` or `"advance": 2500` on the step
 overrides the filename where a filename cannot carry the truth, and is how a step
 with no image says what ends it.
 
+`"listenFrom": 69` on a step ignores its gesture until that many seconds
+into the step — for a clip that asks for a tap near its end, so a tap before
+it has asked does not skip it (calibration 1, 2026-09-30). The gesture is
+dropped, not held: the guest taps again once asked.
+
 `"advance": "none"` on the last step holds it until something outside the
 sequence moves the guest on — calibration's last clip plays until they walk into
 the entrance hallway, which the calibration state handles with
