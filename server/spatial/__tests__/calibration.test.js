@@ -290,39 +290,18 @@ describe('the calibration sequence, running', () => {
   });
 });
 
-describe('the Mask Room, answered with a tap', () => {
-  /** Through calibration and the entrance hallway, into the Mask Room. */
-  function inMaskRoom() {
+describe('the Mask Room', () => {
+  it('plays its clip while they are in it, and stops when they walk into Hall of Heroes', () => {
     const { rt, cues } = makeRuntime();
     const g = arrive(rt, cues);
     for (const input of ['tap', 'swipe', 'drag']) rt.guestInput(g.guestId, input);
     walkTo(rt, g.guestId, 'entranceHallway');
     walkTo(rt, g.guestId, 'maskRoom');
-    return { rt, g, voice: () => rt.desiredCues(g.guestId).get('guidance')?.assetId ?? null };
-  }
-
-  it('plays the room\'s clip, and a tap during it plays the answer', () => {
-    const { rt, g, voice } = inMaskRoom();
-    assert.equal(voice(), 'audio/guidance/3-maskroom.mp3');
-    rt.testAdvanceTime(60_000);
+    const clip = () => rt.desiredCues(g.guestId).get('room')?.assetId ?? null;
+    assert.equal(clip(), 'audio/guidance/3-maskroom.mp3');
     rt.guestInput(g.guestId, 'tap');
-    assert.equal(voice(), 'audio/guidance/3A-tap_maskroom.mp3');
-    rt.guestInput(g.guestId, 'tap');
-    assert.equal(guidance(rt, g.guestId), 'prologue.maskRoom.tapped', 'a second tap changes nothing');
-  });
-
-  it('once the clip has played through, a tap plays nothing', () => {
-    const { rt, g, voice } = inMaskRoom();
-    rt.testAdvanceTime(276_000);
-    assert.equal(guidance(rt, g.guestId), 'prologue.maskRoom.heard');
-    rt.guestInput(g.guestId, 'tap');
-    assert.equal(voice(), null, 'no answer to a question they already heard out');
-  });
-
-  it('ends when they walk on into Hall of Heroes', () => {
-    const { rt, g, voice } = inMaskRoom();
+    assert.equal(clip(), 'audio/guidance/3-maskroom.mp3', 'a tap changes nothing');
     walkTo(rt, g.guestId, 'hallOfHeroes');
-    assert.equal(guidance(rt, g.guestId), 'prologue.pastMaskRoom');
-    assert.equal(voice(), null, 'neither clip follows them out');
+    assert.notEqual(clip(), 'audio/guidance/3-maskroom.mp3', 'it does not follow them out');
   });
 });

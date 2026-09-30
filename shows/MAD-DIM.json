@@ -242,7 +242,12 @@
       "thresholds": {
         "maskRoom-door": {}
       },
-      "bg": "audio/bg/M_MASK SEQUENCE.mp3"
+      "bg": "audio/bg/M_MASK SEQUENCE.mp3",
+      "cues": {
+        "active": {
+          "audio": "audio/guidance/3-maskroom.mp3"
+        }
+      }
     },
     "hallOfHeroes": {
       "name": "Hall of Heroes",
@@ -1394,7 +1399,7 @@
       },
       "cues": {
         "active": {
-          "audio": "audio/guidance/1901-warehouse.mp3"
+          "audio": "audio/guidance/_20-warehouse.mp3"
         }
       },
       "bg": "audio/bg/M_WAREHOUSE.mp3"
@@ -1614,7 +1619,7 @@
       },
       "cues": {
         "active": {
-          "audio": "audio/guidance/2102-controlroom_table.mp3"
+          "audio": "audio/guidance/_22-controlroom.mp3"
         }
       },
       "bg": "audio/bg/M_CONTROLROOM.mp3"
@@ -1852,8 +1857,7 @@
             "states": {
               "arrive": {
                 "on": {
-                  "entered.calibration": "calibration",
-                  "entered.maskRoom": "maskRoom"
+                  "entered.calibration": "calibration"
                 }
               },
               "calibration": {
@@ -1879,30 +1883,7 @@
                   }
                 ]
               },
-              "done": {
-                "on": {
-                  "entered.maskRoom": "maskRoom"
-                }
-              },
-              "maskRoom": {
-                "initial": "listening",
-                "on": {
-                  "entered.hallOfHeroes": "pastMaskRoom"
-                },
-                "states": {
-                  "listening": {
-                    "on": {
-                      "TAP": "tapped"
-                    },
-                    "after": {
-                      "274640": "heard"
-                    }
-                  },
-                  "tapped": {},
-                  "heard": {}
-                }
-              },
-              "pastMaskRoom": {}
+              "done": {}
             }
           },
           "museum": {
@@ -1931,12 +1912,6 @@
       },
       "guidance.ending": {
         "audio": "chime.wav"
-      },
-      "guidance.prologue.maskRoom.listening": {
-        "audio": "audio/guidance/3-maskroom.mp3"
-      },
-      "guidance.prologue.maskRoom.tapped": {
-        "audio": "audio/guidance/3A-tap_maskroom.mp3"
       }
     }
   },
@@ -1994,7 +1969,7 @@
         "inRoom": "audio/guidance/08-consumption1.mp3"
       },
       "superintelligence": {
-        "inRoom": "audio/guidance/1602-superintelligence.mp3"
+        "inRoom": "audio/guidance/018-superintelligence.mp3"
       },
       "automation": {
         "inRoom": "audio/guidance/07-piss.mp3"
@@ -2004,6 +1979,12 @@
       },
       "consumption3": {
         "inRoom": "audio/guidance/08B-consumption3.mp3"
+      },
+      "consumption2": {
+        "inRoom": "audio/guidance/08A-consumption2.mp3"
+      },
+      "faerie": {
+        "inRoom": "audio/guidance/016-faerie.mp3"
       }
     }
   },
