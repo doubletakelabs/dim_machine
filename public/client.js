@@ -807,28 +807,56 @@ function enableShake() {
 // detour would be jitter bought for nothing. What the show *does* own is who
 // may drive — it tells the room server, and hands us the matching secret.
 // ---------------------------------------------------------------------------
+/** How long to wait before trying a room's software again. */
+const EXPERIENCE_RETRY_MS = 2000;
+
 function openExperience(cue) {
   if (experience?.endpoint === cue.endpoint && experience?.driverId === cue.driverId) return;
   closeExperience();
 
-  const accepts = cue.inputs ?? null;
-  const ws = new WebSocket(cue.endpoint);
-  experience = { ws, endpoint: cue.endpoint, driverId: cue.driverId, hue: cue.hue, accepts };
+  const link = {
+    ws: null, endpoint: cue.endpoint, driverId: cue.driverId, hue: cue.hue,
+    accepts: cue.inputs ?? null, retry: null,
+  };
+  experience = link;
+  inputMode = cue.inputMode ?? 'stream';
+  dialExperience(link, cue.secret);
+}
 
+/**
+ * One attempt to reach the room's software, and another after a pause if it
+ * fails or drops — for as long as this is still the guest's link. The show
+ * ends the link (endExperience) when they walk out, or replaces it with a
+ * new one, and either stops the retrying: a phone must never go back to
+ * driving a room it has left. Until then a single failed attempt must not
+ * leave them unable to drive the room they are standing in (Slop, #42,
+ * 2026-09-30): the room turning them away because the show's word that they
+ * may drive had not reached it yet, a Wi-Fi blip, the room's server
+ * restarting.
+ */
+function dialExperience(link, secret) {
+  if (experience !== link) return;
+  let ws;
+  try {
+    ws = new WebSocket(link.endpoint);
+  } catch {
+    setExperienceStatus('unreachable');
+    link.retry = setTimeout(() => dialExperience(link, secret), EXPERIENCE_RETRY_MS);
+    return;
+  }
+  link.ws = ws;
   ws.onopen = () => {
-    ws.send(JSON.stringify({
-      t: 'hello', role: 'driver', driverId: cue.driverId, secret: cue.secret,
-    }));
+    ws.send(JSON.stringify({ t: 'hello', role: 'driver', driverId: link.driverId, secret }));
     setExperienceStatus('linked');
   };
-  // No reconnect loop here. If the room server drops us the show will notice
-  // and re-cue, or the guest has walked out and should not be driving anyway —
-  // a phone reconnecting on its own to a wall in a room it has left is the
-  // fault this avoids.
-  ws.onclose = () => { if (experience?.ws === ws) setExperienceStatus('dropped'); };
+  ws.onclose = () => {
+    if (experience !== link || link.ws !== ws) return; // ended or replaced: stay closed
+    setExperienceStatus('reconnecting');
+    clearTimeout(link.retry);
+    link.retry = setTimeout(() => dialExperience(link, secret), EXPERIENCE_RETRY_MS);
+  };
+  // An error is always followed by a close, which does the retrying.
   ws.onerror = () => setExperienceStatus('unreachable');
-
-  inputMode = cue.inputMode ?? 'stream';
 }
 
 function closeExperience() {
@@ -836,12 +864,13 @@ function closeExperience() {
   experience = null;
   inputMode = 'gestures';
   setExperienceStatus('–');
+  clearTimeout(link?.retry);
   try { link?.ws?.close(); } catch { /* already gone */ }
 }
 
 function sendToExperience(message) {
   const link = experience;
-  if (!link || link.ws.readyState !== 1) return;
+  if (!link?.ws || link.ws.readyState !== 1) return;
   // A piece declares what it consumes; sending it a hold it never asked for is
   // noise on a socket that is carrying a thumb.
   if (link.accepts && !link.accepts.includes(message.t)) return;
