@@ -142,6 +142,14 @@ export class SpatialRuntime {
      * next room is the same cue.
      */
     this.layerSince = new Map();
+    /**
+     * guestId → roomId → { arrivedAt, state, startAt, played }, for rooms
+     * whose clip picks up where the guest left it (`audio.resume`): when this
+     * stay's clip began, and — per room state, since a room that emptied is
+     * idle for a moment as they walk back in — how far into each state's clip
+     * they were when they last left.
+     */
+    this.roomResume = new Map();
     /** Injected so tests drive a link without a socket; see experience-link.js. */
     this.openExperienceSocket = io.openExperienceSocket ?? null;
     /** Show-clock instant the show started, for elapsed-time display. */
@@ -309,6 +317,7 @@ export class SpatialRuntime {
     this.lastRefused.clear();
     this.trustNextReading.clear();
     this.layerSince.clear();
+    this.roomResume.clear();
     this.beaconHolds.clear();
     for (const link of this.experiences.values()) link.stop();
     for (const actor of this.guestActors.values()) actor.stop();
@@ -428,6 +437,7 @@ export class SpatialRuntime {
     this.lastRefused.delete(guestId);
     this.trustNextReading.delete(guestId);
     this.layerSince.delete(guestId);
+    this.roomResume.delete(guestId);
     // The museum remembers rooms per guestId, and a phone's guestId outlives
     // the visit: left here, a reset handset would come back to its rooms
     // already spent, hearing returns instead of the rooms themselves.
@@ -1067,6 +1077,11 @@ export class SpatialRuntime {
         this.furthestStage.set(event.guestId, stage);
       }
     }
+    // Leaving a room whose clip resumes: remember how far into it they were.
+    if (event.previousRoomId && event.previousRoomId !== event.roomId) {
+      const left = this.roomResume.get(event.guestId)?.get(event.previousRoomId);
+      if (left) left.played[left.state] = Math.max(0, event.timestamp - left.startAt);
+    }
     this.guests.get(event.guestId)?.applyOccupancy(event);
     // Rooms react first — a departure has to settle the room they left before
     // the guest actor decides anything about the room they entered.
@@ -1307,7 +1322,8 @@ export class SpatialRuntime {
           .find((o) => o.guestId === guestId)?.sinceTs;
         const startAt = audioTiming(def) === 'together'
           ? room.stateSince
-          : Math.max(arrived ?? room.stateSince, room.stateSince);
+          : this.resumedStart(guestId, here.roomId, def, room, arrived,
+            Math.max(arrived ?? room.stateSince, room.stateSince));
         resolved.room = roomCueFor(def, room.state, here.standing, startAt);
         const stateBg = roomBgFor(def, room.state);
         if (stateBg != null) {
@@ -1348,6 +1364,27 @@ export class SpatialRuntime {
       screenPart(resolved.guidance) ?? screenPart(resolved.adherence) ?? screenPart(resolved.room),
     );
     return desired;
+  }
+
+  /**
+   * When a room's clip began for this guest, for a room with `audio.resume`:
+   * coming back in during the same visit picks the clip up where they left
+   * it, rather than from the top (the Cyclorama, 2026-09-30). The phone joins
+   * a clip partway when its start is in the past, so resuming is only a
+   * matter of backdating the start by what they had already heard. A clip
+   * they heard to the end stays finished. The room moving to a new state
+   * while they are in it starts that state's clip afresh, as ever.
+   */
+  resumedStart(guestId, roomId, def, room, arrived, fresh) {
+    if (!def.audio?.resume || arrived == null) return fresh;
+    let rooms = this.roomResume.get(guestId);
+    if (!rooms) this.roomResume.set(guestId, (rooms = new Map()));
+    const was = rooms.get(roomId);
+    if (was && was.arrivedAt === arrived && was.state === room.state) return was.startAt;
+    const played = was?.played ?? {};
+    const startAt = played[room.state] != null ? fresh - played[room.state] : fresh;
+    rooms.set(roomId, { arrivedAt: arrived, state: room.state, startAt, played });
+    return startAt;
   }
 
   /**

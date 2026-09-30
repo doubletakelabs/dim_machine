@@ -920,6 +920,13 @@ starts again from the top once the room empties and someone walks in. Decided
 `masterTimeline`, the names before that, still load as `own` and `together`
 with a warning.
 
+**`audio.resume`** (per room, `own` timing): a guest who leaves and comes back
+during the same visit picks the room's clip up where they left it, rather than
+from the top — the Cyclorama, 2026-09-30, where a stray reading into the
+hallway would otherwise restart it. A clip they heard to the end stays
+finished; the room moving to a new state starts that state's clip afresh; a
+new visit starts everything afresh.
+
 **What changes a room's state** — and so its clips: guests walking in and out,
 the operator panel's room events, and the room's own piece. A piece sends
 `{ "t": "event", "name": "BACKGROUND_2" }` on its experience link (dim_rooms

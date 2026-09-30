@@ -430,6 +430,9 @@ function checkRoom(roomId, room, errors, warnings) {
       checkEnum(room.audio.timing, AUDIO_TIMINGS, `${path}.audio.timing`, errors);
     }
     checkEnum(room.audio.joinPolicy, AUDIO_JOIN_POLICIES, `${path}.audio.joinPolicy`, errors);
+    if (room.audio.resume != null && typeof room.audio.resume !== 'boolean') {
+      errors.push(`${path}.audio.resume must be true or false`);
+    }
   }
 
   if (isObject(room.seen) && room.seen.dwellMs != null

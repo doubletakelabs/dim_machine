@@ -344,3 +344,45 @@ describe('the layers under the voices', () => {
     assert.ok(rt.desiredCues(b.guestId).get('bed').startAt > rt.desiredCues(a.guestId).get('bed').startAt);
   });
 });
+
+describe('a room clip that picks up where they left it (audio.resume)', () => {
+  const heardFor = (rt, guestId) => (rt.now() - rt.desiredCues(guestId).get('room').startAt) / 1000;
+  const stepOut = (rt, g) => { walk(rt, g.guestId, AT.out); rt.testAdvanceTime(20_000); walk(rt, g.guestId, AT.hallway); };
+
+  it('coming back in, the clip carries on from where they were', () => {
+    const { rt } = makeRuntime((show) => { show.rooms.hallway.audio = { resume: true }; });
+    const g = rt.spawnGuest();
+    walk(rt, g.guestId, AT.hallway);
+    rt.testAdvanceTime(30_000);
+    const before = heardFor(rt, g.guestId);
+    stepOut(rt, g);
+    const after = heardFor(rt, g.guestId);
+    assert.ok(after >= before && after < before + 8, `picked up at ${after}s, having left at ${before}s`);
+  });
+
+  it('without it, coming back starts the clip from the top', () => {
+    const { rt } = makeRuntime();
+    const g = rt.spawnGuest();
+    walk(rt, g.guestId, AT.hallway);
+    rt.testAdvanceTime(30_000);
+    stepOut(rt, g);
+    assert.ok(heardFor(rt, g.guestId) < 5);
+  });
+
+  it('a new visit on the same phone starts afresh', () => {
+    const { rt } = makeRuntime((show) => { show.rooms.hallway.audio = { resume: true }; });
+    const g = rt.spawnGuest({ kind: 'phone', guestId: 'mad0099' });
+    walk(rt, g.guestId, AT.hallway);
+    rt.testAdvanceTime(30_000);
+    rt.removeGuest('mad0099');
+    const next = rt.spawnGuest({ kind: 'phone', guestId: 'mad0099' });
+    walk(rt, next.guestId, AT.hallway);
+    assert.ok(heardFor(rt, next.guestId) < 5);
+  });
+
+  it('is checked: resume is true or false', () => {
+    const def = structuredClone(demo);
+    def.rooms.library.audio = { resume: 'yes' };
+    assert.match(validateShowDefinition(def).errors.join('\n'), /audio\.resume must be true or false/);
+  });
+});
