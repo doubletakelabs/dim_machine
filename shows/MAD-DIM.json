@@ -418,7 +418,10 @@
           "audio": "audio/guidance/5-cyc.mp3"
         }
       },
-      "bg": "audio/bg/M_CYC.mp3"
+      "bg": "audio/bg/M_CYC.mp3",
+      "audio": {
+        "resume": true
+      }
     },
     "museumHallway": {
       "name": "Museum Hallway",
@@ -439,7 +442,7 @@
         "adminOffice",
         "dataCenter"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "museumHallway": {
           "polygon": [
@@ -546,7 +549,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "automation": {
           "polygon": [
@@ -612,7 +615,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "saas": {
           "polygon": [
@@ -687,7 +690,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "influence": {
           "polygon": [
@@ -771,7 +774,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "slop": {
           "polygon": [
@@ -861,7 +864,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "kin": {
           "polygon": [
@@ -923,7 +926,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "faerie": {
           "polygon": [
@@ -1000,7 +1003,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "superintelligence": {
           "polygon": [
@@ -1058,7 +1061,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "consumption1": {
           "polygon": [
@@ -1123,7 +1126,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "consumption2": {
           "polygon": [
@@ -1199,7 +1202,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "consumption3": {
           "polygon": [
@@ -1273,7 +1276,7 @@
         "westHallway",
         "griefbot"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "southCorridor": {
           "polygon": [
@@ -1328,7 +1331,7 @@
         "southCorridor",
         "adminOffice"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "warehouse": {
           "polygon": [
@@ -1405,7 +1408,7 @@
         "dataCenter",
         "museumHallway"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "adminOffice": {
           "polygon": [
@@ -1472,7 +1475,7 @@
         "adminOffice",
         "museumHallway"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "dataCenter": {
           "polygon": [
@@ -1540,7 +1543,7 @@
         "southCorridor",
         "library"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "controlRoom": {
           "polygon": [
@@ -1607,7 +1610,7 @@
         "controlRoom",
         "westHallway"
       ],
-      "stage": 7,
+      "stage": 6,
       "zones": {
         "library": {
           "polygon": [
@@ -1698,7 +1701,7 @@
         "southCorridor",
         "library"
       ],
-      "stage": 6,
+      "stage": 5,
       "zones": {
         "westHallway": {
           "polygon": [
@@ -1737,7 +1740,7 @@
       "adjacent": [
         "southCorridor"
       ],
-      "stage": 6,
+      "stage": 5,
       "machine": {
         "id": "griefbot",
         "initial": "idle",
