@@ -1867,7 +1867,8 @@
                 "sequence": [
                   {
                     "audio": "audio/guidance/1A-calibration1.mp3",
-                    "advance": "tap"
+                    "advance": "tap",
+                    "listenFrom": 67
                   },
                   {
                     "audio": "audio/guidance/1B-calibration2.mp3",
