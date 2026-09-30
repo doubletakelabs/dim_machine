@@ -1660,10 +1660,21 @@ export class SpatialRuntime {
    */
   pendingInputs(guestId) {
     const actor = this.guestActors.get(guestId);
-    if (!actor || !this.running) return [];
+    if (!actor || !this.running || this.gestureHeld(actor)) return [];
     return Object.entries(this.def?.inputBindings ?? {})
       .filter(([, event]) => actor.canAccept(event))
       .map(([input]) => input);
+  }
+
+  /**
+   * Whether the guest's step has yet to ask for its gesture (a sequence
+   * step's `listenFrom`): until then it takes none, and offers none — the
+   * operator panel and the walkthrough see nothing to answer.
+   */
+  gestureHeld(actor) {
+    const step = actor.regions().guidance;
+    const gate = step ? this.def?.guest?.inputGates?.[`guidance.${step}`] : null;
+    return gate != null && this.now() - actor.regionSince('guidance') < gate;
   }
 
   guestInput(guestId, input) {
@@ -1671,11 +1682,7 @@ export class SpatialRuntime {
     if (!actor || !this.running) return false;
     const event = this.def?.inputBindings?.[input];
     if (!event) return false;
-    // A step that has not yet asked for its gesture (a sequence step's
-    // `listenFrom`) does not take one.
-    const step = actor.regions().guidance;
-    const gate = step ? this.def.guest?.inputGates?.[`guidance.${step}`] : null;
-    if (gate != null && this.now() - actor.regionSince('guidance') < gate) return false;
+    if (this.gestureHeld(actor)) return false;
     actor.send(event);
     this.notifyChange();
     return true;

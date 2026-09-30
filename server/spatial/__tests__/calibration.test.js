@@ -18,6 +18,10 @@ import { roomCentroid } from '../zone-math.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const museum = JSON.parse(readFileSync(join(root, 'shows/MAD-DIM.json'), 'utf8'));
+// The show's calibration 1 takes its tap only from 67s (listenFrom); these
+// tests walk the sequence at once. The wait has its own tests below.
+const listenFromInShow = museum.guest.machine.guidance.states.prologue.states.calibration.sequence[0].listenFrom;
+delete museum.guest.machine.guidance.states.prologue.states.calibration.sequence[0].listenFrom;
 
 function makeRuntime(mutate) {
   const show = structuredClone(museum);
@@ -329,6 +333,18 @@ describe('a step that only listens once its clip has asked (listenFrom)', () => 
     rt.guestInput(g.guestId, 'tap');
     rt.guestInput(g.guestId, 'swipe');
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step3');
+  });
+
+  it('is set in the show: calibration 1 asks for its tap at 67s', () => {
+    assert.equal(listenFromInShow, 67);
+  });
+
+  it('offers nothing to answer until then — the panel and the walkthrough wait too', () => {
+    const { rt, cues } = makeRuntime(withListenFrom(60));
+    const g = arrive(rt, cues);
+    assert.deepEqual(rt.pendingInputs(g.guestId), []);
+    rt.testAdvanceTime(61_000);
+    assert.deepEqual(rt.pendingInputs(g.guestId), ['tap']);
   });
 
   it('is checked: seconds, 0 or more', () => {
