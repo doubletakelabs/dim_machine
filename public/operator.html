@@ -1040,10 +1040,14 @@ function phoneRows(user) {
 // simulated guest has no phone, and always shows.
 const onCharger = (g) => phones.get(g.guestId)?.telemetry?.phone?.charging === true;
 const phoneGone = (g) => g.kind === 'phone' && !phones.has(g.guestId);
-const shownGuests = () => (snap?.guests ?? []).filter((g) => !onCharger(g) && !phoneGone(g));
+// A phone nobody has pressed START DIM on is not in the experience yet —
+// unplugged and left on a table, or in someone's hand at the desk (#37,
+// 2026-10-01) — so it is hidden too, until it starts.
+const notStarted = (g) => g.kind === 'phone' && g.startedAt == null;
+const shownGuests = () => (snap?.guests ?? []).filter((g) => !onCharger(g) && !phoneGone(g) && !notStarted(g));
 
 function renderGuests() {
-  const charging = (snap?.guests ?? []).filter((g) => onCharger(g) || phoneGone(g)).length;
+  const charging = (snap?.guests ?? []).filter((g) => onCharger(g) || phoneGone(g) || notStarted(g)).length;
   const rows = shownGuests().map((g) => `
     <tr class="${selection?.kind === 'guest' && selection.id === g.guestId ? 'sel' : ''}"
         data-guest="${g.guestId}">
@@ -1062,7 +1066,7 @@ function renderGuests() {
       <td><button class="tiny" data-remove="${g.guestId}">×</button></td>
     </tr>`).join('');
   $('guests').innerHTML = rows || `<tr><td colspan="7" class="muted">${
-    charging ? 'No guests out — the rest are on chargers.' : 'No guests yet.'}</td></tr>`;
+    charging ? 'No guests in the show — the other phones are on chargers or not started.' : 'No guests yet.'}</td></tr>`;
   $('guestCount').textContent = String(shownGuests().length);
 
   for (const tr of $('guests').querySelectorAll('[data-guest]')) {
