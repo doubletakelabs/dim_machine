@@ -145,6 +145,36 @@ function storeToken(t) {
 }
 
 // ---------------------------------------------------------------------------
+// The guest's gestures, counted for their receipt (2026-10-01)
+// ---------------------------------------------------------------------------
+// Every tap, swipe, drag and hold the phone recognises, wherever it went —
+// the show, a room's piece, or nowhere. Kept with the visit's token, so a page
+// reload keeps counting and a new guest (a new token) starts from nothing.
+// Sent with the phone's telemetry; the Library prints them.
+const COUNTS_KEY = 'dim.counts' + (new URLSearchParams(location.search).get('u') ?? '');
+function loadCounts() {
+  try {
+    const c = JSON.parse(localStorage.getItem(COUNTS_KEY));
+    if (c && c.token && c.token === getToken()) return c;
+  } catch { /* none yet */ }
+  return { token: getToken(), taps: 0, swipes: 0, drags: 0, holds: 0, dragMs: 0 };
+}
+let gestureCounts = loadCounts();
+function countGesture(type, payload) {
+  if (gestureCounts.token !== getToken()) gestureCounts = loadCounts();
+  if (type === 'tap') gestureCounts.taps++;
+  else if (type === 'swipe') gestureCounts.swipes++;
+  else if (type === 'drag') { gestureCounts.drags++; gestureCounts.dragMs += Math.max(0, payload?.ms ?? 0); }
+  else if (type === 'hold') gestureCounts.holds++;
+  try { localStorage.setItem(COUNTS_KEY, JSON.stringify(gestureCounts)); } catch { /* private mode */ }
+}
+function countsForShow() {
+  if (gestureCounts.token !== getToken()) gestureCounts = loadCounts();
+  const { taps, swipes, drags, holds, dragMs } = gestureCounts;
+  return { taps, swipes, drags, holds, dragMs: Math.round(dragMs) };
+}
+
+// ---------------------------------------------------------------------------
 // Clock sync — the estimator lives in clock-sync.js, where it has tests.
 // ---------------------------------------------------------------------------
 const clock = createClock();
@@ -706,6 +736,7 @@ const repeatGuard = createRepeatGuard();
 
 function emitGesture(type, payload) {
   if (!joined) return;
+  countGesture(type, payload);
   // Shown on the phone itself. A gesture that never left the handset and one
   // the show ignored look identical from the floor without this.
   const el = $('gesture');
@@ -737,7 +768,10 @@ function enableGestures() {
     mode: () => inputMode,
     onTouch: resumeAudio,
     onGesture: emitGesture,
-    onHold: (on) => { if (experienceAllows('hold')) sendToExperience({ t: 'hold', on }); },
+    onHold: (on) => {
+      if (on && joined) countGesture('hold');
+      if (experienceAllows('hold')) sendToExperience({ t: 'hold', on });
+    },
     onStreamBegin: streamBegin,
     onStreamMove: streamMove,
     onStreamEnd: streamEnd,
@@ -1205,7 +1239,8 @@ function connect() {
         clock.addSample(msg.t0, msg.server, Date.now());
         // The app's view of the handset — battery, Wi-Fi, beacons, content —
         // for the operator panel. A browser has none to send.
-        if (nativeApp?.status) sendMsg({ type: 'telemetry', phone: nativeStatus() });
+        // And the guest's gesture counts, for their receipt — a browser too.
+        sendMsg({ type: 'telemetry', phone: nativeApp?.status ? nativeStatus() : null, counts: countsForShow() });
         break;
       case 'state': {
         lastState = msg.state;

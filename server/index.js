@@ -14,6 +14,7 @@ import { expandTrackFolders } from './track-folders.js';
 import { execFileSync } from 'node:child_process';
 import * as relay from './relay.js';
 import { clipSeconds } from './clip-seconds.js';
+import { buildReceipt, sendToPrinter } from './receipt.js';
 
 // Not 4000: dim_central (the deploy dashboard) runs there on the same machine.
 const PORT = process.env.PORT || 4100;
@@ -728,6 +729,16 @@ function cleanPhoneStatus(p) {
   return out;
 }
 
+/** The guest's gesture counts from the phone, for their receipt: whole numbers only. */
+function cleanCounts(c) {
+  if (!c || typeof c !== 'object') return null;
+  const out = {};
+  for (const k of ['taps', 'swipes', 'drags', 'holds', 'dragMs']) {
+    if (Number.isInteger(c[k]) && c[k] >= 0 && c[k] < 1e9) out[k] = c[k];
+  }
+  return out;
+}
+
 /**
  * Where the runtime thinks this guest is, as one line.
  *
@@ -790,6 +801,37 @@ function showRoomWord(token, roomId) {
   sendToUser(token, { type: 'word', word, roomId, at: Date.now() });
 }
 
+// ---------------------------------------------------------------------------
+// The receipt (2026-10-01)
+//
+// A guest's phone arriving in the receipt room (the installation's
+// `receipt.room`, the Library) prints their receipt on `receipt.printer`:
+// once per visit, built from the words their visit collected and the gesture
+// counts their phone has sent (server/receipt.js).
+// ---------------------------------------------------------------------------
+const RECEIPT = installation?.receipt?.printer ? { room: 'library', ...installation.receipt } : null;
+/** visitIds whose receipt has printed, so a return to the Library prints nothing. */
+const printedVisits = new Set();
+
+async function printReceipt(token) {
+  const guest = runtime.getGuestByToken(token);
+  const visitId = guest?.visitId;
+  if (!RECEIPT || !visitId || printedVisits.has(visitId)) return;
+  printedVisits.add(visitId);
+  const receipt = buildReceipt({
+    phone: guest.label ?? guest.guestId,
+    visit: visitWords.get(visitId) ?? [],
+    counts: users.get(token)?.counts ?? {},
+  });
+  try {
+    await sendToPrinter(RECEIPT.printer, receipt.bytes);
+    opLog(`receipt printed for ${guest.label}: ${receipt.headline}`);
+  } catch (err) {
+    printedVisits.delete(visitId);
+    opLog(`receipt for ${guest.label} did not print: ${err.message}`);
+  }
+}
+
 /**
  * Push that line whenever it changes. The client has always handled a `state`
  * message; nothing ever sent one, so the readout was fixed at whatever was true
@@ -800,7 +842,10 @@ function pushPhoneStates() {
   for (const [token, u] of users.entries()) {
     if (!u.ws) continue;
     const room = phoneRoom(token);
-    if (room && lastPhoneRoom.get(token) !== room) showRoomWord(token, room);
+    if (room && lastPhoneRoom.get(token) !== room) {
+      showRoomWord(token, room);
+      if (room === RECEIPT?.room) printReceipt(token);
+    }
     if (room) lastPhoneRoom.set(token, room);
     const phase = companionPhase(token);
     const next = `${phoneState(token)}|${phase}`;
@@ -1174,6 +1219,8 @@ wss.on('connection', (ws) => {
             phone: cleanPhoneStatus(msg.phone),
             at: Date.now(),
           };
+          const counts = cleanCounts(msg.counts);
+          if (counts) u.counts = counts;
         }
         return;
       }
