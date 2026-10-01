@@ -1249,6 +1249,16 @@ for the people in front. The show drives it with:
   a room with a word (`poster/words.json`), every time, a return included. The
   server keeps each visit's words, in order, for the receipt poster.
 
+**START DIM (2026-10-01).** The phone page joins only when the guest presses
+START DIM (never by itself, so a handset on the charger plays nothing), and
+its first `ready` sends the guide the event `STARTED` — then the room the guest
+already stands in is said again (`entered.<room>`), so a guide that moves on
+room entry is never left waiting. MAD-DIM's prologue begins in `waiting`;
+`STARTED` takes it to `arrive`, whose cue is the pre-calibration clip, from
+its top. Walking into calibration then holds 2 s (`settling`) before
+calibration1. Calibration is its own stage after the front desk, so a phone
+reading the desk again is refused rather than playing the desk over it.
+
 `{ "type": "faerieFlash" }`, sent to a phone, plays the `purr` (2026-09-27):
 the faerie room's flash, felt. The phone is ready for it; nothing on the
 server sends it yet. The app plays `purr` with strength, where the motor

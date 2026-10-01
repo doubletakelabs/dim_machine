@@ -16,7 +16,7 @@ import { MuseumLayer } from './museum.js';
 import { systemClock } from './clock.js';
 import {
   OCCUPANCY_STATES, CUE_SLOTS, AUDIO_CUE_SLOTS, SCREEN_CUE_SLOT, EXPERIENCE_CUE_SLOT,
-  AUTHORED_GUEST_REGIONS, DRIVER_HUES, audioTiming,
+  AUTHORED_GUEST_REGIONS, DRIVER_HUES, audioTiming, enteredEvent,
 } from './contract.js';
 import { ExperienceLink } from './experience-link.js';
 
@@ -1675,6 +1675,27 @@ export class SpatialRuntime {
     const step = actor.regions().guidance;
     const gate = step ? this.def?.guest?.inputGates?.[`guidance.${step}`] : null;
     return gate != null && this.now() - actor.regionSince('guidance') < gate;
+  }
+
+  /**
+   * The guest pressed START DIM (the phone's first `ready`, 2026-10-01): the
+   * show's guide hears `STARTED`, which a script waiting for it (MAD-DIM's
+   * prologue) takes as its cue to begin — the pre-calibration clip, from its
+   * top. Then the room the guest already stands in is said again, so a guide
+   * that moves on room entry is not left waiting for a room they entered
+   * before pressing. A guide that is not waiting ignores both.
+   *
+   * @returns {boolean} whether the guide took STARTED
+   */
+  guestStarted(guestId) {
+    const actor = this.guestActors.get(guestId);
+    if (!actor || !this.running || !actor.canAccept('STARTED')) return false;
+    actor.send('STARTED');
+    const here = actor.currentRoom()?.roomId;
+    if (here && actor.canAccept(enteredEvent(here))) actor.send(enteredEvent(here));
+    this.append({ type: 'guest.started', guestId, roomId: here ?? null });
+    this.notifyChange();
+    return true;
   }
 
   guestInput(guestId, input) {

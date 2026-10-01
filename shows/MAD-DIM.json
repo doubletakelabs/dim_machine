@@ -64,12 +64,7 @@
         "dwellMs": 8000,
         "accumulate": true
       },
-      "bg": "audio/bg/M_PRE CALIBRATION (LOBBY).mp3",
-      "cues": {
-        "active": {
-          "audio": "audio/guidance/1-precalibration.mp3"
-        }
-      }
+      "bg": "audio/bg/M_PRE CALIBRATION (LOBBY).mp3"
     },
     "calibration": {
       "name": "Calibration",
@@ -78,7 +73,7 @@
         "frontDesk",
         "entranceHallway"
       ],
-      "stage": 1,
+      "stage": 2,
       "zones": {
         "calibration": {
           "polygon": [
@@ -137,7 +132,7 @@
         "calibration",
         "maskRoom"
       ],
-      "stage": 2,
+      "stage": 3,
       "zones": {
         "entranceHallway": {
           "polygon": [
@@ -185,7 +180,7 @@
         "entranceHallway",
         "hallOfHeroes"
       ],
-      "stage": 3,
+      "stage": 4,
       "zones": {
         "maskRoom": {
           "polygon": [
@@ -256,7 +251,7 @@
         "maskRoom",
         "cyclorama"
       ],
-      "stage": 4,
+      "stage": 5,
       "zones": {
         "hallOfHeroes": {
           "polygon": [
@@ -343,7 +338,7 @@
         "hallOfHeroes",
         "museumHallway"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "cyclorama": {
           "polygon": [
@@ -447,7 +442,7 @@
         "adminOffice",
         "dataCenter"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "museumHallway": {
           "polygon": [
@@ -554,7 +549,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "automation": {
           "polygon": [
@@ -620,7 +615,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "saas": {
           "polygon": [
@@ -695,7 +690,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "influence": {
           "polygon": [
@@ -779,7 +774,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "slop": {
           "polygon": [
@@ -869,7 +864,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "kin": {
           "polygon": [
@@ -931,7 +926,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "faerie": {
           "polygon": [
@@ -1008,7 +1003,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "superintelligence": {
           "polygon": [
@@ -1066,7 +1061,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "consumption1": {
           "polygon": [
@@ -1131,7 +1126,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "consumption2": {
           "polygon": [
@@ -1207,7 +1202,7 @@
       "adjacent": [
         "museumHallway"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "consumption3": {
           "polygon": [
@@ -1281,7 +1276,7 @@
         "westHallway",
         "griefbot"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "southCorridor": {
           "polygon": [
@@ -1336,7 +1331,7 @@
         "southCorridor",
         "adminOffice"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "warehouse": {
           "polygon": [
@@ -1413,7 +1408,7 @@
         "dataCenter",
         "museumHallway"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "adminOffice": {
           "polygon": [
@@ -1480,7 +1475,7 @@
         "adminOffice",
         "museumHallway"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "dataCenter": {
           "polygon": [
@@ -1564,7 +1559,7 @@
         "southCorridor",
         "library"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "controlRoom": {
           "polygon": [
@@ -1631,7 +1626,7 @@
         "controlRoom",
         "westHallway"
       ],
-      "stage": 6,
+      "stage": 7,
       "zones": {
         "library": {
           "polygon": [
@@ -1722,7 +1717,7 @@
         "southCorridor",
         "library"
       ],
-      "stage": 5,
+      "stage": 6,
       "zones": {
         "westHallway": {
           "polygon": [
@@ -1761,7 +1756,7 @@
       "adjacent": [
         "southCorridor"
       ],
-      "stage": 5,
+      "stage": 6,
       "machine": {
         "id": "griefbot",
         "initial": "idle",
@@ -1853,11 +1848,24 @@
             "on": {
               "entered.museumHallway": "museum"
             },
-            "initial": "arrive",
+            "initial": "waiting",
             "states": {
+              "waiting": {
+                "on": {
+                  "STARTED": "arrive"
+                }
+              },
               "arrive": {
                 "on": {
-                  "entered.calibration": "calibration"
+                  "entered.calibration": "settling"
+                }
+              },
+              "settling": {
+                "after": {
+                  "2000": "calibration"
+                },
+                "on": {
+                  "entered.entranceHallway": "done"
                 }
               },
               "calibration": {
@@ -1913,6 +1921,9 @@
       },
       "guidance.ending": {
         "audio": "chime.wav"
+      },
+      "guidance.prologue.arrive": {
+        "audio": "audio/guidance/1-precalibration.mp3"
       }
     }
   },

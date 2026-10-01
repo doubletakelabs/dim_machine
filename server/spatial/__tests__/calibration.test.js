@@ -54,11 +54,17 @@ const heard = (cues) => cues
   .filter((c) => c.kind === 'audio' && c.slot === 'guidance')
   .map((c) => c.assetId);
 
-/** Walk a guest into calibration and forget the cues the trip there produced. */
+/**
+ * A guest at the desk who has pressed START DIM (the phone's first `ready`),
+ * walked into calibration and waited out its 2 s settle — with the cues the
+ * trip there produced forgotten.
+ */
 function arrive(rt, cues) {
   const g = rt.spawnGuest();
   walkTo(rt, g.guestId, 'frontDesk');
-  walkTo(rt, g.guestId, 'calibration');
+  rt.guestStarted(g.guestId);
+  walkTo(rt, g.guestId, 'calibration', 5000);
+  rt.testAdvanceTime(2100);
   cues.length = 0;
   return g;
 }
@@ -175,15 +181,56 @@ describe('expanding a sequence into a machine', () => {
 });
 
 describe('the calibration sequence, running', () => {
-  it('starts the first clip on arrival', () => {
+  it('plays nothing until START DIM, then the pre-calibration clip from its top', () => {
     const { rt, cues } = makeRuntime();
     const g = rt.spawnGuest();
     walkTo(rt, g.guestId, 'frontDesk');
-    assert.equal(guidance(rt, g.guestId), 'prologue.arrive', 'nothing starts at the desk');
+    assert.equal(guidance(rt, g.guestId), 'prologue.waiting', 'nothing starts before the press');
+    assert.deepEqual(heard(cues), []);
+
+    rt.testAdvanceTime(30_000);
+    assert.equal(rt.guestStarted(g.guestId), true);
+    assert.equal(guidance(rt, g.guestId), 'prologue.arrive');
+    const pre = cues.find((c) => c.kind === 'audio' && c.slot === 'guidance');
+    assert.equal(pre.assetId, 'audio/guidance/1-precalibration.mp3');
+    assert.equal(pre.startAt, rt.now(), 'from its top at the press, not from when the guest arrived');
+    assert.equal(rt.guestStarted(g.guestId), false, 'a second press (a reload) changes nothing');
+  });
+
+  it('starts calibration1 two seconds after walking into calibration', () => {
+    const { rt, cues } = makeRuntime();
+    const g = rt.spawnGuest();
+    walkTo(rt, g.guestId, 'frontDesk');
+    rt.guestStarted(g.guestId);
+    cues.length = 0;
 
     walkTo(rt, g.guestId, 'calibration');
+    assert.equal(guidance(rt, g.guestId), 'prologue.settling', 'a moment first');
+    assert.deepEqual(heard(cues), []);
+    rt.testAdvanceTime(2100);
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1');
     assert.deepEqual(heard(cues), ['audio/guidance/1A-calibration1.mp3']);
+  });
+
+  it('a guest already in calibration when they press START is not left waiting', () => {
+    const { rt } = makeRuntime();
+    const g = rt.spawnGuest();
+    walkTo(rt, g.guestId, 'frontDesk');
+    walkTo(rt, g.guestId, 'calibration', 5000);
+    rt.guestStarted(g.guestId);
+    assert.equal(guidance(rt, g.guestId), 'prologue.settling');
+  });
+
+  it('cannot go back to the front desk from calibration', () => {
+    const { rt, cues } = makeRuntime();
+    const g = arrive(rt, cues);
+    // The phone's own reading, which the way through judges (an operator's
+    // drag is deliberately not).
+    rt.readRoom(g.guestId, 'frontDesk');
+    rt.testAdvanceTime(5000);
+    assert.equal(rt.guestActors.get(g.guestId).currentRoom()?.roomId, 'calibration', 'the desk is behind them');
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1');
+    assert.equal(rt.desiredCues(g.guestId).get('room'), null, 'and the desk plays nothing over calibration1');
   });
 
   it('waits on the guest, however long they take', () => {
@@ -263,7 +310,9 @@ describe('the calibration sequence, running', () => {
     const a = arrive(rt, cues);
     const b = rt.spawnGuest();
     walkTo(rt, b.guestId, 'frontDesk');
-    walkTo(rt, b.guestId, 'calibration');
+    rt.guestStarted(b.guestId);
+    walkTo(rt, b.guestId, 'calibration', 5000);
+    rt.testAdvanceTime(2100);
 
     rt.guestInput(a.guestId, 'tap');
     rt.guestInput(a.guestId, 'swipe');
@@ -272,7 +321,8 @@ describe('the calibration sequence, running', () => {
     assert.equal(guidance(rt, b.guestId), 'prologue.calibration.step1');
     // A's gestures must not have moved B. This is the whole reason the sequence
     // lives on the guest and not in the room machine.
-    assert.deepEqual(heard(cues.filter((c) => c.guestId === b.guestId)), ['audio/guidance/1A-calibration1.mp3']);
+    assert.deepEqual(heard(cues.filter((c) => c.guestId === b.guestId)),
+      ['audio/guidance/1-precalibration.mp3', 'audio/guidance/1A-calibration1.mp3']);
   });
 
   it('plays a reconnecting phone the clip it should be on', () => {

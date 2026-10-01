@@ -371,8 +371,10 @@ describe('walking a guest the show is waiting on', () => {
     const centreOf = (roomId) => roomCentroid(museum.rooms[roomId]);
     rt.setVirtualPosition(g.guestId, ...centreOf('frontDesk'));
     rt.testAdvanceTime(2600);
+    rt.guestStarted(g.guestId);       // START DIM
     rt.setVirtualPosition(g.guestId, ...centreOf('calibration'));
     rt.testAdvanceTime(2600);
+    rt.testAdvanceTime(2100);         // calibration's 2 s settle
     const guidance = () => rt.guestActors.get(g.guestId).regions().guidance;
     assert.equal(guidance(), 'prologue.calibration.step1');
     rt.walkthrough.start();

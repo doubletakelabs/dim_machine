@@ -234,7 +234,7 @@ describe('the way through the building (rooms.*.stage)', () => {
     rt.setGuestBeacon(guestId, 907);
     rt.testAdvanceTime(4000);
     assert.equal(roomOf(rt, guestId), 'maskRoom');
-    assert.equal(rt.furthestStage.get(guestId), 3, 'still free to come back to the mask room');
+    assert.equal(rt.furthestStage.get(guestId), 4, 'still free to come back to the mask room');
   });
 
   it('rooms away is refused, not held: Hall of Heroes never jumps to SaaS', () => {
@@ -335,7 +335,7 @@ describe('the way through the building (rooms.*.stage)', () => {
     const { rt, guestId } = inMaskRoom();
     rt.setGuestBeacon(guestId, 906);
     assert.deepEqual(rt.wayThrough(guestId), {
-      furthestStage: 3, lastRoom: 'maskRoom', trustNextReading: false,
+      furthestStage: 4, lastRoom: 'maskRoom', trustNextReading: false,
       ignoring: { roomId: 'entranceHallway', reason: 'behind', at: rt.now() },
     });
     rt.sendGuestToRoom(guestId, 'hallOfHeroes');

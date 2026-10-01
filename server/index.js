@@ -1067,7 +1067,12 @@ wss.on('connection', (ws) => {
         // Phone has an unlocked AudioContext and preloaded assets. Replay
         // whatever it should already be hearing.
         const guest = runtime.getGuestByToken(token);
-        if (guest) runtime.resyncCues(guest.guestId);
+        // START DIM pressed: a guide waiting for it begins (pre-calibration).
+        // Then whatever it should be hearing, from the top where it is new.
+        if (guest) {
+          runtime.guestStarted(guest.guestId);
+          runtime.resyncCues(guest.guestId);
+        }
         return;
       }
 
