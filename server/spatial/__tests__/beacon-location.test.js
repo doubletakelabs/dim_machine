@@ -320,6 +320,18 @@ describe('the way through the building (rooms.*.stage)', () => {
     assert.equal(rt.setGuestBeacon(guestId, 906).reason, 'behind', 'and the way through runs from there');
   });
 
+  it('after a placement, the dot follows the phone again (on site: #08 drawn in SaaS from the Warehouse)', () => {
+    const { rt, guestId } = inMaskRoom();
+    rt.sendGuestToRoom(guestId, 'entranceHallway');
+    wait(rt, guestId, 3000);
+    assert.equal(rt.displayPosition(guestId).source, 'virtual', 'drawn where the operator put them');
+    rt.setGuestBeacon(guestId, 907);
+    assert.equal(roomOf(rt, guestId), 'maskRoom');
+    const dot = rt.displayPosition(guestId);
+    assert.equal(dot.source, 'room', 'the phone has spoken: the placed spot is forgotten');
+    assert.deepEqual([dot.x, dot.y], rt.standingSpot('maskRoom', guestId), 'and the dot is in the room it is in');
+  });
+
   it('a placement ahead of the phone cannot strand them (on site: stuck in the Control Room)', () => {
     const { rt, guestId } = inMaskRoom();
     rt.sendGuestToRoom(guestId, 'controlRoom');

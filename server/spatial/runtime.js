@@ -1099,7 +1099,14 @@ export class SpatialRuntime {
     this.append(event);
     // A placement by hand says where the guest is now, not how far through
     // the building they have come: only the phone's own readings count.
-    if (event.source === 'ble') this.trustNextReading.delete(event.guestId);
+    if (event.source === 'ble') {
+      this.trustNextReading.delete(event.guestId);
+      // The phone has spoken for itself, so a spot an operator put the guest
+      // at no longer says where they are. Left, it would draw their dot there
+      // for the rest of the visit, wherever their beacons took them (#08 in
+      // the Warehouse, drawn in SaaS, 2026-10-01).
+      this.virtualLocation?.forget(event.guestId);
+    }
     if (event.occupancy === 'inside' && event.roomId && !this.trustNextReading.has(event.guestId)) {
       this.lastRoom.set(event.guestId, event.roomId);
       this.lastRefused.delete(event.guestId);
