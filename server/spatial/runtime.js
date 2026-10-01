@@ -235,6 +235,11 @@ export class SpatialRuntime {
         }),
         occupantIds: (roomId) =>
           (this.coordinator?.getRoomOccupants(roomId) ?? []).map((o) => o.guestId),
+        // A room that waits for its piece (museum.waitFor) only waits while
+        // that piece is actually connected.
+        pieceReady: (roomId) => this.experiences.get(roomId)?.state === 'ready',
+        wakeAt: (at) => this.clock.setTimeout(() => { if (this.running) this.notifyChange(); },
+          Math.max(0, at - this.now())),
         log: (line) => this.io.log?.(line),
       })
       : null;
@@ -253,7 +258,13 @@ export class SpatialRuntime {
         config: room.experience,
         clock: this.clock,
         openSocket: this.openExperienceSocket,
-        onChange: () => this.io.onStateChange?.(),
+        onChange: () => {
+          // A piece that drops lets everyone waiting for it hear the room.
+          const lost = this.experiences.get(roomId)?.state !== 'ready'
+            && this.running && this.museum?.pieceLost(roomId);
+          if (lost) this.notifyChange();
+          else this.io.onStateChange?.();
+        },
         onEvent: (id, name) => this.roomEventFromExperience(id, name),
       }));
     }
@@ -613,9 +624,13 @@ export class SpatialRuntime {
     const from = room.state;
     room.send(name);
     const moved = room.state !== from;
-    this.append({ type: 'room.experienceEvent', roomId, event: name, from, to: room.state, moved });
-    this.io.log?.(moved ? `${roomId} ← ${name} (from its piece): ${from} → ${room.state}` : `${roomId} ← ${name} (from its piece): no change in ${from}`);
-    if (moved) this.notifyChange();
+    // Guests whose entrance was waiting for this (museum.waitFor) hear it now.
+    const released = this.museum?.pieceEvent(roomId, name) ?? 0;
+    this.append({ type: 'room.experienceEvent', roomId, event: name, from, to: room.state, moved, released });
+    this.io.log?.(moved
+      ? `${roomId} ← ${name} (from its piece): ${from} → ${room.state}`
+      : `${roomId} ← ${name} (from its piece): no change in ${from}${released ? `; ${released} waiting now hear the room` : ''}`);
+    if (moved || released) this.notifyChange();
     return moved;
   }
 

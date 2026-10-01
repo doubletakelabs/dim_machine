@@ -1987,6 +1987,10 @@
       "consumption3"
     ],
     "doneAfterMs": 5000,
+    "waitFor": {
+      "kin": "KIN_RUN"
+    },
+    "waitMaxMs": 60000,
     "stems": {},
     "roomStems": {
       "slop": {
