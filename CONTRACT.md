@@ -57,6 +57,12 @@ Decided on site at MAD, in one day; each is written into its section.
   the show's assets, not all of `public/assets`, and the page decodes each
   clip when a cue first asks for it, within a memory budget — not all at load,
   which crashed the page on the venue's phones.
+- **Kin speaks when it can pop up (§8.1, museum clips).** `museum.waitFor`
+  holds a room's entrance and in_room until its piece sends an event: Kin's
+  board says `KIN_RUN` as its actuator starts a run, so a guest who walks in
+  mid-run or in the cooldown hears only the room's background until the next
+  run (2026-10-01). Never while the piece is unconnected; never past
+  `museum.waitMaxMs` (60000).
 - **No museum limit; Kin and Faerie both (§8.1, museum clips).** A guest
   may enter every museum room, Kin and Faerie included (2026-10-01; until
   then MAD-DIM's `museum.chooseOne` let them have only one of the two). Going
@@ -1015,6 +1021,14 @@ the per-room stems; whatever it does not declare falls back to the shared one.
   both Kin and Faerie (2026-10-01).
 - A return runs the room again, so they can use it, but not its entrance or
   in_room: they hear `returnVisited` instead.
+- `waitFor` lets a room wait for its own piece before it speaks — MAD-DIM:
+  `{ "kin": "KIN_RUN" }` (2026-10-01). Walking in wakes the room as usual and
+  its background plays, but the entrance and in_room hold until the piece
+  sends that event (`{ "t": "event", "name": "KIN_RUN" }`, which Kin's board
+  sends as each run starts); everyone waiting in the room then hears it from
+  that moment. Out before then is as if they never went in. Nothing is held
+  while the piece's link is not up, a link that drops releases everyone
+  waiting, and nobody waits longer than `waitMaxMs` (default 60000).
 - A room is only theirs once they are still in it `museum.doneAfterMs`
   after its first clip actually began on their phone (MAD-DIM: 5000). The
   page reports each voice it starts — `{ "type": "playing", "assetId",

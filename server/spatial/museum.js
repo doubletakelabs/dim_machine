@@ -28,6 +28,15 @@
  *   and back, a clip that never got to play — and it is as if they never went
  *   in: no slot, no choice made, and the next entry plays it from the top
  *   (2026-09-27).
+ * - A room may wait for its own piece before it speaks (`waitFor`, MAD-DIM:
+ *   Kin waits for KIN_RUN, 2026-10-01). Walking in still wakes the room and
+ *   its background plays, but the entrance and in_room hold until the piece
+ *   says the event — Kin's actuator starting a run, so a guest who walks in
+ *   during a run or its cooldown hears nothing until the pop-up they will see.
+ *   Out before then is as if they never went in, like any too-brief visit.
+ *   Nothing is held while the piece is not connected, a dropped link lets
+ *   everyone waiting hear the room at once, and nobody waits longer than
+ *   `waitMaxMs` (60s): a dead or stuck piece must never mean silence.
  * - A full room (maxOccupants) refuses by capacity: silence, nothing burned,
  *   nothing remembered. Walking away from it can never count against anyone.
  * - A below-capacity room that is already running activates *for the joiner*
@@ -71,6 +80,8 @@ export class MuseumLayer {
    * @param {(roomId: string) => void} io.release — stand an abandoned room down
    * @param {(roomId: string) => { count: number, max: number|null, active: boolean }} io.roomInfo
    * @param {(roomId: string) => string[]} io.occupantIds — who is physically inside right now
+   * @param {(roomId: string) => boolean} [io.pieceReady] — the room's piece is connected
+   * @param {(at: number) => void} [io.wakeAt] — re-cue everyone at `at`
    * @param {(line: string) => void} [io.log]
    */
   constructor(config, io) {
@@ -86,6 +97,10 @@ export class MuseumLayer {
     for (const group of config.chooseOne ?? []) {
       for (const roomId of group) this.rivals.set(roomId, group.filter((r) => r !== roomId));
     }
+    /** roomId → the event from its piece that its entrance waits for. */
+    this.waitFor = new Map(Object.entries(config.waitFor ?? {}));
+    /** The longest a guest waits for it before hearing the room anyway. */
+    this.waitMaxMs = config.waitMaxMs ?? 60000;
     /** guestId → { seen, memory: Map, engagedRoom, engagedAt, visitKind, voice } */
     this.guests = new Map();
     /** roomId → Set<guestId> currently engaged (their room, running for them) */
@@ -101,6 +116,7 @@ export class MuseumLayer {
         engagedAt: 0,
         replay: false,       // engaged on a return: the room runs, its clips do not
         clipAt: null,        // when the engaged room's first clip began on their phone
+        heldAt: null,        // waiting since then for the room's piece (`waitFor`)
         visitKind: null,     // what this entry was, consumed on exit
         voice: null,         // the current spoken line: { stem, assetId, startAt }
       });
@@ -189,7 +205,15 @@ export class MuseumLayer {
     g.seen += 1;
     g.memory.set(roomId, 'visited');
     this.engage(g, guestId, roomId, now, false);
-    this.say(g, 'entrance', now, roomId);
+    if (this.waitFor.has(roomId) && this.io.pieceReady?.(roomId)) {
+      // Its piece first: nothing spoken until it says so (`waitFor`).
+      g.heldAt = now;
+      g.voice = null;
+      this.io.wakeAt?.(now + this.waitMaxMs);
+      this.io.log?.(`museum: ${guestId} in ${roomId}, waiting for ${this.waitFor.get(roomId)}`);
+    } else {
+      this.say(g, 'entrance', now, roomId);
+    }
     // First one in wakes the room; a joiner finds it already running and the
     // room activates *for them* all the same — their own entrance, their own
     // in_room.
@@ -247,11 +271,47 @@ export class MuseumLayer {
     if (kind && kind !== 'full') this.say(g, 'inHallway', this.io.now());
   }
 
+  /** Their wait is over: the room speaks from `at`, entrance then in_room. */
+  unhold(g, at) {
+    g.heldAt = null;
+    g.engagedAt = at;
+    this.say(g, 'entrance', at, g.engagedRoom);
+  }
+
+  /**
+   * The room's piece said something. If it is what the room waits for, everyone
+   * waiting in it hears the room now. Returns how many were waiting.
+   */
+  pieceEvent(roomId, name) {
+    if (this.waitFor.get(roomId) !== name) return 0;
+    return this.unholdRoom(roomId, `${name} from its piece`);
+  }
+
+  /** The room's piece is no longer connected: nobody waits for it. */
+  pieceLost(roomId) {
+    if (!this.waitFor.has(roomId)) return 0;
+    return this.unholdRoom(roomId, 'its piece is not connected');
+  }
+
+  unholdRoom(roomId, why) {
+    const now = this.io.now();
+    let n = 0;
+    for (const guestId of this.engaged.get(roomId) ?? []) {
+      const g = this.guests.get(guestId);
+      if (g?.heldAt == null) continue;
+      this.unhold(g, now);
+      n += 1;
+    }
+    if (n) this.io.log?.(`museum: ${roomId} speaks for ${n} waiting (${why})`);
+    return n;
+  }
+
   /** Walked out: the slot stays burned, and the room may stand down. */
   disengage(guestId, roomId) {
     const g = this.guest(guestId);
     g.engagedRoom = null;
     g.replay = false;
+    g.heldAt = null;
     const set = this.engaged.get(roomId);
     set?.delete(guestId);
     if (set && set.size === 0 && this.io.roomInfo(roomId).active) {
@@ -291,6 +351,11 @@ export class MuseumLayer {
   guestCues(guestId, roomIdHere) {
     const g = this.guests.get(guestId);
     if (!g) return null;
+    // Waited as long as anyone should: the room speaks from when it ran out.
+    if (g.heldAt != null && this.io.now() - g.heldAt >= this.waitMaxMs) {
+      this.io.log?.(`museum: ${guestId} waited ${this.waitMaxMs / 1000}s for ${g.engagedRoom}'s piece — hearing it anyway`);
+      this.unhold(g, g.heldAt + this.waitMaxMs);
+    }
     const inMuseumRoom = roomIdHere && this.rooms.has(roomIdHere);
     if (!inMuseumRoom && !g.voice) return null;
 
@@ -303,7 +368,8 @@ export class MuseumLayer {
         key: `museum:${g.voice.stem}:${g.voice.startAt}`,
       };
     }
-    if (g.engagedRoom && g.engagedRoom === roomIdHere && !g.replay && this.io.roomInfo(roomIdHere).active) {
+    if (g.engagedRoom && g.engagedRoom === roomIdHere && !g.replay && g.heldAt == null
+      && this.io.roomInfo(roomIdHere).active) {
       // The bed starts exactly when the entrance clip ends — the server knows
       // the clip's length, so the phone just schedules it.
       const entrance = this.stemAsset('entrance', g, roomIdHere);
@@ -330,6 +396,7 @@ export class MuseumLayer {
       seen: g.seen,
       limit,
       engagedRoom: g.engagedRoom,
+      waiting: g.heldAt != null,
       rooms: Object.fromEntries(g.memory),
     };
   }
@@ -347,6 +414,26 @@ export function checkMuseum(museum, rooms, errors, warnings) {
   }
   if (museum.doneAfterMs != null && !(typeof museum.doneAfterMs === 'number' && museum.doneAfterMs >= 0)) {
     errors.push('museum.doneAfterMs must be a non-negative number of milliseconds');
+  }
+  if (museum.waitMaxMs != null && !(typeof museum.waitMaxMs === 'number' && museum.waitMaxMs > 0)) {
+    errors.push('museum.waitMaxMs must be a positive number of milliseconds');
+  }
+  if (museum.waitFor != null) {
+    if (typeof museum.waitFor !== 'object' || Array.isArray(museum.waitFor)) {
+      errors.push('museum.waitFor must map room ids to an event from that room\'s piece, e.g. { "kin": "KIN_RUN" }');
+    } else {
+      const museumRooms = new Set(Array.isArray(museum.rooms) ? museum.rooms : []);
+      for (const [roomId, name] of Object.entries(museum.waitFor)) {
+        if (!museumRooms.has(roomId)) errors.push(`museum.waitFor names "${roomId}", which is not one of museum.rooms`);
+        if (typeof name !== 'string' || !/^[A-Z][A-Z0-9_]{0,63}$/.test(name)) {
+          errors.push(`museum.waitFor.${roomId} must be an event name like KIN_RUN`);
+        }
+        // Without a piece it would wait for nothing; it never holds, but say so.
+        if (rooms?.[roomId] && !rooms[roomId].experience) {
+          warnings.push(`museum.waitFor.${roomId}: the room has no experience to send ${name}, so nothing will wait`);
+        }
+      }
+    }
   }
   if (!Array.isArray(museum.rooms) || !museum.rooms.length) {
     errors.push('museum.rooms must be a non-empty array of room ids');

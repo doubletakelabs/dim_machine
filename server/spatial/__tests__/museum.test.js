@@ -532,3 +532,148 @@ describe('a phone handed on (a new visit on the same guestId)', () => {
     assert.equal(roomState(rt, 'saas'), 'active');
   });
 });
+
+describe('a room that waits for its piece (Kin, museum.waitFor)', () => {
+  // Kin's entrance and in_room wait for KIN_RUN — its actuator starting a run —
+  // so nobody hears the room while it is mid-run or cooling down and cannot
+  // pop up for them (2026-10-01). Its background plays all the while.
+  function withKin({ connect = true, mutate } = {}) {
+    const sockets = [];
+    const open = (url) => {
+      const handlers = {};
+      const socket = {
+        url,
+        sent: [],
+        on: (event, fn) => { handlers[event] = fn; },
+        send: (raw) => socket.sent.push(JSON.parse(raw)),
+        close: () => {},
+        accept: () => handlers.open?.(),
+        drop: () => handlers.close?.(),
+        reply: (m) => handlers.message?.(JSON.stringify(m)),
+      };
+      sockets.push(socket);
+      return socket;
+    };
+    const rt = new SpatialRuntime({
+      enableTick: false,
+      clock: new ManualClock(),
+      assetSeconds: () => ENTRANCE_SECONDS,
+      openExperienceSocket: open,
+    });
+    const def = applyInstallation(structuredClone(museum), {
+      installation: 'test',
+      experiences: { kin: 'ws://kin.test/ws' },
+    }).def;
+    if (!mutate?.keepDone) def.museum.doneAfterMs = 0;
+    mutate?.(def);
+    assert.deepEqual(rt.load(def).errors, []);
+    rt.start();
+    const kin = sockets[0];
+    if (connect) kin.accept();
+    return { rt, kin, run: () => kin.reply({ t: 'event', name: 'KIN_RUN' }) };
+  }
+
+  const roomBg = (rt, guestId) => rt.desiredCues(guestId).get('bg')?.assetId ?? null;
+
+  it('walking in puts them on the board\'s driver list — what starts a run', () => {
+    const { rt, kin } = withKin();
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'kin');
+    const drivers = kin.sent.filter((m) => m.t === 'drivers').at(-1);
+    assert.equal(drivers?.drivers.length, 1, 'the board hears one guest walk up');
+  });
+
+  it('the room wakes and its background plays, but its clips wait for KIN_RUN', () => {
+    const { rt, run } = withKin();
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'kin');
+    assert.equal(roomState(rt, 'kin'), 'active');
+    assert.equal(roomBg(rt, g.guestId), museum.rooms.kin.bg.audio, 'Kin\'s background plays');
+    assert.notEqual(voice(rt, g.guestId), 'audio/museum/entrance.wav');
+    assert.equal(bed(rt, g.guestId), null, 'no in_room yet');
+    assert.equal(snap(rt, g.guestId).waiting, true);
+
+    rt.testAdvanceTime(15000); // Kin is cooling down; still nothing
+    assert.equal(bed(rt, g.guestId), null);
+
+    const ranAt = rt.now();
+    run();
+    assert.equal(voice(rt, g.guestId), 'audio/museum/entrance.wav', 'the entrance, as Kin rises');
+    assert.equal(bed(rt, g.guestId).startAt, ranAt + ENTRANCE_SECONDS * 1000, 'in_room after it');
+    assert.equal(snap(rt, g.guestId).waiting, false);
+  });
+
+  it('someone who walks in after a run started waits for the next one', () => {
+    const { rt, run } = withKin();
+    const a = arrive(rt);
+    const b = arrive(rt);
+    walk(rt, a.guestId, 'kin');
+    run();
+    walk(rt, b.guestId, 'kin');
+    assert.equal(snap(rt, b.guestId).waiting, true, 'b missed this run');
+    assert.equal(voice(rt, a.guestId), 'audio/museum/entrance.wav', 'a is unaffected');
+    rt.testAdvanceTime(30000);
+    run();
+    assert.equal(snap(rt, b.guestId).waiting, false);
+    assert.equal(voice(rt, b.guestId), 'audio/museum/entrance.wav');
+  });
+
+  it('out before Kin runs is as if they never went in', () => {
+    const { rt } = withKin({ mutate: Object.assign(() => {}, { keepDone: true }) });
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'kin');
+    walk(rt, g.guestId, 'museumHallway');
+    assert.equal(snap(rt, g.guestId).rooms.kin, undefined, 'not had');
+    assert.equal(snap(rt, g.guestId).seen, 0);
+  });
+
+  it('other rooms do not wait', () => {
+    const { rt } = withKin();
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'slop');
+    assert.equal(voice(rt, g.guestId), 'audio/museum/entrance.wav');
+  });
+
+  it('nothing waits while the board is not connected', () => {
+    const { rt } = withKin({ connect: false });
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'kin');
+    assert.equal(voice(rt, g.guestId), 'audio/museum/entrance.wav');
+    assert.equal(snap(rt, g.guestId).waiting, false);
+  });
+
+  it('a board that drops lets everyone waiting hear the room', () => {
+    const { rt, kin } = withKin();
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'kin');
+    assert.equal(snap(rt, g.guestId).waiting, true);
+    kin.drop();
+    assert.equal(snap(rt, g.guestId).waiting, false);
+    assert.equal(voice(rt, g.guestId), 'audio/museum/entrance.wav');
+  });
+
+  it('nobody waits longer than waitMaxMs, even for a board that never runs', () => {
+    const { rt } = withKin();
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'kin');
+    const heldAt = rt.museum.guests.get(g.guestId).heldAt;
+    rt.testAdvanceTime(59000);
+    assert.equal(snap(rt, g.guestId).waiting, true);
+    rt.testAdvanceTime(2000);
+    assert.equal(snap(rt, g.guestId).waiting, false);
+    assert.equal(bed(rt, g.guestId).startAt, heldAt + 60000 + ENTRANCE_SECONDS * 1000);
+  });
+
+  it('validates the setting', () => {
+    const errorsFor = (museumPatch) => {
+      const def = structuredClone(museum);
+      Object.assign(def.museum, museumPatch);
+      return validateShowDefinition(def).errors.join('\n');
+    };
+    assert.equal(errorsFor({ waitFor: { kin: 'KIN_RUN' }, waitMaxMs: 60000 }), '');
+    assert.match(errorsFor({ waitFor: { library: 'KIN_RUN' } }), /"library", which is not one of museum\.rooms/);
+    assert.match(errorsFor({ waitFor: { kin: 'kin run' } }), /waitFor\.kin must be an event name/);
+    assert.match(errorsFor({ waitFor: ['kin'] }), /museum\.waitFor must map room ids/);
+    assert.match(errorsFor({ waitMaxMs: 0 }), /waitMaxMs must be a positive number/);
+  });
+});
