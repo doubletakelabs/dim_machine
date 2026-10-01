@@ -1959,12 +1959,6 @@
       "consumption2",
       "consumption3"
     ],
-    "chooseOne": [
-      [
-        "kin",
-        "faerie"
-      ]
-    ],
     "doneAfterMs": 5000,
     "stems": {},
     "roomStems": {
