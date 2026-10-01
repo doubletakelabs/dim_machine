@@ -520,28 +520,42 @@ describe('the lobby, driven from calibration', () => {
     assert.equal(cues.filter((c) => c.kind === 'endExperience' && c.guestId === g.guestId).length, 0);
   });
 
-  it('puts a guest on the side of the screen by the beacon their phone heard strongest, and keeps them there', () => {
+  it('puts a guest on the side of the screen by the beacon their phone heard strongest, checked at each clip', () => {
     const { rt, cues, lobby } = withLobby();
     const left = arrive(rt, cues);
     const right = arrive(rt, cues);
     rt.resyncCues(left.guestId);
-    const cue = cues.find((c) => c.kind === 'experience' && c.guestId === left.guestId);
+    const lastCue = (g) => cues.filter((c) => c.kind === 'experience' && c.guestId === g.guestId).at(-1);
+    const cue = lastCue(left);
     assert.deepEqual([...cue.sides].sort(), [46849, 49152], 'the phone is told which beacons to sample');
     assert.equal(cue.sideAfterMs, 3000);
+    assert.equal(cue.sideKey, 'guidance.prologue.calibration.step1', 'and in which step');
     assert.deepEqual(lobby.last('drivers').drivers.map((d) => d.side), [undefined, undefined], 'no side until the phone says');
 
-    assert.equal(rt.setGuestSide(left.guestId, 49152), true);
-    assert.equal(rt.setGuestSide(right.guestId, 46849), true);
-    const sideOf = (g) => {
+    const step1 = 'guidance.prologue.calibration.step1';
+    assert.equal(rt.setGuestSide(left.guestId, 49152, step1), true);
+    assert.equal(rt.setGuestSide(right.guestId, 46849, step1), true);
+    const driverOf = (g) => {
       const driverId = rt.experienceDrivers('calibration').find((d) => d.guestId === g.guestId).driverId;
-      return lobby.last('drivers').drivers.find((d) => d.driverId === driverId).side;
+      return lobby.last('drivers').drivers.find((d) => d.driverId === driverId);
     };
-    assert.equal(sideOf(left), 'left');
-    assert.equal(sideOf(right), 'right');
+    assert.equal(driverOf(left).side, 'left');
+    assert.equal(driverOf(right).side, 'right');
+    assert.equal(driverOf(left).place, step1);
 
-    assert.equal(rt.setGuestSide(left.guestId, 46849), false, 'locked: one pick per visit');
-    assert.equal(sideOf(left), 'left');
-    assert.equal(rt.setGuestSide(right.guestId, 12345), false, 'a beacon the room does not split on');
+    assert.equal(rt.setGuestSide(left.guestId, 46849, step1), false, 'one pick per clip');
+    assert.equal(rt.setGuestSide(left.guestId, 46849, 'guidance.prologue.calibration.step2'), false, 'not for a clip they are not on');
+    assert.equal(rt.setGuestSide(right.guestId, 12345, step1), false, 'a beacon the room does not split on');
+
+    // The next clip: the phone is re-cued to sample again, and may change sides.
+    rt.guestInput(left.guestId, 'tap');
+    const step2 = 'guidance.prologue.calibration.step2';
+    assert.equal(lastCue(left).sideKey, step2);
+    assert.equal(driverOf(left).side, 'left', 'kept until the new pick');
+    assert.equal(rt.setGuestSide(left.guestId, 46849, step2), true);
+    assert.equal(driverOf(left).side, 'right');
+    assert.equal(driverOf(left).place, step2, 'a new place for the new clip');
+    assert.equal(cues.filter((c) => c.kind === 'endExperience' && c.guestId === left.guestId).length, 0, 'one link throughout');
   });
 
   it('takes eight guests at once, each in a colour of their own', () => {

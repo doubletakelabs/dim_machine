@@ -1117,10 +1117,13 @@ wss.on('connection', (ws) => {
       }
 
       case 'side': {
-        // The phone's pick of the beacon it heard strongest over its first
-        // seconds in a room whose piece splits the screen (rooms.<id>.experience.sides).
+        // The phone's pick of the beacon it heard strongest over the first
+        // seconds of a step, in a room whose piece splits the screen
+        // (rooms.<id>.experience.sides): { major, key } — key, the step.
         const guest = runtime.getGuestByToken(token);
-        if (guest && Number.isInteger(msg.major)) runtime.setGuestSide(guest.guestId, msg.major);
+        if (guest && Number.isInteger(msg.major) && typeof msg.key === 'string' && msg.key.length <= 200) {
+          runtime.setGuestSide(guest.guestId, msg.major, msg.key);
+        }
         return;
       }
 

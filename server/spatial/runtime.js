@@ -111,7 +111,7 @@ export class SpatialRuntime {
     this._sequencesSeen = new Map();
     /** Clips whose length could not be read, warned about once each. */
     this._unmeasuredClips = new Set();
-    /** guestId → { roomId, side }: which half of a piece's screen is theirs (`sides`). */
+    /** guestId → { roomId, key, side }: which half of a piece's screen is theirs (`sides`), as of which step. */
     this._sides = new Map();
     /**
      * guestId → the doorway their phone hears (§4.2c):
@@ -1559,7 +1559,8 @@ export class SpatialRuntime {
         lifecycle: this.experienceLifecycle(roomId),
         drivers: this.experienceDrivers(roomId).map(({ driverId, hue, secret, guestId }) => {
           const side = this._sides.get(guestId);
-          return { driverId, hue, secret, ...(side?.roomId === roomId ? { side: side.side } : {}) };
+          // `place` changes with each new pick: the piece places the guest afresh.
+          return { driverId, hue, secret, ...(side?.roomId === roomId ? { side: side.side, place: side.key } : {}) };
         }),
         ...(Array.isArray(tracks) ? { tracks: tracks.map(({ n, seconds }) => ({ n, seconds })) } : {}),
       });
@@ -1804,21 +1805,32 @@ export class SpatialRuntime {
 
   /**
    * Which half of a piece's screen is the guest's, from the room beacon their
-   * phone heard strongest over its first few seconds there (`sides`: the
-   * lobby, from calibration's two beacons, 2026-10-01). Locked once given for
-   * that room: the phone samples once, and a guest's popups do not wander.
+   * phone heard strongest over the first few seconds of each step of their
+   * sequence (`sides`: the lobby, from calibration's two beacons — checked
+   * at every clip, 2026-10-01). One pick per step; a guest can change sides
+   * between clips, and the piece places them afresh each time.
    *
+   * @param {string} key — the step the phone sampled in (its cue's `sideKey`)
    * @returns {boolean} whether it was taken
    */
-  setGuestSide(guestId, major) {
+  setGuestSide(guestId, major, key) {
     const actor = this.guestActors.get(guestId);
     const roomId = actor?.currentRoom()?.roomId;
     const side = roomId ? this.def?.rooms?.[roomId]?.experience?.sides?.[String(major)] : null;
-    if (!side || this._sides.get(guestId)?.roomId === roomId) return false;
-    this._sides.set(guestId, { roomId, side });
-    this.append({ type: 'guest.side', guestId, roomId, major: Number(major), side });
+    if (!side || key == null || key !== this.sideKeyFor(guestId)) return false;
+    const was = this._sides.get(guestId);
+    if (was?.roomId === roomId && was.key === key) return false;
+    this._sides.set(guestId, { roomId, key, side });
+    this.append({ type: 'guest.side', guestId, roomId, step: key, major: Number(major), side });
     this.notifyChange();
     return true;
+  }
+
+  /** The sequence step a guest's side is sampled for, or null outside a sequence. */
+  sideKeyFor(guestId) {
+    const actor = this.guestActors.get(guestId);
+    const key = actor ? this.guidanceKey(actor) : null;
+    return key && this.def?.guest?.stepInputs?.[key] ? key : null;
   }
 
   /** Re-cue a guest at `at` (show clock), when a gesture unlocks. One pending per guest. */
@@ -1862,12 +1874,14 @@ export class SpatialRuntime {
       allow = taught.inputs;
       if (taught.nextAt != null) this.wakeAt(guestId, taught.nextAt);
     }
+    // Re-sampled at each step, so the cue changes with the step.
+    const sideKey = config.sides ? this.sideKeyFor(guestId) : null;
     return {
       assetId: `${here.roomId}:${driver.driverId}`,
-      key: `${here.roomId}:${driver.driverId}` + (allow ? `:${allow.join('+')}` : ''),
+      key: `${here.roomId}:${driver.driverId}` + (allow ? `:${allow.join('+')}` : '') + (sideKey ? `@${sideKey}` : ''),
       ...(allow ? { allow } : {}),
       // Beacons to sample for the guest's side of the screen, and for how long.
-      ...(config.sides ? { sides: Object.keys(config.sides).map(Number), sideAfterMs: config.sideAfterMs ?? 3000 } : {}),
+      ...(config.sides ? { sides: Object.keys(config.sides).map(Number), sideAfterMs: config.sideAfterMs ?? 3000, sideKey } : {}),
       endpoint: config.phoneEndpoint ?? config.endpoint,
       experienceId: config.experienceId ?? null,
       inputMode: config.inputMode ?? 'stream',

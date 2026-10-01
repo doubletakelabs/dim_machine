@@ -820,8 +820,13 @@ const EXPERIENCE_RETRY_MS = 2000;
 
 function openExperience(cue) {
   if (experience?.endpoint === cue.endpoint && experience?.driverId === cue.driverId) {
-    // The same link, re-cued because the show has unlocked another gesture.
+    // The same link, re-cued: another gesture unlocked, or a new step to
+    // sample the guest's side in.
     experience.allow = cue.allow ?? null;
+    if (cue.sideKey && cue.sideKey !== experience.sideKey) {
+      experience.sideKey = cue.sideKey;
+      sampleSide(experience, cue.sides, cue.sideAfterMs ?? 3000);
+    }
     return;
   }
   closeExperience();
@@ -834,24 +839,27 @@ function openExperience(cue) {
   experience = link;
   inputMode = cue.inputMode ?? 'stream';
   dialExperience(link, cue.secret);
-  if (Array.isArray(cue.sides) && cue.sides.length) sampleSide(link, cue.sides, cue.sideAfterMs ?? 3000);
+  link.sideKey = cue.sideKey ?? null;
+  if (link.sideKey) sampleSide(link, cue.sides, cue.sideAfterMs ?? 3000);
 }
 
 /**
- * Which of the room's beacons this phone hears strongest, averaged over its
- * first few seconds with the piece, told to the show once: it decides which
- * half of the screen is this guest's (the lobby, from calibration's two
- * beacons, 2026-10-01). Needs the app's `heard`; without it, nothing is sent
- * and the piece places the guest anywhere. Nothing heard yet: keep listening.
+ * Which of the room's beacons this phone hears strongest, averaged over the
+ * first few seconds of a step (each calibration clip), told to the show once
+ * per step: it decides which half of the screen is this guest's for that clip
+ * (the lobby, from calibration's two beacons, 2026-10-01). Needs the app's
+ * `heard`; without it, nothing is sent and the piece places the guest
+ * anywhere. Nothing heard yet: keep listening. A new step: this one stops.
  */
 const SIDE_SAMPLE_EVERY_MS = 250;
 const SIDE_GIVE_UP_MS = 30000;
 function sampleSide(link, majors, forMs) {
-  if (!nativeApp?.status) return;
+  if (!nativeApp?.status || !Array.isArray(majors) || !majors.length) return;
+  const key = link.sideKey;
   const sums = new Map();
   const started = Date.now();
   const timer = setInterval(() => {
-    if (experience !== link) return clearInterval(timer);
+    if (experience !== link || link.sideKey !== key) return clearInterval(timer);
     const heard = nativeStatus()?.heard ?? {};
     for (const major of majors) {
       const rssi = heard[String(major)];
@@ -868,7 +876,7 @@ function sampleSide(link, majors, forMs) {
     }
     clearInterval(timer);
     const [best] = [...sums.entries()].sort((a, b) => b[1].total / b[1].n - a[1].total / a[1].n)[0];
-    sendMsg({ type: 'side', major: best });
+    sendMsg({ type: 'side', major: best, key });
   }, SIDE_SAMPLE_EVERY_MS);
 }
 
