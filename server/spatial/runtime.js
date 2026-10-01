@@ -1752,6 +1752,9 @@ export class SpatialRuntime {
     const actor = this.guestActors.get(guestId);
     if (!actor || !this.running || !actor.canAccept('STARTED')) return false;
     actor.send('STARTED');
+    // How long they have been in the show counts from here (the panel's Time).
+    const guest = this.guests.get(guestId);
+    if (guest && guest.startedAt == null) guest.startedAt = this.now();
     const here = actor.currentRoom()?.roomId;
     if (here && actor.canAccept(enteredEvent(here))) actor.send(enteredEvent(here));
     this.append({ type: 'guest.started', guestId, roomId: here ?? null });

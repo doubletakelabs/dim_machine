@@ -26,6 +26,12 @@ export class Guest {
      * visit, with the show started afresh.
      */
     this.visitId = init.visitId ?? null;
+    /**
+     * When this visit began: the guest pressed START DIM. Null until then.
+     * Set once — a phone that reconnects sends its `ready` again, and that
+     * is not a new start.
+     */
+    this.startedAt = null;
     this.pathId = init.pathId;
     /**
      * Whether a person chose this path rather than the show drawing it.
@@ -126,6 +132,7 @@ export class Guest {
       occupancy: this.occupancy,
       connected: this.connected,
       kind: this.kind,
+      startedAt: this.startedAt,
       pathPinned: this.pathPinned,
       visitHistory: this.visitHistory,
     };

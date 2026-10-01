@@ -666,3 +666,39 @@ describe('a step that only listens once its clip has asked (listenFrom)', () => 
     assert.match(errors.join('\n'), /sequence\[0\]\.listenFrom must be a number of seconds/);
   });
 });
+
+describe('how long a guest has been in the show (the panel\'s Time)', () => {
+  const panelRow = (rt, guestId) => rt.getGuestsRoster().find((g) => g.guestId === guestId);
+
+  it('counts from START DIM, not from when the phone was handed over', () => {
+    const { rt } = makeRuntime();
+    const g = rt.spawnGuest({ kind: 'phone', guestId: 'mad0098' });
+    walkTo(rt, g.guestId, 'frontDesk');
+    rt.testAdvanceTime(30_000);
+    assert.equal(panelRow(rt, g.guestId).startedAt, null, 'not started yet: the panel shows a dash');
+    const pressed = rt.now();
+    rt.guestStarted(g.guestId);
+    assert.equal(panelRow(rt, g.guestId).startedAt, pressed);
+  });
+
+  it('is not reset by a reload or a reconnect, which send ready again', () => {
+    const { rt } = makeRuntime();
+    const g = rt.spawnGuest({ kind: 'phone', guestId: 'mad0098' });
+    walkTo(rt, g.guestId, 'frontDesk');
+    rt.guestStarted(g.guestId);
+    const started = panelRow(rt, g.guestId).startedAt;
+    rt.testAdvanceTime(120_000);
+    rt.guestStarted(g.guestId);
+    assert.equal(panelRow(rt, g.guestId).startedAt, started);
+  });
+
+  it('starts again for the next person on the same phone', () => {
+    const { rt } = makeRuntime();
+    const g = rt.spawnGuest({ kind: 'phone', guestId: 'mad0098' });
+    walkTo(rt, g.guestId, 'frontDesk');
+    rt.guestStarted(g.guestId);
+    rt.removeGuest('mad0098');
+    const next = rt.spawnGuest({ kind: 'phone', guestId: 'mad0098' });
+    assert.equal(panelRow(rt, next.guestId).startedAt, null);
+  });
+});

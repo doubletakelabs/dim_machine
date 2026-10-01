@@ -242,7 +242,7 @@
       </div>
       <div class="scrollBody">
         <table>
-          <thead><tr><th>Guest</th><th>Journey</th><th>Room</th><th>Doing</th><th>Standing</th><th></th></tr></thead>
+          <thead><tr><th>Guest</th><th>Time</th><th>Journey</th><th>Room</th><th>Doing</th><th>Standing</th><th></th></tr></thead>
           <tbody id="guests"></tbody>
         </table>
       </div>
@@ -422,7 +422,27 @@ function formatDuration(ms) {
   return `${m}:${sec}`;
 }
 
+/** The show clock now, carried forward from the last roster at its rate. */
+function showNow() {
+  const c = clockAt.server;
+  if (!c || c.now == null) return null;
+  return c.now + (Date.now() - clockAt.received) * (c.rate ?? 1);
+}
+
+/**
+ * How long a guest has been in the show: from pressing START DIM, on the
+ * show clock. A guest who has not pressed it yet shows a dash.
+ */
+function guestTime(startedAt) {
+  const now = showNow();
+  return startedAt == null || startedAt === '' || now == null ? '<span class="muted">—</span>' : formatDuration(now - Number(startedAt));
+}
+
 setInterval(renderClock, 200);
+// The guest list's Time column ticks on its own, between rosters.
+setInterval(() => {
+  for (const cell of document.querySelectorAll('.guestTime')) cell.innerHTML = guestTime(cell.dataset.started);
+}, 1000);
 
 function appendLog(line) {
   const el = document.createElement('div');
@@ -1032,6 +1052,7 @@ function renderGuests() {
         ${g.label}${g.walking ? ' <span class="muted">▸</span>' : ''}
         <br><span class="muted mono" style="font-size:10px">${g.guestId}</span>
       </td>
+      <td class="mono guestTime" data-started="${g.startedAt ?? ''}">${guestTime(g.startedAt)}</td>
       <td class="muted">${g.regions?.guidance ?? '—'}${
         g.museum && g.museum.seen ? ` <span style="color:var(--accent)">· ${museumCount(g.museum)}</span>` : ''}${
         onCharger(g) ? ' <span class="muted">⚡</span>' : ''}</td>
@@ -1040,7 +1061,7 @@ function renderGuests() {
       <td style="color:${standingColour(g.currentRoom)}">${describeStanding(g.currentRoom)}</td>
       <td><button class="tiny" data-remove="${g.guestId}">×</button></td>
     </tr>`).join('');
-  $('guests').innerHTML = rows || `<tr><td colspan="6" class="muted">${
+  $('guests').innerHTML = rows || `<tr><td colspan="7" class="muted">${
     charging ? 'No guests out — the rest are on chargers.' : 'No guests yet.'}</td></tr>`;
   $('guestCount').textContent = String(shownGuests().length);
 
