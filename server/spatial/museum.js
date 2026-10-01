@@ -7,15 +7,15 @@
  *
  * The rules, as the team settled them (2026-09-08 … 2026-09-11; complete
  * removed 2026-09-25; no limit, a choice of one, and returns that run
- * 2026-09-26):
+ * 2026-09-26; MAD-DIM's Kin-or-Faerie choice dropped 2026-10-01):
  *
  * - Guests go where they like. Entering a museum room activates it and the
  *   journey runs — entrance, then in_room the moment the entrance clip ends,
  *   for as long as they stay. There is no completion: a room runs until every
  *   guest it is running for has walked out. A show may still cap how many
  *   rooms a guest gets (`limit`); MAD-DIM does not.
- * - `chooseOne` groups rooms a guest gets only one of (MAD-DIM: Kin or
- *   Faerie). The first of a group they enter is theirs; from then on the rest
+ * - `chooseOne` groups rooms a guest gets only one of (MAD-DIM sets none;
+ *   it once paired Kin and Faerie). The first of a group they enter is theirs; from then on the rest
  *   of the group — and any room past a `limit` — cannot activate for them:
  *   in_room_disabled once, return_disabled every entry after.
  * - Returning to a room they have had runs it again, so they can use it, but

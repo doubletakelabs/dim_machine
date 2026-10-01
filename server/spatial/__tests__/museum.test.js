@@ -261,9 +261,31 @@ describe('a room is theirs 5s after its first clip starts on their phone (museum
   });
 });
 
-describe('Kin or Faerie (chooseOne)', () => {
-  it('the first of the pair they enter is theirs; the other will not run for them', () => {
+describe('MAD-DIM: Kin and Faerie both', () => {
+  it('a guest who has had Kin still gets Faerie, and the other way round', () => {
     const rt = makeRuntime();
+    const g = arrive(rt);
+    walk(rt, g.guestId, 'kin');
+    walk(rt, g.guestId, 'museumHallway');
+    walk(rt, g.guestId, 'faerie');
+    assert.equal(roomState(rt, 'faerie'), 'active', 'faerie runs for them');
+    assert.equal(voice(rt, g.guestId), 'audio/museum/entrance.wav');
+    assert.equal(snap(rt, g.guestId).rooms.kin, 'visited');
+
+    const h = arrive(rt);
+    walk(rt, h.guestId, 'faerie');
+    walk(rt, h.guestId, 'museumHallway');
+    walk(rt, h.guestId, 'kin');
+    assert.equal(snap(rt, h.guestId).rooms.kin, 'visited', 'kin is theirs too');
+  });
+});
+
+// MAD-DIM no longer pairs them (2026-10-01); a show that does still gets this.
+describe('a choice of one (chooseOne)', () => {
+  const pairKinFaerie = (def) => { def.museum.chooseOne = [['kin', 'faerie']]; };
+
+  it('the first of the pair they enter is theirs; the other will not run for them', () => {
+    const rt = makeRuntime(pairKinFaerie);
     const g = arrive(rt);
     walk(rt, g.guestId, 'kin');
     assert.equal(roomState(rt, 'kin'), 'active');
@@ -281,7 +303,7 @@ describe('Kin or Faerie (chooseOne)', () => {
   });
 
   it('either way round', () => {
-    const rt = makeRuntime();
+    const rt = makeRuntime(pairKinFaerie);
     const g = arrive(rt);
     walk(rt, g.guestId, 'faerie');
     walk(rt, g.guestId, 'museumHallway');
@@ -291,7 +313,10 @@ describe('Kin or Faerie (chooseOne)', () => {
   });
 
   it('a full room is not a choice', () => {
-    const rt = makeRuntime((def) => { def.rooms.kin.multiGuest = { ...def.rooms.kin.multiGuest, maxOccupants: 1 }; });
+    const rt = makeRuntime((def) => {
+      pairKinFaerie(def);
+      def.rooms.kin.multiGuest = { ...def.rooms.kin.multiGuest, maxOccupants: 1 };
+    });
     const a = arrive(rt);
     const b = arrive(rt);
     walk(rt, a.guestId, 'kin');
@@ -344,8 +369,9 @@ describe('two guests, one room', () => {
 
   it('someone it is not running for does not keep it going', () => {
     // The rule: a room ends when everyone eligible has left. A guest whose
-    // slots were spent can stand in it; the room is not theirs.
-    const rt = makeRuntime();
+    // slots were spent can stand in it; the room is not theirs. Faerie spends
+    // Kin here only by pairing them, which MAD-DIM no longer does.
+    const rt = makeRuntime((def) => { def.museum.chooseOne = [['kin', 'faerie']]; });
     const spent = arrive(rt);
     for (const roomId of ['automation', 'saas', 'slop', 'faerie']) {
       walk(rt, spent.guestId, roomId);

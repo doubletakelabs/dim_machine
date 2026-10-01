@@ -57,10 +57,10 @@ Decided on site at MAD, in one day; each is written into its section.
   the show's assets, not all of `public/assets`, and the page decodes each
   clip when a cue first asks for it, within a memory budget — not all at load,
   which crashed the page on the venue's phones.
-- **No museum limit; Kin or Faerie (§8.1, museum clips).** A guest may
-  enter every museum room; `museum.chooseOne` lets them have Kin or Faerie,
-  not both. Going back into a room runs it again to use, without replaying
-  its clips.
+- **No museum limit; Kin and Faerie both (§8.1, museum clips).** A guest
+  may enter every museum room, Kin and Faerie included (2026-10-01; until
+  then MAD-DIM's `museum.chooseOne` let them have only one of the two). Going
+  back into a room runs it again to use, without replaying its clips.
 - **The Museum Hallway is inferred (§4.2d).** It has no beacons; a phone
   hearing two or more of its rooms, none at its threshold, reports it by name
   (`{ "type": "location", "room" }`). The app (0.2.2+) also no longer picks a
@@ -1007,11 +1007,12 @@ the per-room stems; whatever it does not declare falls back to the shared one.
 - Any museum room runs the first time they walk in: entrance, then in_room.
   `limit` still caps how many rooms a guest gets if a show sets it; MAD-DIM
   does not.
-- `chooseOne` groups rooms a guest gets only one of — MAD-DIM:
+- `chooseOne` groups rooms a guest gets only one of, e.g.
   `[["kin", "faerie"]]`. The first of a group they enter is theirs; the rest of
   the group will not run for them (`inRoomDisabled` once, `returnDisabled`
   after), as a room past the `limit` would not. A room they could not enter
-  because it was full is not a choice.
+  because it was full is not a choice. MAD-DIM sets none: a guest may have
+  both Kin and Faerie (2026-10-01).
 - A return runs the room again, so they can use it, but not its entrance or
   in_room: they hear `returnVisited` instead.
 - A room is only theirs once they are still in it `museum.doneAfterMs`
