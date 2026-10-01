@@ -129,8 +129,10 @@ export function createGestureRecogniser(opts = {}) {
         dy: Math.round(dy),
       });
     } else if (path >= DRAG_MIN_PX) {
-      // Streamed already, move by move, to the room's experience.
-      if (mode() !== 'stream') onGesture('drag', { path: Math.round(path), ms });
+      // In stream mode the room's experience heard it move by move already;
+      // it is still reported whole, marked, for a show step that waits for a
+      // drag while the guest drives a piece (calibration and the lobby).
+      onGesture('drag', { path: Math.round(path), ms, ...(mode() === 'stream' ? { streamed: true } : {}) });
     } else if (dist <= TAP_MAX_PX) {
       onGesture('tap', { x: Math.round(x), y: Math.round(y) });
     }

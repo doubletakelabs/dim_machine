@@ -197,9 +197,12 @@ describe('drag', () => {
     assert.equal(quick.of('drag').length, 0);
   });
 
-  it('is left to the stream when a room experience has the surface', () => {
+  it('is still reported whole in stream mode, marked as streamed', () => {
     const f = drawn(circle, 100, 'stream');
-    assert.equal(f.of('drag').length, 0, 'the experience heard every move already');
+    // The experience heard every move already; a show step waiting for a drag
+    // (calibration, with the lobby driven) has to hear that one happened.
+    assert.equal(f.of('drag').length, 1);
+    assert.equal(f.of('drag')[0][1].streamed, true);
   });
 });
 

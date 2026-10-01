@@ -344,6 +344,64 @@ describe('the calibration sequence, running', () => {
   });
 });
 
+describe('the lobby, driven from calibration', () => {
+  // The lobby (dim_rooms 01_lobby) answers the same three gestures calibration
+  // teaches; guests drive it while the sequence waits for them (2026-10-01).
+  function withLobby() {
+    const sockets = [];
+    const show = structuredClone(museum);
+    show.rooms.calibration.experience.endpoint = 'ws://lobby.test:8080';
+    const cues = [];
+    const rt = new SpatialRuntime({
+      enableTick: false,
+      clock: new ManualClock(),
+      onCue: (guestId, cue) => cues.push({ guestId, ...cue }),
+      openExperienceSocket: (url) => {
+        const handlers = {};
+        const socket = {
+          url, sent: [],
+          on: (event, fn) => { handlers[event] = fn; },
+          send: (raw) => socket.sent.push(JSON.parse(raw)),
+          close: () => {},
+          last: (t) => [...socket.sent].reverse().find((m) => m.t === t) ?? null,
+        };
+        sockets.push(socket);
+        queueMicrotask(() => handlers.open?.());
+        socket.open = () => handlers.open?.();
+        return socket;
+      },
+    });
+    assert.deepEqual(rt.load(show).errors, []);
+    rt.start();
+    sockets[0].open();
+    return { rt, cues, lobby: sockets[0] };
+  }
+
+  it('a guest in calibration drives the lobby, and the phone is told the show needs its gestures too', () => {
+    const { rt, cues, lobby } = withLobby();
+    const g = arrive(rt, cues);
+    rt.resyncCues(g.guestId);
+
+    assert.equal(lobby.last('lifecycle').state, 'live');
+    assert.equal(lobby.last('drivers').drivers.length, 1);
+    const cue = cues.find((c) => c.kind === 'experience' && c.guestId === g.guestId);
+    assert.equal(cue.endpoint, 'ws://lobby.test:8080');
+    assert.equal(cue.gesturesToShow, true);
+
+    // And the sequence still hears them: the phone sends each one both ways.
+    for (const input of ['tap', 'swipe', 'drag']) rt.guestInput(g.guestId, input);
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step4');
+  });
+
+  it('takes eight guests at once, each in a colour of their own', () => {
+    const { rt, cues, lobby } = withLobby();
+    for (let i = 0; i < 8; i++) arrive(rt, cues);
+    const drivers = lobby.last('drivers').drivers;
+    assert.equal(drivers.length, 8);
+    assert.equal(new Set(drivers.map((d) => d.hue)).size, 8);
+  });
+});
+
 describe('the Mask Room', () => {
   it('plays its clip while they are in it, and stops when they walk into Hall of Heroes', () => {
     const { rt, cues } = makeRuntime();

@@ -1736,6 +1736,8 @@ export class SpatialRuntime {
       experienceId: config.experienceId ?? null,
       inputMode: config.inputMode ?? 'stream',
       inputs: config.inputs ?? null,
+      // The show's own steps need the same gestures (the lobby, in calibration).
+      ...(config.gesturesToShow === true ? { gesturesToShow: true } : {}),
       driverId: driver.driverId,
       hue: driver.hue,
       secret: driver.secret,

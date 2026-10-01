@@ -709,7 +709,13 @@ function emitGesture(type, payload) {
   const el = $('gesture');
   if (el) el.textContent = type;
 
-  if (inputMode === 'stream') return sendToExperience({ t: type, ...payload });
+  if (inputMode === 'stream') {
+    // A drag went to the piece move by move already; taps and swipes go whole.
+    if (!payload?.streamed) sendToExperience({ t: type, ...payload });
+    // A piece showing what the show is teaching (the lobby, during
+    // calibration) leaves the show its gestures too (gesturesToShow).
+    if (!experience?.gesturesToShow) return;
+  }
   // The guard is for the statechart only: a nervous double-tap is one answer to
   // a screen. An experience wants every tap it is given.
   if (!repeatGuard.allow()) return;
@@ -816,7 +822,7 @@ function openExperience(cue) {
 
   const link = {
     ws: null, endpoint: cue.endpoint, driverId: cue.driverId, hue: cue.hue,
-    accepts: cue.inputs ?? null, retry: null,
+    accepts: cue.inputs ?? null, gesturesToShow: cue.gesturesToShow === true, retry: null,
   };
   experience = link;
   inputMode = cue.inputMode ?? 'stream';

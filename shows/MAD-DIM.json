@@ -123,6 +123,18 @@
         "dwellMs": 8000,
         "accumulate": true
       },
+      "experience": {
+        "experienceId": "lobby-dead-internet",
+        "inputMode": "stream",
+        "inputs": [
+          "tap",
+          "swipe",
+          "drag",
+          "release"
+        ],
+        "maxDrivers": 8,
+        "gesturesToShow": true
+      },
       "bg": "audio/bg/M_PRE CALIBRATION (LOBBY).mp3"
     },
     "entranceHallway": {

@@ -127,6 +127,7 @@ export class CueDirector {
           experienceId: want.experienceId,
           inputMode: want.inputMode,
           inputs: want.inputs,
+          ...(want.gesturesToShow ? { gesturesToShow: true } : {}),
           driverId: want.driverId,
           hue: want.hue,
           secret: want.secret,

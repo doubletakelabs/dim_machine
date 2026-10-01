@@ -327,9 +327,10 @@ export const EXPERIENCE_EVENTS = ['reset', 'refresh'];
 /**
  * Colours handed to drivers, in order. An experience uses them to tint whatever
  * a driver owns; the show assigns them so that two people never share one, and
- * so a piece never has to invent identity for itself.
+ * so a piece never has to invent identity for itself. Eight, for the lobby's
+ * eight guests at once (2026-10-01); the first six are unchanged.
  */
-export const DRIVER_HUES = [190, 28, 320, 95, 265, 55];
+export const DRIVER_HUES = [190, 28, 320, 95, 265, 55, 0, 140];
 
 /**
  * What a guest is.

@@ -1,12 +1,13 @@
 {
   "installation": "MAD — Dead Internet Museum",
-  "note": "The room machines on the show network (192.168.3.x). The show server uses this file by default — no flag needed — unless that machine has an installations/local.json, which would win. The show server connects to each as the broker; a guest's phone connects to the same address directly to drive the room. A room with an experience but no address here runs as an ordinary room. Not yet listed: the Admin Office (dim_rooms 15_office, at 192.168.3.28, 2026-09-30), which has no room piece in dim_rooms yet; and consumption3 (its wall, at 192.168.3.8), built as a keyboard piece with no phones (dim_rooms #61) but not yet connected to the show. SaaS moved to 192.168.3.15 and Consumption 3 to 192.168.3.8 on 2026-09-28. Kin is an ESP32 driving the actuator (dim_rooms 14_kin, 2026-10-01): it hears who is in the room and no phone connects to it.",
+  "note": "The room machines on the show network (192.168.3.x). The show server uses this file by default — no flag needed — unless that machine has an installations/local.json, which would win. The show server connects to each as the broker; a guest's phone connects to the same address directly to drive the room. A room with an experience but no address here runs as an ordinary room. Not yet listed: the Admin Office (dim_rooms 15_office, at 192.168.3.28, 2026-09-30), which has no room piece in dim_rooms yet; and consumption3 (its wall, at 192.168.3.8), built as a keyboard piece with no phones (dim_rooms #61) but not yet connected to the show. SaaS moved to 192.168.3.15 and Consumption 3 to 192.168.3.8 on 2026-09-28. Kin is an ESP32 driving the actuator (dim_rooms 14_kin, 2026-10-01): it hears who is in the room and no phone connects to it. The lobby (dim_rooms 01_lobby, 192.168.3.29) is driven from the calibration room: guests' taps, swipes and drags show on it while they also advance calibration (gesturesToShow, 2026-10-01).",
   "experiences": {
     "cyclorama": "ws://192.168.3.2:8080",
     "slop": "ws://192.168.3.7:8080",
     "influence": "ws://192.168.3.9:8080",
     "consumption2": "ws://192.168.3.11:8080",
     "saas": "ws://192.168.3.15:8080",
-    "kin": "ws://192.168.3.26/ws"
+    "kin": "ws://192.168.3.26/ws",
+    "calibration": "ws://192.168.3.29:8080"
   }
 }

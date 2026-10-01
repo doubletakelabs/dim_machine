@@ -528,6 +528,9 @@ function checkRoomExperience(roomId, room, path, errors, warnings) {
   if (room.kind === 'hallway') {
     warnings.push(`${at} is on a hallway — guests pass through and will barely hold a driver slot`);
   }
+  if (experience.gesturesToShow != null && typeof experience.gesturesToShow !== 'boolean') {
+    errors.push(`${at}.gesturesToShow must be true or false`);
+  }
   if (experience.inputMode === 'none' && experience.inputs?.length) {
     warnings.push(`${at}.inputs is ignored: inputMode "none" sends no phone to the experience`);
   }
