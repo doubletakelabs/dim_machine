@@ -1495,8 +1495,25 @@ export class SpatialRuntime {
       driving.push(guest.guestId);
     }
 
-    for (const guestId of assigned.keys()) {
-      if (!driving.includes(guestId)) assigned.delete(guestId);
+    // A guest who has left stops driving — unless the room keeps drivers a
+    // while (`keepDriverMs`: the lobby, from calibration, 2026-10-01). A phone
+    // whose location flickers out of the room and back within that keeps its
+    // driver, and with it its box, place and side on the piece; in between it
+    // stays in the set, so the piece changes nothing.
+    const keepMs = def.keepDriverMs ?? 0;
+    const lingering = [];
+    for (const [guestId, entry] of assigned) {
+      if (driving.includes(guestId)) { entry.leftAt = null; continue; }
+      entry.leftAt ??= this.now();
+      if (!this.guests.has(guestId) || this.now() - entry.leftAt >= keepMs) {
+        assigned.delete(guestId);
+        continue;
+      }
+      lingering.push(guestId);
+      // Re-reconcile when the wait is up, so the piece hears they have gone.
+      if (!entry.dropTimer) {
+        entry.dropTimer = this.clock.setTimeout(() => { entry.dropTimer = null; this.notifyChange(); }, keepMs - (this.now() - entry.leftAt) + 1);
+      }
     }
 
     const cap = Math.min(
@@ -1517,6 +1534,10 @@ export class SpatialRuntime {
           guestId,
         });
       }
+      out.push(assigned.get(guestId));
+    }
+    for (const guestId of lingering) {
+      if (out.length >= cap) break;
       out.push(assigned.get(guestId));
     }
     return out;

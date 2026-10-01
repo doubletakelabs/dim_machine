@@ -558,6 +558,43 @@ describe('the lobby, driven from calibration', () => {
     assert.equal(cues.filter((c) => c.kind === 'endExperience' && c.guestId === left.guestId).length, 0, 'one link throughout');
   });
 
+  it('keeps a guest whose location flickers out and back within 15 s as the same driver', () => {
+    const { rt, cues, lobby } = withLobby();
+    const g = arrive(rt, cues);
+    const driverId = () => rt.experienceDrivers('calibration').find((d) => d.guestId === g.guestId)?.driverId;
+    const listed = () => lobby.last('drivers').drivers.map((d) => d.driverId);
+    const first = driverId();
+    assert.ok(first);
+
+    rt.sendGuestToRoom(g.guestId, 'entranceHallway');
+    rt.testAdvanceTime(3000);
+    assert.deepEqual(listed(), [first], 'still on the piece while away');
+    rt.sendGuestToRoom(g.guestId, 'calibration');
+    rt.testAdvanceTime(3000);
+    assert.equal(driverId(), first, 'the same driver: same box, same place');
+    assert.deepEqual(listed(), [first]);
+  });
+
+  it('lets them go once they have been away longer', () => {
+    const { rt, cues, lobby } = withLobby();
+    const g = arrive(rt, cues);
+    const first = rt.experienceDrivers('calibration')[0].driverId;
+    rt.sendGuestToRoom(g.guestId, 'entranceHallway');
+    rt.testAdvanceTime(20_000);
+    assert.deepEqual(lobby.last('drivers').drivers, [], 'gone from the piece after 15 s');
+    assert.equal(lobby.last('lifecycle').state, 'attract');
+    rt.sendGuestToRoom(g.guestId, 'calibration');
+    rt.testAdvanceTime(3000);
+    assert.notEqual(rt.experienceDrivers('calibration')[0]?.driverId, first, 'a new driver now');
+  });
+
+  it('drops a guest removed from the show at once', () => {
+    const { rt, cues, lobby } = withLobby();
+    const g = arrive(rt, cues);
+    rt.removeGuest(g.guestId);
+    assert.deepEqual(lobby.last('drivers').drivers, []);
+  });
+
   it('takes eight guests at once, each in a colour of their own', () => {
     const { rt, cues, lobby } = withLobby();
     for (let i = 0; i < 8; i++) arrive(rt, cues);

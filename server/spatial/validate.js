@@ -533,6 +533,9 @@ function checkRoomExperience(roomId, room, path, errors, warnings) {
       && Object.entries(experience.sides).every(([major, side]) => /^\d{1,5}$/.test(major) && ['left', 'right'].includes(side));
     if (!ok) errors.push(`${at}.sides must map beacon majors to "left" or "right"`);
   }
+  if (experience.keepDriverMs != null && !(Number.isInteger(experience.keepDriverMs) && experience.keepDriverMs >= 0)) {
+    errors.push(`${at}.keepDriverMs must be a whole number of ms, 0 or more`);
+  }
   if (experience.sideAfterMs != null && !(Number.isInteger(experience.sideAfterMs) && experience.sideAfterMs > 0)) {
     errors.push(`${at}.sideAfterMs must be a positive whole number of ms`);
   }

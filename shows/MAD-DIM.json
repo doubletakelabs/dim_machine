@@ -138,7 +138,8 @@
           "49152": "left",
           "46849": "right"
         },
-        "sideAfterMs": 3000
+        "sideAfterMs": 3000,
+        "keepDriverMs": 15000
       },
       "bg": "audio/bg/M_PRE CALIBRATION (LOBBY).mp3"
     },
