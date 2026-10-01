@@ -915,6 +915,10 @@
         "dwellMs": 20000,
         "accumulate": true
       },
+      "experience": {
+        "experienceId": "kin-actuator",
+        "inputMode": "none"
+      },
       "bg": {
         "audio": "audio/bg/M_KIN.mp3",
         "crossfadeMs": 3000

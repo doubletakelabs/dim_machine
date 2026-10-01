@@ -1725,6 +1725,8 @@ export class SpatialRuntime {
     if (!here) return null;
     const config = this.def?.rooms?.[here.roomId]?.experience;
     if (!config?.endpoint) return null;
+    // A piece the show talks to and phones do not (inputMode "none").
+    if (config.inputMode === 'none') return null;
     const driver = this.experienceDrivers(here.roomId).find((d) => d.guestId === guestId);
     if (!driver) return null;
     return {

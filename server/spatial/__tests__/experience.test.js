@@ -396,6 +396,29 @@ describe('handing a phone to an experience', () => {
   });
 });
 
+describe('a piece no phone talks to (inputMode "none")', () => {
+  // Kin's actuator: an ESP32 that only needs to know somebody has walked in.
+  const KIN = { installation: 'test', experiences: { kin: 'ws://kin.test/ws' } };
+
+  it('hears who walks in, and their phone is never sent to it', () => {
+    const { rt, server, cues } = makeRuntime({ installation: KIN, connect: false });
+    const socket = server.sockets.find((s) => s.url === 'ws://kin.test/ws');
+    socket.accept();
+    assert.deepEqual(socket.last('drivers').drivers, []);
+
+    const g = driverIn(rt, 'kin');
+    const drivers = socket.last('drivers').drivers;
+    assert.equal(drivers.length, 1, 'a guest walking in is a new name on the list');
+    assert.equal(socket.last('lifecycle').state, 'live');
+    assert.deepEqual(cues.filter((c) => c.kind === 'experience' && c.guestId === g.guestId), []);
+
+    driverIn(rt, 'kin');
+    const after = socket.last('drivers').drivers;
+    assert.equal(after.length, 2);
+    assert.ok(after.some((d) => d.driverId === drivers[0].driverId), 'the first guest keeps their name');
+  });
+});
+
 describe('a room piece moving its room on (event)', () => {
   // 2026-09-26: the room's own computer knows when something happened — Slop
   // changing background — and the phones' clips follow the room's state.

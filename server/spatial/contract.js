@@ -263,10 +263,16 @@ export const EXPERIENCE_CUE_SLOT = 'experience';
  * statechart hears none of it. It must not: a drag feeding a statechart would
  * transition it sixty times a second.
  *
+ * `none` is a room whose machine the phones never touch — a motor, a light, a
+ * thing that only needs to know who is in the room (Kin's actuator, an
+ * ESP32, 2026-10-01). The show still links to it as broker and sends it the
+ * lifecycle and the driver list; no phone is handed its address. A small
+ * board has no business holding six phones' sockets open.
+ *
  * One mode at a time, declared by the room. Otherwise a 200px flick is both a
  * `drag` stream and a terminal `swipe left`, and something fires twice.
  */
-export const INPUT_MODES = ['gestures', 'stream'];
+export const INPUT_MODES = ['gestures', 'stream', 'none'];
 
 /**
  * Intents a phone can send an experience. Recognition stays on the handset in

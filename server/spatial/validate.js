@@ -528,6 +528,9 @@ function checkRoomExperience(roomId, room, path, errors, warnings) {
   if (room.kind === 'hallway') {
     warnings.push(`${at} is on a hallway — guests pass through and will barely hold a driver slot`);
   }
+  if (experience.inputMode === 'none' && experience.inputs?.length) {
+    warnings.push(`${at}.inputs is ignored: inputMode "none" sends no phone to the experience`);
+  }
   if (experience.inputMode === 'gestures') {
     warnings.push(
       `${at}.inputMode is "gestures", so nothing streams to the experience — `
