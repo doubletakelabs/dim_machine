@@ -241,6 +241,7 @@
         </div>
       </div>
       <div class="scrollBody">
+        <div style="padding:4px 2px 6px"><button class="tiny" id="chargersBtn" style="display:none"></button></div>
         <table>
           <thead><tr><th>Guest</th><th>Journey</th><th>Room</th><th>Doing</th><th>Standing</th><th></th></tr></thead>
           <tbody id="guests"></tbody>
@@ -614,7 +615,7 @@ function renderPlan() {
   // Dots are kept as live nodes rather than rebuilt, so the animation loop can
   // move them every frame without touching anything else.
   const seen = new Set();
-  for (const guest of snap?.guests ?? []) {
+  for (const guest of shownGuests()) {
     if (!guest.position) continue;
     seen.add(guest.guestId);
     const g = document.createElementNS(SVG_NS, 'g');
@@ -1012,8 +1013,25 @@ function phoneRows(user) {
       <dt>Content</dt><dd>${content}${p.syncError ? `<br><span style="color:#e0b050">⚠ ${p.syncError}</span>` : ''}</dd>` : ''}`;
 }
 
+// Phones on the chargers are between guests: hidden from the list and the
+// plan unless asked for (2026-10-01). Remembered per browser.
+let showChargers = false;
+try { showChargers = localStorage.getItem('dim.showChargers') === '1'; } catch { /* private mode */ }
+const onCharger = (g) => phones.get(g.guestId)?.telemetry?.phone?.charging === true;
+const shownGuests = () => (snap?.guests ?? []).filter((g) => showChargers || !onCharger(g));
+$('chargersBtn').onclick = () => {
+  showChargers = !showChargers;
+  try { localStorage.setItem('dim.showChargers', showChargers ? '1' : ''); } catch { /* private mode */ }
+  render();
+};
+
 function renderGuests() {
-  const rows = (snap?.guests ?? []).map((g) => `
+  const charging = (snap?.guests ?? []).filter(onCharger).length;
+  $('chargersBtn').style.display = charging ? '' : 'none';
+  $('chargersBtn').textContent = showChargers
+    ? `Hide ${charging} on charger${charging === 1 ? '' : 's'}`
+    : `Show ${charging} on charger${charging === 1 ? '' : 's'}`;
+  const rows = shownGuests().map((g) => `
     <tr class="${selection?.kind === 'guest' && selection.id === g.guestId ? 'sel' : ''}"
         data-guest="${g.guestId}">
       <td>
@@ -1022,14 +1040,16 @@ function renderGuests() {
         <br><span class="muted mono" style="font-size:10px">${g.guestId}</span>
       </td>
       <td class="muted">${g.regions?.guidance ?? '—'}${
-        g.museum && g.museum.seen ? ` <span style="color:var(--accent)">· ${museumCount(g.museum)}</span>` : ''}</td>
+        g.museum && g.museum.seen ? ` <span style="color:var(--accent)">· ${museumCount(g.museum)}</span>` : ''}${
+        onCharger(g) ? ' <span class="muted">⚡</span>' : ''}</td>
       <td>${g.roomId ?? '<span class="muted">—</span>'}</td>
       <td class="muted">${describeIntent(g)}</td>
       <td style="color:${standingColour(g.currentRoom)}">${describeStanding(g.currentRoom)}</td>
       <td><button class="tiny" data-remove="${g.guestId}">×</button></td>
     </tr>`).join('');
-  $('guests').innerHTML = rows || '<tr><td colspan="6" class="muted">No guests yet.</td></tr>';
-  $('guestCount').textContent = String((snap?.guests ?? []).length);
+  $('guests').innerHTML = rows || `<tr><td colspan="6" class="muted">${
+    charging && !showChargers ? 'No guests out — the rest are on chargers.' : 'No guests yet.'}</td></tr>`;
+  $('guestCount').textContent = String(shownGuests().length);
 
   for (const tr of $('guests').querySelectorAll('[data-guest]')) {
     tr.onclick = (e) => {
