@@ -520,6 +520,30 @@ describe('the lobby, driven from calibration', () => {
     assert.equal(cues.filter((c) => c.kind === 'endExperience' && c.guestId === g.guestId).length, 0);
   });
 
+  it('puts a guest on the side of the screen by the beacon their phone heard strongest, and keeps them there', () => {
+    const { rt, cues, lobby } = withLobby();
+    const left = arrive(rt, cues);
+    const right = arrive(rt, cues);
+    rt.resyncCues(left.guestId);
+    const cue = cues.find((c) => c.kind === 'experience' && c.guestId === left.guestId);
+    assert.deepEqual([...cue.sides].sort(), [46849, 49152], 'the phone is told which beacons to sample');
+    assert.equal(cue.sideAfterMs, 3000);
+    assert.deepEqual(lobby.last('drivers').drivers.map((d) => d.side), [undefined, undefined], 'no side until the phone says');
+
+    assert.equal(rt.setGuestSide(left.guestId, 49152), true);
+    assert.equal(rt.setGuestSide(right.guestId, 46849), true);
+    const sideOf = (g) => {
+      const driverId = rt.experienceDrivers('calibration').find((d) => d.guestId === g.guestId).driverId;
+      return lobby.last('drivers').drivers.find((d) => d.driverId === driverId).side;
+    };
+    assert.equal(sideOf(left), 'left');
+    assert.equal(sideOf(right), 'right');
+
+    assert.equal(rt.setGuestSide(left.guestId, 46849), false, 'locked: one pick per visit');
+    assert.equal(sideOf(left), 'left');
+    assert.equal(rt.setGuestSide(right.guestId, 12345), false, 'a beacon the room does not split on');
+  });
+
   it('takes eight guests at once, each in a colour of their own', () => {
     const { rt, cues, lobby } = withLobby();
     for (let i = 0; i < 8; i++) arrive(rt, cues);

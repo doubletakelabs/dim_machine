@@ -129,6 +129,7 @@ export class CueDirector {
           inputs: want.inputs,
           ...(want.gesturesToShow ? { gesturesToShow: true } : {}),
           ...(want.allow ? { allow: want.allow } : {}),
+          ...(want.sides ? { sides: want.sides, sideAfterMs: want.sideAfterMs } : {}),
           driverId: want.driverId,
           hue: want.hue,
           secret: want.secret,

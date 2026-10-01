@@ -528,6 +528,14 @@ function checkRoomExperience(roomId, room, path, errors, warnings) {
   if (room.kind === 'hallway') {
     warnings.push(`${at} is on a hallway — guests pass through and will barely hold a driver slot`);
   }
+  if (experience.sides != null) {
+    const ok = experience.sides && typeof experience.sides === 'object' && !Array.isArray(experience.sides)
+      && Object.entries(experience.sides).every(([major, side]) => /^\d{1,5}$/.test(major) && ['left', 'right'].includes(side));
+    if (!ok) errors.push(`${at}.sides must map beacon majors to "left" or "right"`);
+  }
+  if (experience.sideAfterMs != null && !(Number.isInteger(experience.sideAfterMs) && experience.sideAfterMs > 0)) {
+    errors.push(`${at}.sideAfterMs must be a positive whole number of ms`);
+  }
   if (experience.gesturesToShow != null && typeof experience.gesturesToShow !== 'boolean') {
     errors.push(`${at}.gesturesToShow must be true or false`);
   }

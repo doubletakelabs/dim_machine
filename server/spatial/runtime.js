@@ -111,6 +111,8 @@ export class SpatialRuntime {
     this._sequencesSeen = new Map();
     /** Clips whose length could not be read, warned about once each. */
     this._unmeasuredClips = new Set();
+    /** guestId → { roomId, side }: which half of a piece's screen is theirs (`sides`). */
+    this._sides = new Map();
     /**
      * guestId → the doorway their phone hears (§4.2c):
      * { thresholdId, roomId, since, entered }. `entered` once they have stood
@@ -451,6 +453,7 @@ export class SpatialRuntime {
     this.clock.clearTimeout(this._unlockWakes.get(guestId)?.handle);
     this._unlockWakes.delete(guestId);
     this._sequencesSeen.delete(guestId);
+    this._sides.delete(guestId);
     // The museum remembers rooms per guestId, and a phone's guestId outlives
     // the visit: left here, a reset handset would come back to its rooms
     // already spent, hearing returns instead of the rooms themselves.
@@ -1554,9 +1557,10 @@ export class SpatialRuntime {
       const tracks = this.def?.rooms?.[roomId]?.tracks?.list;
       link.reconcile({
         lifecycle: this.experienceLifecycle(roomId),
-        drivers: this.experienceDrivers(roomId).map(({ driverId, hue, secret }) => ({
-          driverId, hue, secret,
-        })),
+        drivers: this.experienceDrivers(roomId).map(({ driverId, hue, secret, guestId }) => {
+          const side = this._sides.get(guestId);
+          return { driverId, hue, secret, ...(side?.roomId === roomId ? { side: side.side } : {}) };
+        }),
         ...(Array.isArray(tracks) ? { tracks: tracks.map(({ n, seconds }) => ({ n, seconds })) } : {}),
       });
 
@@ -1798,6 +1802,25 @@ export class SpatialRuntime {
     return { inputs: [...all], nextAt: null };
   }
 
+  /**
+   * Which half of a piece's screen is the guest's, from the room beacon their
+   * phone heard strongest over its first few seconds there (`sides`: the
+   * lobby, from calibration's two beacons, 2026-10-01). Locked once given for
+   * that room: the phone samples once, and a guest's popups do not wander.
+   *
+   * @returns {boolean} whether it was taken
+   */
+  setGuestSide(guestId, major) {
+    const actor = this.guestActors.get(guestId);
+    const roomId = actor?.currentRoom()?.roomId;
+    const side = roomId ? this.def?.rooms?.[roomId]?.experience?.sides?.[String(major)] : null;
+    if (!side || this._sides.get(guestId)?.roomId === roomId) return false;
+    this._sides.set(guestId, { roomId, side });
+    this.append({ type: 'guest.side', guestId, roomId, major: Number(major), side });
+    this.notifyChange();
+    return true;
+  }
+
   /** Re-cue a guest at `at` (show clock), when a gesture unlocks. One pending per guest. */
   wakeAt(guestId, at) {
     const pending = this._unlockWakes.get(guestId);
@@ -1843,6 +1866,8 @@ export class SpatialRuntime {
       assetId: `${here.roomId}:${driver.driverId}`,
       key: `${here.roomId}:${driver.driverId}` + (allow ? `:${allow.join('+')}` : ''),
       ...(allow ? { allow } : {}),
+      // Beacons to sample for the guest's side of the screen, and for how long.
+      ...(config.sides ? { sides: Object.keys(config.sides).map(Number), sideAfterMs: config.sideAfterMs ?? 3000 } : {}),
       endpoint: config.phoneEndpoint ?? config.endpoint,
       experienceId: config.experienceId ?? null,
       inputMode: config.inputMode ?? 'stream',

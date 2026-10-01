@@ -834,6 +834,42 @@ function openExperience(cue) {
   experience = link;
   inputMode = cue.inputMode ?? 'stream';
   dialExperience(link, cue.secret);
+  if (Array.isArray(cue.sides) && cue.sides.length) sampleSide(link, cue.sides, cue.sideAfterMs ?? 3000);
+}
+
+/**
+ * Which of the room's beacons this phone hears strongest, averaged over its
+ * first few seconds with the piece, told to the show once: it decides which
+ * half of the screen is this guest's (the lobby, from calibration's two
+ * beacons, 2026-10-01). Needs the app's `heard`; without it, nothing is sent
+ * and the piece places the guest anywhere. Nothing heard yet: keep listening.
+ */
+const SIDE_SAMPLE_EVERY_MS = 250;
+const SIDE_GIVE_UP_MS = 30000;
+function sampleSide(link, majors, forMs) {
+  if (!nativeApp?.status) return;
+  const sums = new Map();
+  const started = Date.now();
+  const timer = setInterval(() => {
+    if (experience !== link) return clearInterval(timer);
+    const heard = nativeStatus()?.heard ?? {};
+    for (const major of majors) {
+      const rssi = heard[String(major)];
+      if (typeof rssi !== 'number') continue;
+      const s = sums.get(major) ?? { total: 0, n: 0 };
+      s.total += rssi; s.n += 1;
+      sums.set(major, s);
+    }
+    const elapsed = Date.now() - started;
+    if (elapsed < forMs) return;
+    if (!sums.size) {
+      if (elapsed > SIDE_GIVE_UP_MS) clearInterval(timer);
+      return;
+    }
+    clearInterval(timer);
+    const [best] = [...sums.entries()].sort((a, b) => b[1].total / b[1].n - a[1].total / a[1].n)[0];
+    sendMsg({ type: 'side', major: best });
+  }, SIDE_SAMPLE_EVERY_MS);
 }
 
 /**

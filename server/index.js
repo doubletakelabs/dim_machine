@@ -1116,6 +1116,14 @@ wss.on('connection', (ws) => {
         return;
       }
 
+      case 'side': {
+        // The phone's pick of the beacon it heard strongest over its first
+        // seconds in a room whose piece splits the screen (rooms.<id>.experience.sides).
+        const guest = runtime.getGuestByToken(token);
+        if (guest && Number.isInteger(msg.major)) runtime.setGuestSide(guest.guestId, msg.major);
+        return;
+      }
+
       case 'ping': {
         send(ws, { type: 'pong', t0: msg.t0, server: Date.now() });
         // A phone the app locates reports only when its room changes, so its

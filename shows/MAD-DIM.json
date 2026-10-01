@@ -133,7 +133,12 @@
           "release"
         ],
         "maxDrivers": 8,
-        "gesturesToShow": true
+        "gesturesToShow": true,
+        "sides": {
+          "49152": "left",
+          "46849": "right"
+        },
+        "sideAfterMs": 3000
       },
       "bg": "audio/bg/M_PRE CALIBRATION (LOBBY).mp3"
     },
