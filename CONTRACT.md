@@ -1151,6 +1151,22 @@ into the step — for a clip that asks for a tap near its end, so a tap before
 it has asked does not skip it (calibration 1, 2026-09-30). The gesture is
 dropped, not held: the guest taps again once asked.
 
+`"playThrough": true` on a step plays its clip to the end whatever the guest
+does (calibration, 2026-10-01). Its gesture, once `listenFrom` allows it, still
+counts — one per step — but moves the guest on only when the clip has
+finished; a clip that ends unanswered waits, background still playing, and the
+gesture then moves them on at once. The clip's length is read from the file
+(WAV, or MP3 by its VBR header or bitrate); if it cannot be, the gesture acts at
+once and the operator log says so.
+
+A room experience with `"gesturesToShow": true` (the lobby, driven from
+calibration) is driven while the show teaches its gestures. The phone sends
+each tap, swipe and drag both to the piece and to the show's steps, and the
+piece hears only the gestures taught so far: those earlier steps asked for,
+plus the current step's own once its `listenFrom` has passed — nothing before
+the sequence, everything it taught after. The phone is re-cued (`allow` on its
+experience cue) as each one unlocks, on the same link.
+
 `"advance": "none"` on the last step holds it until something outside the
 sequence moves the guest on — calibration's last clip plays until they walk into
 the entrance hallway, which the calibration state handles with

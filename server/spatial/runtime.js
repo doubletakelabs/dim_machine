@@ -103,6 +103,14 @@ export class SpatialRuntime {
     this._drivers = new Map();
     /** roomId → last presentation state seen, so a reset can be spotted once. */
     this._roomStateWas = new Map();
+    /** guestId → { key, handle }: a gesture waiting for its step's clip to end (playThrough). */
+    this._heldGestures = new Map();
+    /** guestId → { at, handle }: when the guest's next gesture unlocks, to re-cue then. */
+    this._unlockWakes = new Map();
+    /** guestId → sequences they have stepped through, for what they have been taught. */
+    this._sequencesSeen = new Map();
+    /** Clips whose length could not be read, warned about once each. */
+    this._unmeasuredClips = new Set();
     /**
      * guestId → the doorway their phone hears (§4.2c):
      * { thresholdId, roomId, since, entered }. `entered` once they have stood
@@ -438,6 +446,11 @@ export class SpatialRuntime {
     this.trustNextReading.delete(guestId);
     this.layerSince.delete(guestId);
     this.roomResume.delete(guestId);
+    this.clock.clearTimeout(this._heldGestures.get(guestId)?.handle);
+    this._heldGestures.delete(guestId);
+    this.clock.clearTimeout(this._unlockWakes.get(guestId)?.handle);
+    this._unlockWakes.delete(guestId);
+    this._sequencesSeen.delete(guestId);
     // The museum remembers rooms per guestId, and a phone's guestId outlives
     // the visit: left here, a reset handset would come back to its rooms
     // already spent, hearing returns instead of the rooms themselves.
@@ -1704,9 +1717,98 @@ export class SpatialRuntime {
     const event = this.def?.inputBindings?.[input];
     if (!event) return false;
     if (this.gestureHeld(actor)) return false;
+    const left = this.clipLeftMs(actor);
+    if (left > 0) return this.holdGesture(guestId, actor, event, left);
     actor.send(event);
     this.notifyChange();
     return true;
+  }
+
+  /** The guest's guidance step, as its sequence keys spell it (`guidance.<state>`). */
+  guidanceKey(actor) {
+    const step = actor.regions().guidance;
+    return step ? `guidance.${step}` : null;
+  }
+
+  /**
+   * How much of a `playThrough` step's clip is still to play, in ms; 0 when
+   * the step has none, it has finished, or its length cannot be read (then
+   * the gesture acts at once, as before, and the operator log says why).
+   */
+  clipLeftMs(actor) {
+    const clip = this.def?.guest?.playThrough?.[this.guidanceKey(actor)];
+    if (!clip) return 0;
+    const seconds = this.io.clipSeconds?.(clip);
+    if (!(seconds > 0)) {
+      if (!this._unmeasuredClips.has(clip)) {
+        this._unmeasuredClips.add(clip);
+        this.io.log?.(`playThrough: cannot read the length of ${clip}; its gesture will cut it short`);
+      }
+      return 0;
+    }
+    return Math.max(0, Math.round(seconds * 1000) - (this.now() - actor.regionSince('guidance')));
+  }
+
+  /**
+   * A gesture made while a `playThrough` clip is still playing: it counts, and
+   * moves the guest on the moment the clip ends. One per step — the rest are
+   * the guest enjoying the piece they are driving, not more answers.
+   */
+  holdGesture(guestId, actor, event, leftMs) {
+    if (!actor.canAccept(event)) return false;
+    const key = this.guidanceKey(actor);
+    if (this._heldGestures.get(guestId)?.key === key) return true;
+    const since = actor.regionSince('guidance');
+    const handle = this.clock.setTimeout(() => {
+      if (this._heldGestures.get(guestId)?.handle !== handle) return;
+      this._heldGestures.delete(guestId);
+      const now = this.guestActors.get(guestId);
+      // Somewhere else by now (an operator, a reset): the answer was to a step
+      // they have left.
+      if (!now || !this.running || this.guidanceKey(now) !== key || now.regionSince('guidance') !== since) return;
+      if (!now.canAccept(event)) return;
+      now.send(event);
+      this.notifyChange();
+    }, leftMs);
+    this._heldGestures.set(guestId, { key, handle });
+    return true;
+  }
+
+  /**
+   * The gestures a guest has been taught so far, for a piece they drive while
+   * a sequence teaches them (`gesturesToShow`: the lobby, in calibration).
+   * In a step: what earlier steps asked for, plus this step's own once its
+   * listenFrom has passed. Outside one: nothing before the sequence, all it
+   * taught after. `nextAt` is when the set next grows, if it will.
+   */
+  taughtInputs(guestId) {
+    const actor = this.guestActors.get(guestId);
+    if (!actor) return { inputs: [], nextAt: null };
+    const seen = this._sequencesSeen.get(guestId) ?? new Set();
+    const step = this.def?.guest?.stepInputs?.[this.guidanceKey(actor)];
+    if (step) {
+      seen.add(step.sequence);
+      this._sequencesSeen.set(guestId, seen);
+      const opensAt = actor.regionSince('guidance') + step.fromMs;
+      const open = step.input && this.now() >= opensAt;
+      const inputs = open && !step.taught.includes(step.input) ? [...step.taught, step.input] : step.taught;
+      return { inputs, nextAt: step.input && !open ? opensAt : null };
+    }
+    const all = new Set([...seen].flatMap((at) => this.def?.guest?.sequenceInputs?.[at] ?? []));
+    return { inputs: [...all], nextAt: null };
+  }
+
+  /** Re-cue a guest at `at` (show clock), when a gesture unlocks. One pending per guest. */
+  wakeAt(guestId, at) {
+    const pending = this._unlockWakes.get(guestId);
+    if (pending?.at === at) return;
+    if (pending) this.clock.clearTimeout(pending.handle);
+    const handle = this.clock.setTimeout(() => {
+      if (this._unlockWakes.get(guestId)?.handle !== handle) return;
+      this._unlockWakes.delete(guestId);
+      this.notifyChange();
+    }, Math.max(0, at - this.now()));
+    this._unlockWakes.set(guestId, { at, handle });
   }
 
   /**
@@ -1729,9 +1831,18 @@ export class SpatialRuntime {
     if (config.inputMode === 'none') return null;
     const driver = this.experienceDrivers(here.roomId).find((d) => d.guestId === guestId);
     if (!driver) return null;
+    // A piece driven while the show teaches its gestures hears only those the
+    // guest has been taught so far; the phone is re-cued as each unlocks.
+    let allow = null;
+    if (config.gesturesToShow === true) {
+      const taught = this.taughtInputs(guestId);
+      allow = taught.inputs;
+      if (taught.nextAt != null) this.wakeAt(guestId, taught.nextAt);
+    }
     return {
       assetId: `${here.roomId}:${driver.driverId}`,
-      key: `${here.roomId}:${driver.driverId}`,
+      key: `${here.roomId}:${driver.driverId}` + (allow ? `:${allow.join('+')}` : ''),
+      ...(allow ? { allow } : {}),
       endpoint: config.phoneEndpoint ?? config.endpoint,
       experienceId: config.experienceId ?? null,
       inputMode: config.inputMode ?? 'stream',

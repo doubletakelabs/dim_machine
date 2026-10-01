@@ -13,6 +13,7 @@ import { resolveAudioNames } from './asset-names.js';
 import { expandTrackFolders } from './track-folders.js';
 import { execFileSync } from 'node:child_process';
 import * as relay from './relay.js';
+import { clipSeconds } from './clip-seconds.js';
 
 // Not 4000: dim_central (the deploy dashboard) runs there on the same machine.
 const PORT = process.env.PORT || 4100;
@@ -366,6 +367,8 @@ const runtime = new SpatialRuntime({
   // The museum layer schedules the in_room bed to start exactly when the
   // entrance clip ends, which needs the clip's real length.
   assetSeconds: (asset) => wavSeconds(asset),
+  // A playThrough step's clip, so its gesture waits for the clip to end.
+  clipSeconds: (asset) => clipSeconds(join(assetsDir, asset)),
   clock: showClock,
   log: opLog,
   onStateChange: scheduleRoster,

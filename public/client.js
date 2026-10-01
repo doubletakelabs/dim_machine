@@ -249,6 +249,8 @@ const companion = createCompanion({
 window.DIM.companion = companion; // for the console and the harness
 // The app's accelerometer, a few times a second: which way up the phone is.
 window.DIM.onGravity = (y) => companion.gravity(Number(y));
+// The app, on going back on the charger: no debug for the next guest.
+window.DIM.onCharger = () => companion.hideDebug();
 
 /** Bring the layer bus in line with who is speaking. Safe to call anytime. */
 function applyDuck() {
@@ -711,7 +713,7 @@ function emitGesture(type, payload) {
 
   if (inputMode === 'stream') {
     // A drag went to the piece move by move already; taps and swipes go whole.
-    if (!payload?.streamed) sendToExperience({ t: type, ...payload });
+    if (!payload?.streamed && experienceAllows(type)) sendToExperience({ t: type, ...payload });
     // A piece showing what the show is teaching (the lobby, during
     // calibration) leaves the show its gestures too (gesturesToShow).
     if (!experience?.gesturesToShow) return;
@@ -735,7 +737,7 @@ function enableGestures() {
     mode: () => inputMode,
     onTouch: resumeAudio,
     onGesture: emitGesture,
-    onHold: (on) => sendToExperience({ t: 'hold', on }),
+    onHold: (on) => { if (experienceAllows('hold')) sendToExperience({ t: 'hold', on }); },
     onStreamBegin: streamBegin,
     onStreamMove: streamMove,
     onStreamEnd: streamEnd,
@@ -817,12 +819,17 @@ function enableShake() {
 const EXPERIENCE_RETRY_MS = 2000;
 
 function openExperience(cue) {
-  if (experience?.endpoint === cue.endpoint && experience?.driverId === cue.driverId) return;
+  if (experience?.endpoint === cue.endpoint && experience?.driverId === cue.driverId) {
+    // The same link, re-cued because the show has unlocked another gesture.
+    experience.allow = cue.allow ?? null;
+    return;
+  }
   closeExperience();
 
   const link = {
     ws: null, endpoint: cue.endpoint, driverId: cue.driverId, hue: cue.hue,
-    accepts: cue.inputs ?? null, gesturesToShow: cue.gesturesToShow === true, retry: null,
+    accepts: cue.inputs ?? null, gesturesToShow: cue.gesturesToShow === true,
+    allow: cue.allow ?? null, retry: null,
   };
   experience = link;
   inputMode = cue.inputMode ?? 'stream';
@@ -894,7 +901,18 @@ function setExperienceStatus(text) {
  */
 const stream = { down: false, x: 0, y: 0, dx: 0, dy: 0, at: 0, vx: 0, vy: 0, queued: false };
 
+/**
+ * Whether the piece may hear this gesture yet. A piece driven while the show
+ * teaches its gestures (the lobby, in calibration) is given only those taught
+ * so far (`allow`, 2026-10-01); a drag's moves and release go with `drag`.
+ */
+function experienceAllows(type) {
+  const allow = experience?.allow;
+  return !Array.isArray(allow) || allow.includes(type === 'release' ? 'drag' : type);
+}
+
 function streamBegin(x, y) {
+  if (!experienceAllows('drag')) return;
   stream.down = true;
   stream.x = x; stream.y = y;
   stream.dx = 0; stream.dy = 0;
@@ -1278,7 +1296,12 @@ function showSync() {
   const s = nativeStatus() ?? {};
   let note = '';
   if (s.syncing) {
-    note = typeof s.syncTotal === 'number' && s.syncTotal > 0 ? `syncing ${s.syncDone ?? 0} / ${s.syncTotal}` : 'syncing…';
+    if (typeof s.syncTotal === 'number' && s.syncTotal > 0) {
+      const left = Math.max(0, s.syncTotal - (s.syncDone ?? 0));
+      note = `${left} file${left === 1 ? '' : 's'} left to sync`;
+    } else {
+      note = 'syncing…';
+    }
   } else if (s.syncError) {
     note = `sync failed: ${s.syncError}`;
   } else if (!s.content) {

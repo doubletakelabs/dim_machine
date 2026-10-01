@@ -134,6 +134,9 @@ function expandOne(state, path, { cues, guest, bindings, errors, warnings }) {
     warnings.push(`guest.machine.${at}.onComplete is never reached — the last step advances on "none"`);
   }
 
+  // Gestures the steps so far have asked for, in order (see `stepInputs` below).
+  const taught = [];
+
   steps.forEach((step, i) => {
     const stepAt = `${at}.sequence[${i}]`;
     if (!step || typeof step !== 'object') {
@@ -166,6 +169,34 @@ function expandOne(state, path, { cues, guest, bindings, errors, warnings }) {
         guest.inputGates = { ...(guest.inputGates ?? {}), [`${at}.${stepId(i)}`]: Math.round(step.listenFrom * 1000) };
       }
     }
+
+    // `playThrough`: the step's clip is always heard to its end (calibration,
+    // 2026-10-01). Its gesture still counts once allowed, but moves the guest
+    // on only when the clip has finished — straight away if it already has.
+    // Kept on the guest as `playThrough`, step state → the clip.
+    if (step.playThrough != null) {
+      if (typeof step.playThrough !== 'boolean') {
+        errors.push(`${stepAt}.playThrough must be true or false`);
+      } else if (step.playThrough && !step.audio) {
+        errors.push(`${stepAt}.playThrough needs an audio clip to play through`);
+      } else if (step.playThrough) {
+        guest.playThrough = { ...(guest.playThrough ?? {}), [`${at}.${stepId(i)}`]: step.audio };
+      }
+    }
+
+    // What the guest has been taught by this step: every gesture an earlier
+    // step asked for, and this step's own once its listenFrom has passed. A
+    // piece the guest drives alongside the sequence (the lobby, during
+    // calibration; `gesturesToShow`) hears only those.
+    const input = advance?.kind === 'input' ? advance.input : null;
+    guest.stepInputs = {
+      ...(guest.stepInputs ?? {}),
+      [`${at}.${stepId(i)}`]: {
+        sequence: at, taught: [...taught], input, fromMs: Math.round((step.listenFrom ?? 0) * 1000),
+      },
+    };
+    if (input && !taught.includes(input)) taught.push(input);
+    guest.sequenceInputs = { ...(guest.sequenceInputs ?? {}), [at]: [...taught] };
     cues[`${at}.${stepId(i)}`] = cueFor(step);
   });
 

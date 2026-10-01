@@ -281,5 +281,7 @@ export function createCompanion({ root, readVolume, setVolume, onDebug }) {
     setLastWord(word) { if (word) { lastWord = String(word).toUpperCase(); if (view === 'idle') rest(); } },
     get hanging() { return hanging; },
     gravity,
+    /** Out of debug, whatever it was: the phone is back on the charger. */
+    hideDebug() { cancelHold(); if (debugOn) setDebug(false); },
   };
 }

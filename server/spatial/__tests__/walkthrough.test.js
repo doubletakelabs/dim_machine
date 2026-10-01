@@ -355,9 +355,13 @@ describe('operator overrides', () => {
 
 describe('walking a guest the show is waiting on', () => {
   const museum = JSON.parse(readFileSync(join(root, 'shows/MAD-DIM.json'), 'utf8'));
-  // The show's calibration 1 takes its tap only from 67s (listenFrom);
-  // these tests answer at once. calibration.test.js covers the wait.
-  delete museum.guest.machine.guidance.states.prologue.states.calibration.sequence[0].listenFrom;
+  // The show's calibration steps take their gestures only some way into each
+  // clip (listenFrom) and play every clip out (playThrough); these tests
+  // answer at once. calibration.test.js covers both.
+  for (const step of museum.guest.machine.guidance.states.prologue.states.calibration.sequence) {
+    delete step.listenFrom;
+    delete step.playThrough;
+  }
 
   /** Stand a fresh guest on the first calibration screen, mid-question. */
   function atAScreen({ kind }) {

@@ -1892,15 +1892,20 @@
                   {
                     "audio": "audio/guidance/1A-calibration1.mp3",
                     "advance": "tap",
-                    "listenFrom": 67
+                    "listenFrom": 47,
+                    "playThrough": true
                   },
                   {
                     "audio": "audio/guidance/1B-calibration2.mp3",
-                    "advance": "swipe"
+                    "advance": "swipe",
+                    "listenFrom": 3,
+                    "playThrough": true
                   },
                   {
                     "audio": "audio/guidance/1C-calibration3.mp3",
-                    "advance": "drag"
+                    "advance": "drag",
+                    "listenFrom": 6,
+                    "playThrough": true
                   },
                   {
                     "audio": "audio/guidance/1D-calibration4.mp3",

@@ -18,12 +18,17 @@ import { roomCentroid } from '../zone-math.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const museum = JSON.parse(readFileSync(join(root, 'shows/MAD-DIM.json'), 'utf8'));
-// The show's calibration 1 takes its tap only from 67s (listenFrom); these
-// tests walk the sequence at once. The wait has its own tests below.
-const listenFromInShow = museum.guest.machine.guidance.states.prologue.states.calibration.sequence[0].listenFrom;
-delete museum.guest.machine.guidance.states.prologue.states.calibration.sequence[0].listenFrom;
+// The show's calibration steps take their gesture only some way into each clip
+// (listenFrom) and play every clip to its end (playThrough); these tests walk
+// the sequence at once. Both have their own tests below, against the show's
+// own values.
+const sequenceInShow = structuredClone(museum.guest.machine.guidance.states.prologue.states.calibration.sequence);
+for (const step of museum.guest.machine.guidance.states.prologue.states.calibration.sequence) {
+  delete step.listenFrom;
+  delete step.playThrough;
+}
 
-function makeRuntime(mutate) {
+function makeRuntime(mutate, io = {}) {
   const show = structuredClone(museum);
   if (mutate) mutate(show);
   const cues = [];
@@ -31,6 +36,7 @@ function makeRuntime(mutate) {
     enableTick: false,
     clock: new ManualClock(),
     onCue: (guestId, cue) => cues.push({ guestId, ...cue }),
+    ...io,
   });
   assert.deepEqual(rt.load(show).errors, []);
   rt.start();
@@ -344,18 +350,109 @@ describe('the calibration sequence, running', () => {
   });
 });
 
+/** The calibration clips' real lengths (2026-10-01). */
+const CLIP_SECONDS = {
+  'audio/guidance/1A-calibration1.mp3': 71.9,
+  'audio/guidance/1B-calibration2.mp3': 8.6,
+  'audio/guidance/1C-calibration3.mp3': 11.3,
+  'audio/guidance/1D-calibration4.mp3': 14.9,
+};
+
+describe('every clip heard to its end (playThrough)', () => {
+  const asShown = (show) => {
+    show.guest.machine.guidance.states.prologue.states.calibration.sequence = structuredClone(sequenceInShow);
+  };
+  const io = { clipSeconds: (clip) => CLIP_SECONDS[clip] ?? null };
+  /** On to `ms` into the guest's current clip. */
+  const into = (rt, g, ms) => {
+    const at = rt.now() - rt.guestActors.get(g.guestId).regionSince('guidance');
+    rt.testAdvanceTime(Math.max(0, ms - at));
+  };
+
+  it('a gesture during the clip counts, and moves the guest on only when the clip ends', () => {
+    const { rt, cues } = makeRuntime(asShown, io);
+    const g = arrive(rt, cues);
+    into(rt, g, 50_000);
+    assert.equal(rt.guestInput(g.guestId, 'tap'), true, 'taken at 50 s');
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1', 'but calibration1 plays on');
+    into(rt, g, 71_000);
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1', 'still playing at 71 s');
+    rt.testAdvanceTime(1_000);
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step2', 'calibration2 as calibration1 ends');
+    assert.ok(heard(cues).includes('audio/guidance/1B-calibration2.mp3'));
+  });
+
+  it('a clip that ends unanswered waits, and the gesture then moves the guest on at once', () => {
+    const { rt, cues } = makeRuntime(asShown, io);
+    const g = arrive(rt, cues);
+    rt.testAdvanceTime(90_000);
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1', 'waiting, in silence');
+    rt.guestInput(g.guestId, 'tap');
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step2');
+  });
+
+  it('a gesture before the step allows it is ignored, and is not remembered', () => {
+    const { rt, cues } = makeRuntime(asShown, io);
+    const g = arrive(rt, cues);
+    rt.testAdvanceTime(20_000);
+    assert.equal(rt.guestInput(g.guestId, 'tap'), false);
+    rt.testAdvanceTime(60_000);
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1', 'the early tap did not count');
+  });
+
+  it('walks the whole sequence with each clip heard out', () => {
+    const { rt, cues } = makeRuntime(asShown, io);
+    const g = arrive(rt, cues);
+    into(rt, g, 48_000);
+    rt.guestInput(g.guestId, 'tap');
+    into(rt, g, 72_000);                              // calibration1 ends at 71.9 s
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step2');
+    into(rt, g, 1_000);
+    assert.equal(rt.guestInput(g.guestId, 'swipe'), false, 'swipe not yet: 3 s in');
+    into(rt, g, 3_000);
+    rt.guestInput(g.guestId, 'swipe');
+    into(rt, g, 9_000);                               // calibration2 ends at 8.6 s
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step3');
+    into(rt, g, 6_000);
+    rt.guestInput(g.guestId, 'drag');
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step3', 'calibration3 plays on');
+    into(rt, g, 11_500);                              // calibration3 ends at 11.3 s
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step4');
+  });
+
+  it('a clip whose length cannot be read lets the gesture act at once, as before', () => {
+    const { rt, cues } = makeRuntime(asShown, { clipSeconds: () => null });
+    const g = arrive(rt, cues);
+    rt.testAdvanceTime(48_000);
+    rt.guestInput(g.guestId, 'tap');
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step2');
+  });
+
+  it('is checked: needs a clip, and true or false', () => {
+    const show = structuredClone(museum);
+    const seq = show.guest.machine.guidance.states.prologue.states.calibration.sequence;
+    seq[0].playThrough = 'yes';
+    seq[1] = { image: 'x.png', advance: 'swipe', playThrough: true };
+    const { errors } = expandSequences(show);
+    assert.match(errors.join('\n'), /sequence\[0\]\.playThrough must be true or false/);
+    assert.match(errors.join('\n'), /sequence\[1\]\.playThrough needs an audio clip/);
+  });
+});
+
 describe('the lobby, driven from calibration', () => {
   // The lobby (dim_rooms 01_lobby) answers the same three gestures calibration
   // teaches; guests drive it while the sequence waits for them (2026-10-01).
-  function withLobby() {
+  function withLobby({ asShown = false } = {}) {
     const sockets = [];
     const show = structuredClone(museum);
+    if (asShown) show.guest.machine.guidance.states.prologue.states.calibration.sequence = structuredClone(sequenceInShow);
     show.rooms.calibration.experience.endpoint = 'ws://lobby.test:8080';
     const cues = [];
     const rt = new SpatialRuntime({
       enableTick: false,
       clock: new ManualClock(),
       onCue: (guestId, cue) => cues.push({ guestId, ...cue }),
+      clipSeconds: (clip) => CLIP_SECONDS[clip] ?? null,
       openExperienceSocket: (url) => {
         const handlers = {};
         const socket = {
@@ -391,6 +488,36 @@ describe('the lobby, driven from calibration', () => {
     // And the sequence still hears them: the phone sends each one both ways.
     for (const input of ['tap', 'swipe', 'drag']) rt.guestInput(g.guestId, input);
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step4');
+  });
+
+  it('hears only the gestures calibration has taught so far, re-cued as each unlocks', () => {
+    const { rt, cues } = withLobby({ asShown: true });
+    const g = rt.spawnGuest();
+    walkTo(rt, g.guestId, 'frontDesk');
+    rt.guestStarted(g.guestId);
+    walkTo(rt, g.guestId, 'calibration', 5000);
+    const allowed = () => cues.filter((c) => c.kind === 'experience' && c.guestId === g.guestId).at(-1)?.allow;
+
+    assert.deepEqual(allowed(), [], 'nothing before calibration1 asks');
+    rt.testAdvanceTime(2100 + 47_000);
+    assert.deepEqual(allowed(), ['tap'], 'tap from 47 s into calibration1');
+    rt.guestInput(g.guestId, 'tap');
+    rt.testAdvanceTime(25_000);                       // into calibration2
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step2');
+    assert.deepEqual(allowed(), ['tap'], 'swipe not yet');
+    rt.testAdvanceTime(3_000);
+    assert.deepEqual(allowed(), ['tap', 'swipe'], 'swipe from 3 s into calibration2, and tap stays');
+    rt.guestInput(g.guestId, 'swipe');
+    rt.testAdvanceTime(6_000);                        // into calibration3
+    assert.deepEqual(allowed(), ['tap', 'swipe']);
+    rt.testAdvanceTime(6_000);
+    assert.deepEqual(allowed(), ['tap', 'swipe', 'drag'], 'drag from 6 s into calibration3');
+    rt.guestInput(g.guestId, 'drag');
+    rt.testAdvanceTime(6_000);                        // calibration4
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step4');
+    assert.deepEqual(allowed(), ['tap', 'swipe', 'drag'], 'all three in calibration4');
+    // One link throughout: the phone is re-cued, never sent away and back.
+    assert.equal(cues.filter((c) => c.kind === 'endExperience' && c.guestId === g.guestId).length, 0);
   });
 
   it('takes eight guests at once, each in a colour of their own', () => {
@@ -443,8 +570,8 @@ describe('a step that only listens once its clip has asked (listenFrom)', () => 
     assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step3');
   });
 
-  it('is set in the show: calibration 1 asks for its tap at 67s', () => {
-    assert.equal(listenFromInShow, 67);
+  it('is set in the show: tap from 47 s, swipe from 3 s, drag from 6 s', () => {
+    assert.deepEqual(sequenceInShow.map((step) => step.listenFrom ?? null), [47, 3, 6, null]);
   });
 
   it('offers nothing to answer until then — the panel and the walkthrough wait too', () => {
