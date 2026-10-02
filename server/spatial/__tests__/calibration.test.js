@@ -702,3 +702,30 @@ describe('how long a guest has been in the show (the panel\'s Time)', () => {
     assert.equal(panelRow(rt, next.guestId).startedAt, null);
   });
 });
+
+describe('Help Me, in the runtime', () => {
+  const row = (rt, guestId) => rt.getGuestsRoster().find((g) => g.guestId === guestId);
+
+  it('marks the guest until someone is on their way, and a second press changes nothing', () => {
+    const { rt } = makeRuntime();
+    const g = rt.spawnGuest({ kind: 'phone', guestId: 'mad0098' });
+    assert.equal(row(rt, g.guestId).help, null);
+    const asked = rt.now();
+    assert.equal(rt.guestNeedsHelp(g.guestId), true);
+    rt.testAdvanceTime(10_000);
+    rt.guestNeedsHelp(g.guestId);
+    assert.deepEqual(row(rt, g.guestId).help, { at: asked }, 'still the first press');
+    assert.equal(rt.helpOnTheWay(g.guestId), true);
+    assert.equal(row(rt, g.guestId).help, null);
+    assert.equal(rt.helpOnTheWay(g.guestId), false, 'nothing left to answer');
+  });
+
+  it('is gone with the visit: the next person on the phone has not asked', () => {
+    const { rt } = makeRuntime();
+    rt.spawnGuest({ kind: 'phone', guestId: 'mad0098' });
+    rt.guestNeedsHelp('mad0098');
+    rt.removeGuest('mad0098');
+    const next = rt.spawnGuest({ kind: 'phone', guestId: 'mad0098' });
+    assert.equal(row(rt, next.guestId).help, null);
+  });
+});

@@ -69,6 +69,8 @@ const assetsDir = join(root, 'public', 'assets');
 const app = express();
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(join(root, 'public')));
+// The front desk's page, for the iPad: where everyone is, and who needs help.
+app.get('/ipad', (_req, res) => res.sendFile(join(root, 'public', 'ipad.html')));
 
 // The zone tracer judges overlaps in the browser with the same functions the
 // show judges occupancy with — served from the source, so there is no browser
@@ -355,6 +357,11 @@ app.post('/api/spatial/activate', (req, res) => {
 // ---------------------------------------------------------------------------
 const users = new Map();
 const operators = new Set();
+/**
+ * The front desk iPad (/ipad): sees what the operator panel sees, and can
+ * answer a guest's Help Me — nothing else it sends is acted on.
+ */
+const desks = new Set();
 let loadedShowFile = null;
 
 // Test-mode clock: lets the panel run the show at 10x or pause it outright.
@@ -616,6 +623,9 @@ function broadcast(obj, who) {
   if (who === 'operators' || who === 'all') {
     for (const ws of operators) send(ws, obj);
   }
+  if (who === 'watchers' || who === 'all') {
+    for (const ws of [...operators, ...desks]) send(ws, obj);
+  }
 }
 
 function opLog(line) {
@@ -633,7 +643,7 @@ function schedulePositions() {
   if (positionsTimer || rosterTimer) return;
   positionsTimer = setTimeout(() => {
     positionsTimer = null;
-    broadcast({ type: 'positions', guests: runtime.getPositionsSnapshot() }, 'operators');
+    broadcast({ type: 'positions', guests: runtime.getPositionsSnapshot() }, 'watchers');
   }, 60);
 }
 
@@ -683,7 +693,7 @@ function sendRoster() {
       notInstalled,
     },
     shows: listShows(),
-  }, 'operators');
+  }, 'watchers');
 }
 
 setInterval(sendRoster, 2000);
@@ -1004,6 +1014,7 @@ function clearOfflinePhones() {
 wss.on('connection', (ws) => {
   let token = null;
   let isOperator = false;
+  let isDesk = false;
 
   ws.on('message', (raw) => {
     let msg;
@@ -1012,6 +1023,8 @@ wss.on('connection', (ws) => {
     } catch {
       return;
     }
+    // The front desk only watches, and answers help.
+    if (isDesk && msg.type !== 'helpOnTheWay') return;
 
     switch (msg.type) {
       case 'hello': {
@@ -1020,6 +1033,13 @@ wss.on('connection', (ws) => {
           operators.add(ws);
           sendRoster();
           opLog('operator connected');
+          return;
+        }
+        if (msg.role === 'desk') {
+          isDesk = true;
+          desks.add(ws);
+          sendRoster();
+          opLog('front desk connected');
           return;
         }
 
@@ -1121,6 +1141,27 @@ wss.on('connection', (ws) => {
           runtime.guestStarted(guest.guestId);
           runtime.resyncCues(guest.guestId);
         }
+        return;
+      }
+
+      case 'help': {
+        // Help Me, pressed on the phone. The phone is told the desk has it,
+        // so it can say help is coming — and says so only once it is true.
+        const guest = runtime.getGuestByToken(token);
+        if (!guest) return;
+        runtime.guestNeedsHelp(guest.guestId);
+        sendRoster();
+        send(ws, { type: 'helpReceived' });
+        return;
+      }
+
+      case 'helpOnTheWay': {
+        // Staff tapped "On my way" on the iPad or the panel.
+        if (!isOperator && !isDesk) return;
+        const guest = runtime.guests.get(msg.guestId);
+        if (!guest || !runtime.helpOnTheWay(guest.guestId)) return;
+        sendToUser(guest.token, { type: 'helpOnTheWay' });
+        sendRoster();
         return;
       }
 
@@ -1389,6 +1430,10 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     if (isOperator) {
       operators.delete(ws);
+      return;
+    }
+    if (isDesk) {
+      desks.delete(ws);
       return;
     }
     if (token && users.get(token)?.ws === ws) {

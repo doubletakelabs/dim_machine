@@ -55,6 +55,11 @@
   }
   #connInfo.live::before { color: var(--ok); }
 
+  /* Guests who pressed Help Me on their phone (the front desk iPad has it too). */
+  #helpWanted { flex: none; display: none; background: #e8241a; color: #fff; padding: 8px 14px; font-weight: 700; }
+  #helpWanted .who { margin-right: 18px; white-space: nowrap; }
+  #helpWanted button { margin-left: 6px; }
+  .helpTag { background: #e8241a; color: #fff; border-radius: 4px; padding: 0 5px; font-size: 10px; font-weight: 800; }
   #assetWarning {
     flex: none; display: none; padding: 8px 14px; background: #46191c;
     color: #ffd9d9; font-size: 12px; line-height: 1.5;
@@ -184,6 +189,7 @@
   <span class="pill" id="connInfo">connecting…</span>
 </header>
 
+<div id="helpWanted"></div>
 <div id="assetWarning"></div>
 
 <main>
@@ -641,7 +647,7 @@ function renderPlan() {
     g.setAttribute('class', 'guest');
     const dot = document.createElementNS(SVG_NS, 'circle');
     dot.setAttribute('r', 8);
-    dot.setAttribute('fill', standingColour(guest.currentRoom));
+    dot.setAttribute('fill', guest.help ? '#e8241a' : standingColour(guest.currentRoom));
     dot.setAttribute('stroke', selection?.kind === 'guest' && selection.id === guest.guestId
       ? '#6ea8fe' : '#0d0f13');
     dot.setAttribute('stroke-width', guest.walking ? 3 : 2);
@@ -1044,7 +1050,7 @@ const phoneGone = (g) => g.kind === 'phone' && !phones.has(g.guestId);
 // unplugged and left on a table, or in someone's hand at the desk (#37,
 // 2026-10-01) — so it is hidden too, until it starts.
 const notStarted = (g) => g.kind === 'phone' && g.startedAt == null;
-const shownGuests = () => (snap?.guests ?? []).filter((g) => !onCharger(g) && !phoneGone(g) && !notStarted(g));
+const shownGuests = () => (snap?.guests ?? []).filter((g) => g.help || (!onCharger(g) && !phoneGone(g) && !notStarted(g)));
 
 function renderGuests() {
   const charging = (snap?.guests ?? []).filter((g) => onCharger(g) || phoneGone(g) || notStarted(g)).length;
@@ -1053,7 +1059,7 @@ function renderGuests() {
         data-guest="${g.guestId}">
       <td>
         <span style="color:${standingColour(g.currentRoom)}">●</span>
-        ${g.label}${g.walking ? ' <span class="muted">▸</span>' : ''}
+        ${g.label}${g.walking ? ' <span class="muted">▸</span>' : ''}${g.help ? ' <span class="helpTag">HELP</span>' : ''}
         <br><span class="muted mono" style="font-size:10px">${g.guestId}</span>
       </td>
       <td class="mono guestTime" data-started="${g.startedAt ?? ''}">${guestTime(g.startedAt)}</td>
@@ -1249,6 +1255,14 @@ function renderOutputs() {
 }
 
 function render() {
+  // Help Me, pressed on a phone: staff answer it here or on the front desk iPad.
+  const helpNow = (snap?.guests ?? []).filter((g) => g.help);
+  $('helpWanted').style.display = helpNow.length ? 'block' : 'none';
+  $('helpWanted').innerHTML = helpNow.map((g) => `<span class="who">${g.label} needs help${
+    g.roomId ? ` — ${g.roomId}` : ''}<button class="tiny" data-onway="${g.guestId}">On my way</button></span>`).join('');
+  for (const btn of $('helpWanted').querySelectorAll('[data-onway]')) {
+    btn.onclick = () => { btn.disabled = true; send({ type: 'helpOnTheWay', guestId: btn.dataset.onway }); };
+  }
   // A missing asset is a blank screen or silence in a room, and neither shows
   // up anywhere else. It stays on screen rather than scrolling past in the log.
   const missing = showMeta?.missingAssets ?? [];

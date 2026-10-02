@@ -275,6 +275,8 @@ const companion = createCompanion({
     document.documentElement.classList.toggle('debug', on);
     tellNative('setDebugVisible', on);
   },
+  // Help Me, on the ? screen: to the front desk.
+  onHelpMe: () => sendMsg({ type: 'help' }),
 });
 window.DIM.companion = companion; // for the console and the harness
 // The app's accelerometer, a few times a second: which way up the phone is.
@@ -1256,6 +1258,12 @@ function connect() {
       case 'word':
         // Walked into a room with a word: every time, a return included.
         companion.showWord(msg.word);
+        break;
+      case 'helpReceived':
+        companion.helpReceived();
+        break;
+      case 'helpOnTheWay':
+        companion.helpOnTheWay();
         break;
       case 'cue':
         if (joined) runCue(msg.cue);

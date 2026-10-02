@@ -32,6 +32,11 @@ export class Guest {
      * is not a new start.
      */
     this.startedAt = null;
+    /**
+     * The guest pressed Help Me on their phone, and nobody has answered yet:
+     * `{ at }` on the show clock, until staff tap "On my way". Null otherwise.
+     */
+    this.help = null;
     this.pathId = init.pathId;
     /**
      * Whether a person chose this path rather than the show drawing it.
@@ -133,6 +138,7 @@ export class Guest {
       connected: this.connected,
       kind: this.kind,
       startedAt: this.startedAt,
+      help: this.help,
       pathPinned: this.pathPinned,
       visitHistory: this.visitHistory,
     };

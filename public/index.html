@@ -152,6 +152,16 @@
       width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; flex: none; margin-top: 1px;
     }
     .cmp-help-foot { margin-top: 28px !important; opacity: .45; }
+    /* Help Me: the front desk's iPad flashes and marks this guest. */
+    .cmp-helpme {
+      display: block; width: 100%; margin: 6px 0 0; padding: 16px 0; border: 0; border-radius: 999px;
+      background: #e8241a; color: #fff; font: 900 20px/1 'Raleway', sans-serif; letter-spacing: .06em;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .cmp-helpme:active { transform: scale(.98); }
+    .cmp-helpme:disabled { opacity: .45; }
+    .cmp-helpme.waiting { opacity: 1; animation: cmp-pulse 1.8s ease-in-out infinite; }
+    .cmp-helpme-status { min-height: 1.6em; margin-top: 14px !important; font-weight: 700 !important; font-size: 15px !important; }
 
     /* Held up: telemetry, help and volume fade in. Hanging: only the word. */
     .cmp-chrome { position: absolute; z-index: 2; opacity: 1; transition: opacity .4s ease; }

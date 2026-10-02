@@ -1762,6 +1762,34 @@ export class SpatialRuntime {
     return true;
   }
 
+  /**
+   * The guest pressed Help Me (the ? on their phone). The front desk iPad and
+   * the operator panel flash and mark them until someone answers. A second
+   * press while waiting changes nothing: the first is still being answered.
+   */
+  guestNeedsHelp(guestId) {
+    const guest = this.guests.get(guestId);
+    if (!guest) return false;
+    if (!guest.help) {
+      guest.help = { at: this.now() };
+      this.append({ type: 'guest.help', guestId, roomId: guest.roomId ?? null });
+      this.io.log?.(`${guest.label} asked for help${guest.roomId ? ` in ${guest.roomId}` : ''}`);
+      this.notifyChange();
+    }
+    return true;
+  }
+
+  /** Staff tapped "On my way": the request is answered. */
+  helpOnTheWay(guestId) {
+    const guest = this.guests.get(guestId);
+    if (!guest?.help) return false;
+    guest.help = null;
+    this.append({ type: 'guest.helpOnTheWay', guestId });
+    this.io.log?.(`someone is on their way to ${guest.label}`);
+    this.notifyChange();
+    return true;
+  }
+
   guestInput(guestId, input) {
     const actor = this.guestActors.get(guestId);
     if (!actor || !this.running) return false;

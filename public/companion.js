@@ -24,6 +24,9 @@
  * the debug readouts and Reset for two minutes; the same again hides them.
  */
 
+/** How long Help Me waits for the server to say it has the request. */
+const HELP_ANSWER_MS = 5000;
+
 const PALETTE = [
   { bg: '#000000', ink: '#ffffff' },
   { bg: '#1652f0', ink: '#ffffff' },
@@ -69,6 +72,8 @@ const MARKUP = `
       <div class="cmp-step"><b>3</b><span>Use the slider on the right to adjust the volume of whatever this phone is playing for you.</span></div>
       <div class="cmp-step"><b>4</b><span>At the end, everything you collected is sent ahead. Your receipt will be waiting in the library.</span></div>
       <p class="cmp-help-foot">Lost, or something not working? Find anyone wearing a DIM badge.</p>
+      <button class="cmp-helpme cmp-control">HELP ME</button>
+      <p class="cmp-helpme-status" aria-live="polite"></p>
     </div>
   </div>
   <div class="cmp-chrome cmp-top">
@@ -94,8 +99,9 @@ const MARKUP = `
  * @param {() => number} opts.readVolume — 0..1
  * @param {(v: number) => void} opts.setVolume
  * @param {(on: boolean) => void} [opts.onDebug] — show or hide the debug readouts
+ * @param {() => void} [opts.onHelpMe] — the guest pressed Help Me
  */
-export function createCompanion({ root, readVolume, setVolume, onDebug }) {
+export function createCompanion({ root, readVolume, setVolume, onDebug, onHelpMe }) {
   root.innerHTML = MARKUP;
   const q = (sel) => root.querySelector(sel);
   const html = document.documentElement;
@@ -209,6 +215,33 @@ export function createCompanion({ root, readVolume, setVolume, onDebug }) {
     if (view === 'help') rest(); else { clearTimeout(wordTimer); wordTimer = null; show('help'); }
   });
 
+  // Help Me (2026-10-01): the front desk's iPad flashes and marks this guest.
+  // It says help is coming only once the server has it; with no answer in a
+  // few seconds, it says so and sends them to a badge instead.
+  const helpMe = q('.cmp-helpme');
+  const helpStatus = q('.cmp-helpme-status');
+  let helpTimer = null;
+  function helpState(text, { waiting = false, pressable = true } = {}) {
+    helpStatus.textContent = text;
+    helpMe.disabled = !pressable;
+    helpMe.classList.toggle('waiting', waiting);
+  }
+  helpMe.addEventListener('click', () => {
+    if (helpMe.disabled) return;
+    helpState('Sending…', { pressable: false });
+    clearTimeout(helpTimer);
+    helpTimer = setTimeout(() => helpState("Couldn't reach the front desk. Find anyone wearing a DIM badge."), HELP_ANSWER_MS);
+    onHelpMe?.();
+  });
+  function helpReceived() {
+    clearTimeout(helpTimer);
+    helpState('Help is coming. Stay where you are.', { waiting: true, pressable: false });
+  }
+  function helpOnTheWay() {
+    clearTimeout(helpTimer);
+    helpState('Someone is on their way to you.');
+  }
+
   // ------------------------------------------------------------- volume
 
   const slider = q('.cmp-vol-slider');
@@ -281,6 +314,10 @@ export function createCompanion({ root, readVolume, setVolume, onDebug }) {
     setLastWord(word) { if (word) { lastWord = String(word).toUpperCase(); if (view === 'idle') rest(); } },
     get hanging() { return hanging; },
     gravity,
+    /** The server has the Help Me: help is coming. */
+    helpReceived,
+    /** Staff tapped "On my way" at the desk. */
+    helpOnTheWay,
     /** Out of debug, whatever it was: the phone is back on the charger. */
     hideDebug() { cancelHold(); if (debugOn) setDebug(false); },
   };

@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>DIM · Front desk</title>
+<!--
+  The front desk's page, for the iPad on its stand (2026-10-01): where every
+  guest in the show is, how long they have been in, and who has pressed Help
+  Me on their phone. It watches the show and answers help, nothing more — the
+  server ignores anything else it sends (`role: 'desk'`).
+
+  Who is shown: the same guests as the operator panel's list — phones that
+  have pressed START DIM, are with the show and are off their chargers — plus
+  anyone waiting for help, whatever their phone says.
+
+  A help request flashes the screen, rings a chime every few seconds and
+  marks the guest's dot until someone taps "On my way", which tells the
+  guest's phone that someone is coming. Safari plays sound only after a tap,
+  hence the "Tap to start" when the page opens.
+-->
+<style>
+  :root {
+    --bg: #0b0c10; --panel: #14161b; --line: #262a33; --ink: #eef1f7; --muted: #8b93a3;
+    --dot: #f2f4f8; --dot-ink: #0b0c10; --help: #e8241a; --ok: #58c98a;
+    --zone: #2a2f3a; --zone-busy: #2f8f5b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; overflow: hidden; }
+
+  #app { display: grid; grid-template-columns: minmax(0, auto) minmax(230px, 1fr); height: 100%;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  #mapWrap { position: relative; height: 100%; padding: 12px 0 12px 12px; display: flex; align-items: center; justify-content: center; min-width: 0; }
+  #map { height: 100%; max-width: 100%; display: block; }
+
+  #side { display: flex; flex-direction: column; min-height: 0; padding: 14px 14px 12px; gap: 12px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  header h1 { margin: 0; font-size: 17px; letter-spacing: .08em; text-transform: uppercase; font-weight: 800; }
+  #conn { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  #conn.down { color: var(--help); font-weight: 700; }
+
+  #alerts { display: flex; flex-direction: column; gap: 10px; }
+  .alert { background: var(--help); color: #fff; border-radius: 14px; padding: 14px; animation: alert-pulse 1s ease-in-out infinite; }
+  .alert b { display: block; font-size: 26px; font-weight: 900; letter-spacing: .02em; }
+  .alert span { display: block; font-size: 15px; margin: 4px 0 12px; opacity: .92; }
+  .alert button { width: 100%; padding: 14px 0; border: 0; border-radius: 10px; background: #fff; color: var(--help);
+    font-size: 18px; font-weight: 900; letter-spacing: .06em; }
+  .alert button:active { transform: scale(.98); }
+  @keyframes alert-pulse { 50% { filter: brightness(1.18); } }
+
+  #listHead { display: flex; justify-content: space-between; align-items: baseline; color: var(--muted);
+    font-size: 12px; letter-spacing: .1em; text-transform: uppercase; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  #listHead b { color: var(--ink); font-size: 15px; letter-spacing: 0; }
+  #list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; }
+  #list li { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 10px;
+    padding: 10px 2px; border-bottom: 1px solid var(--line); }
+  #list li.help { color: var(--help); }
+  .num { width: 40px; height: 40px; border-radius: 50%; background: var(--dot); color: var(--dot-ink);
+    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; }
+  li.help .num { background: var(--help); color: #fff; }
+  .room { font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .time { font-size: 18px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  #empty { color: var(--muted); font-size: 15px; padding: 18px 2px; }
+
+  /* The map */
+  .zone { fill: var(--zone); fill-opacity: .28; stroke: #4a5160; stroke-width: 1.2; }
+  .zone.hallway { fill-opacity: .12; stroke-dasharray: 5 4; }
+  .zone.busy { fill: var(--zone-busy); fill-opacity: .32; }
+  .zone.helpHere { fill: var(--help); fill-opacity: .35; }
+  .roomLabel { fill: #d9deea; font-size: 15px; font-weight: 700; text-anchor: middle; pointer-events: none;
+    paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+  .dot { transition: transform .45s linear; }
+  .dot circle.body { fill: var(--dot); stroke: var(--bg); stroke-width: 3; }
+  .dot text { fill: var(--dot-ink); font-size: 15px; font-weight: 800; text-anchor: middle; dominant-baseline: central; }
+  .dot.picked circle.body { stroke: #6ea8fe; stroke-width: 5; }
+  .dot.help circle.body { fill: var(--help); }
+  .dot.help text { fill: #fff; }
+  .dot .ring { fill: none; stroke: var(--help); stroke-width: 5; opacity: 0; transform-box: fill-box; transform-origin: center; }
+  .dot.help .ring { animation: ring 1.6s ease-out infinite; }
+  .dot.help .ring.two { animation-delay: .8s; }
+  @keyframes ring { from { transform: scale(1); opacity: .95; } to { transform: scale(3.6); opacity: 0; } }
+
+  /* The whole screen flashes while anyone is waiting for help. */
+  #flash { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 5;
+    box-shadow: inset 0 0 0 14px var(--help), inset 0 0 120px 40px rgba(232, 36, 26, .55); }
+  body.helpWanted #flash { animation: flash 1s steps(1, end) infinite; }
+  @keyframes flash { 0% { opacity: 1; } 50% { opacity: .15; } }
+
+  /* Safari will only play the chime after a tap. */
+  #start { position: fixed; inset: 0; z-index: 10; background: rgba(11, 12, 16, .94); display: flex;
+    flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; padding: 24px; }
+  #start button { padding: 22px 48px; border: 0; border-radius: 16px; background: var(--ink); color: var(--bg);
+    font-size: 24px; font-weight: 900; letter-spacing: .06em; }
+  #start p { color: var(--muted); font-size: 16px; max-width: 420px; line-height: 1.5; margin: 0; }
+  #start.gone { display: none; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="mapWrap"><svg id="map" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  <div id="side">
+    <header><h1>Front desk</h1><span id="conn">Connecting…</span></header>
+    <div id="alerts"></div>
+    <div id="listHead"><span>In the show</span><b id="count">0</b></div>
+    <ul id="list"></ul>
+  </div>
+</div>
+<div id="flash"></div>
+<div id="start">
+  <button id="startBtn">TAP TO START</button>
+  <p>This turns on the help chime. The page stays here showing where every guest is; a guest pressing Help Me on their phone flashes the screen and marks their dot.</p>
+</div>
+
+<script>
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const $ = (id) => document.getElementById(id);
+/** While anyone is waiting, the chime rings again this often. */
+const CHIME_EVERY_MS = 8000;
+
+let snap = null;              // the latest spatial snapshot from the roster
+let phones = new Map();       // guestId → the phone's roster entry
+let clockAt = { server: null, received: Date.now() };
+let drawnPlan = null;         // which show the map was drawn for
+let picked = null;            // a guest tapped in the list, outlined on the map
+let pickedTimer = null;
+const dots = new Map();       // guestId → <g>
+
+// ------------------------------------------------------------ who is shown
+
+const onCharger = (g) => phones.get(g.guestId)?.telemetry?.phone?.charging === true;
+const phoneGone = (g) => g.kind === 'phone' && !phones.has(g.guestId);
+const notStarted = (g) => g.kind === 'phone' && g.startedAt == null;
+const inShow = (g) => !onCharger(g) && !phoneGone(g) && !notStarted(g);
+const shownGuests = () => (snap?.guests ?? []).filter((g) => g.help || inShow(g));
+const waiting = () => (snap?.guests ?? []).filter((g) => g.help);
+
+const number = (g) => String(g.label ?? g.guestId).replace(/^#?mad0*/i, '').replace(/^#/, '') || '?';
+const roomName = (roomId) => (snap?.rooms ?? []).find((r) => r.roomId === roomId)?.name ?? null;
+
+// ------------------------------------------------------------ the show clock
+
+function showNow() {
+  const c = clockAt.server;
+  if (!c || c.now == null) return null;
+  return c.now + (Date.now() - clockAt.received) * (c.rate ?? 1);
+}
+function duration(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+const since = (at) => { const now = showNow(); return at == null || now == null ? '—' : duration(now - at); };
+
+// ------------------------------------------------------------ the map
+
+function drawPlan() {
+  const svg = $('map');
+  const fp = snap?.floorPlan;
+  const key = JSON.stringify([fp, Object.keys(snap?.zones ?? {})]);
+  if (key === drawnPlan) return;
+  drawnPlan = key;
+  svg.innerHTML = '';
+  dots.clear();
+  const w = fp?.width ?? (fp?.extent ? fp.extent.maxX + 40 : 800);
+  const h = fp?.height ?? (fp?.extent ? fp.extent.maxY + 40 : 1200);
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.style.aspectRatio = `${w} / ${h}`;
+  if (fp?.image) {
+    const img = document.createElementNS(SVG_NS, 'image');
+    img.setAttribute('href', `/assets/${fp.image}`);
+    img.setAttribute('width', w);
+    img.setAttribute('height', h);
+    img.setAttribute('preserveAspectRatio', 'none'); // the zones are traced in this exact box
+    img.setAttribute('opacity', '.7');
+    svg.appendChild(img);
+  }
+  const zonesLayer = document.createElementNS(SVG_NS, 'g');
+  zonesLayer.id = 'zones';
+  const kinds = new Map((snap?.rooms ?? []).map((r) => [r.roomId, r.kind]));
+  for (const zone of Object.values(snap?.zones ?? {})) {
+    if (!zone.polygon?.length) continue;
+    const poly = document.createElementNS(SVG_NS, 'polygon');
+    poly.setAttribute('points', zone.polygon.map((p) => p.join(',')).join(' '));
+    poly.dataset.room = zone.roomId;
+    poly.setAttribute('class', `zone${kinds.get(zone.roomId) === 'hallway' ? ' hallway' : ''}`);
+    zonesLayer.appendChild(poly);
+  }
+  svg.appendChild(zonesLayer);
+  // One name per room, on its first zone; hallways go unnamed.
+  const named = new Set();
+  for (const zone of Object.values(snap?.zones ?? {})) {
+    if (named.has(zone.roomId) || kinds.get(zone.roomId) === 'hallway' || !zone.polygon?.length) continue;
+    named.add(zone.roomId);
+    const at = zone.label ?? centroid(zone.polygon);
+    const t = document.createElementNS(SVG_NS, 'text');
+    t.setAttribute('class', 'roomLabel');
+    t.setAttribute('x', at[0]);
+    t.setAttribute('y', at[1]);
+    t.textContent = zone.roomName ?? roomName(zone.roomId) ?? zone.roomId;
+    svg.appendChild(t);
+  }
+  const dotsLayer = document.createElementNS(SVG_NS, 'g');
+  dotsLayer.id = 'dots';
+  svg.appendChild(dotsLayer);
+}
+
+function centroid(poly) {
+  const s = poly.reduce((a, [x, y]) => [a[0] + x, a[1] + y], [0, 0]);
+  return [s[0] / poly.length, s[1] / poly.length];
+}
+
+function drawDots() {
+  const layer = $('dots');
+  if (!layer) return;
+  const shown = shownGuests();
+  const seen = new Set();
+  for (const g of shown) {
+    if (!g.position) continue;
+    seen.add(g.guestId);
+    let node = dots.get(g.guestId);
+    if (!node) {
+      node = document.createElementNS(SVG_NS, 'g');
+      node.innerHTML = '<circle class="ring" r="16"/><circle class="ring two" r="16"/><circle class="body" r="16"/><text></text>';
+      layer.appendChild(node);
+      dots.set(g.guestId, node);
+    }
+    node.querySelector('text').textContent = number(g);
+    node.setAttribute('class', `dot${g.help ? ' help' : ''}${picked === g.guestId ? ' picked' : ''}`);
+    node.style.transform = `translate(${g.position.x}px, ${g.position.y}px)`;
+  }
+  for (const [id, node] of dots) if (!seen.has(id)) { node.remove(); dots.delete(id); }
+  // Anyone waiting for help is drawn last, on top of the rest.
+  for (const g of shown) if (g.help && dots.get(g.guestId)) layer.appendChild(dots.get(g.guestId));
+  // Rooms with someone in them, and rooms with someone waiting for help.
+  const busy = new Set(shown.map((g) => g.roomId).filter(Boolean));
+  const helpRooms = new Set(waiting().map((g) => g.roomId).filter(Boolean));
+  for (const poly of document.querySelectorAll('#zones polygon')) {
+    poly.classList.toggle('busy', busy.has(poly.dataset.room));
+    poly.classList.toggle('helpHere', helpRooms.has(poly.dataset.room));
+  }
+}
+
+// ------------------------------------------------------------ the list
+
+function renderList() {
+  const shown = shownGuests().sort((a, b) => (b.help ? 1 : 0) - (a.help ? 1 : 0) || (a.startedAt ?? Infinity) - (b.startedAt ?? Infinity));
+  $('count').textContent = String(shown.length);
+  $('list').innerHTML = shown.length ? shown.map((g) => `
+    <li class="${g.help ? 'help' : ''}" data-guest="${g.guestId}">
+      <span class="num">${number(g)}</span>
+      <span class="room">${roomName(g.roomId) ?? 'Between rooms'}</span>
+      <span class="time" data-started="${g.startedAt ?? ''}">${since(g.startedAt)}</span>
+    </li>`).join('') : '<li id="empty">Nobody in the show right now.</li>';
+}
+
+function renderAlerts() {
+  const list = waiting();
+  $('alerts').innerHTML = list.map((g) => `
+    <div class="alert">
+      <b>#${number(g)} NEEDS HELP</b>
+      <span>${roomName(g.roomId) ? `In ${roomName(g.roomId)}` : 'Between rooms'} · <span class="ago" data-at="${g.help.at}" style="display:inline;margin:0">${since(g.help.at)}</span> ago</span>
+      <button data-answer="${g.guestId}">ON MY WAY</button>
+    </div>`).join('');
+  document.body.classList.toggle('helpWanted', list.length > 0);
+}
+
+$('alerts').addEventListener('click', (e) => {
+  const id = e.target.closest('[data-answer]')?.dataset.answer;
+  if (!id) return;
+  e.target.disabled = true;
+  e.target.textContent = 'SENDING…';
+  send({ type: 'helpOnTheWay', guestId: id });
+});
+
+$('list').addEventListener('click', (e) => {
+  const id = e.target.closest('[data-guest]')?.dataset.guest;
+  if (!id) return;
+  picked = picked === id ? null : id;
+  clearTimeout(pickedTimer);
+  if (picked) pickedTimer = setTimeout(() => { picked = null; drawDots(); }, 5000);
+  drawDots();
+});
+
+// The times tick between rosters.
+setInterval(() => {
+  for (const el of document.querySelectorAll('[data-started]')) el.textContent = since(el.dataset.started === '' ? null : Number(el.dataset.started));
+  for (const el of document.querySelectorAll('[data-at]')) el.textContent = since(Number(el.dataset.at));
+}, 1000);
+
+// ------------------------------------------------------------ the chime
+
+let audio = null;
+let lastChime = 0;
+function chime() {
+  if (!audio) return;
+  audio.resume?.();
+  const t = audio.currentTime;
+  for (const [i, freq] of [[0, 659.25], [1, 880], [2, 1318.5]]) {
+    const o = audio.createOscillator();
+    const g = audio.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    const at = t + i * 0.18;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(0.5, at + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.9);
+    o.connect(g).connect(audio.destination);
+    o.start(at);
+    o.stop(at + 1);
+  }
+  lastChime = Date.now();
+}
+let knownHelp = new Set();
+function checkChime() {
+  const now = new Set(waiting().map((g) => g.guestId));
+  const fresh = [...now].some((id) => !knownHelp.has(id));
+  knownHelp = now;
+  if (now.size && (fresh || Date.now() - lastChime >= CHIME_EVERY_MS)) chime();
+}
+setInterval(checkChime, 1000);
+
+$('startBtn').addEventListener('click', () => {
+  try {
+    audio = new (window.AudioContext || window.webkitAudioContext)();
+    audio.resume();
+    // A silent blip, so Safari counts the page as allowed to make sound.
+    const o = audio.createOscillator(); const g = audio.createGain(); g.gain.value = 0.0001;
+    o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime + 0.05);
+  } catch {}
+  $('start').classList.add('gone');
+});
+
+// ------------------------------------------------------------ the server
+
+let ws = null;
+function send(obj) { if (ws?.readyState === 1) ws.send(JSON.stringify(obj)); }
+function connect() {
+  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: 'hello', role: 'desk' }));
+    $('conn').textContent = 'Live';
+    $('conn').classList.remove('down');
+  };
+  ws.onmessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    if (msg.type === 'roster') {
+      snap = msg.spatial;
+      phones = new Map((msg.users ?? []).map((u) => [u.guestId, u]));
+      clockAt = { server: snap?.clock ?? null, received: Date.now() };
+      drawPlan();
+      drawDots();
+      renderList();
+      renderAlerts();
+      checkChime();
+    } else if (msg.type === 'positions') {
+      for (const p of msg.guests ?? []) {
+        const g = snap?.guests?.find((x) => x.guestId === p.guestId);
+        if (g && p.position) { g.position = p.position; g.roomId = p.roomId ?? g.roomId; }
+      }
+      drawDots();
+    }
+  };
+  ws.onclose = () => {
+    $('conn').textContent = 'Reconnecting…';
+    $('conn').classList.add('down');
+    setTimeout(connect, 1500);
+  };
+}
+connect();
+</script>
+</body>
+</html>
