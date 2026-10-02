@@ -326,7 +326,7 @@ export class MuseumLayer {
   say(g, stem, startAt, roomId = null) {
     const assetId = this.stemAsset(stem, g, roomId);
     if (!assetId) return;
-    g.voice = { stem, assetId, startAt };
+    g.voice = { stem, assetId, startAt, roomId };
   }
 
   /**
@@ -357,15 +357,19 @@ export class MuseumLayer {
       this.unhold(g, g.heldAt + this.waitMaxMs);
     }
     const inMuseumRoom = roomIdHere && this.rooms.has(roomIdHere);
-    if (!inMuseumRoom && !g.voice) return null;
+    // A room's line is heard in that room only: walking out stops it, as
+    // every other room's does (2026-10-02). Back in during the same line, it
+    // carries on from where it has got to. The hallway's line has no room.
+    const voice = g.voice && (g.voice.roomId == null || g.voice.roomId === roomIdHere) ? g.voice : null;
+    if (!inMuseumRoom && !voice) return null;
 
     const cues = { room: null, guidance: null };
-    if (g.voice) {
+    if (voice) {
       cues.guidance = {
-        assetId: g.voice.assetId,
-        startAt: g.voice.startAt,
+        assetId: voice.assetId,
+        startAt: voice.startAt,
         seek: true, // a reconnecting phone joins the line where it is
-        key: `museum:${g.voice.stem}:${g.voice.startAt}`,
+        key: `museum:${voice.stem}:${voice.startAt}`,
       };
     }
     if (g.engagedRoom && g.engagedRoom === roomIdHere && !g.replay && g.heldAt == null
@@ -384,9 +388,8 @@ export class MuseumLayer {
       };
       if (!cues.room.assetId) cues.room = null;
     }
-    // Outside its rooms the museum has no say over the room slot: a line
-    // still carrying from the last exhibit plays on, and the room they are in
-    // — the Data Center, a hallway — keeps its own (2026-10-02).
+    // Outside its rooms the museum has no say over the room slot: the room
+    // they are in — the Data Center, a hallway — keeps its own (2026-10-02).
     if (!inMuseumRoom) delete cues.room;
     return cues;
   }

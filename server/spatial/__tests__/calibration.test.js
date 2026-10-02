@@ -861,3 +861,36 @@ describe('the rooms after the museum speak (2026-10-02)', () => {
     assert.equal(rt.desiredCues(g.guestId).get('room')?.assetId, museum.rooms.dataCenter.cues.active.audio);
   });
 });
+
+describe('a museum room\'s line stays in its room (2026-10-02)', () => {
+  const SI = museum.museum.roomStems.superintelligence.entrance;
+  const intoMuseum = (rt) => {
+    const g = rt.spawnGuest();
+    walkTo(rt, g.guestId, 'frontDesk');
+    rt.guestStarted(g.guestId);
+    rt.testAdvanceTime(20_000);
+    for (const r of ['calibration', 'entranceHallway', 'maskRoom', 'hallOfHeroes', 'cyclorama', 'museumHallway', 'superintelligence']) {
+      walkTo(rt, g.guestId, r, 6000);
+    }
+    return g;
+  };
+
+  it('stops when the guest walks out, partway through', () => {
+    const { rt, cues } = makeRuntime(null, { clipSeconds: () => 60 });
+    const g = intoMuseum(rt);
+    assert.equal(rt.desiredCues(g.guestId).get('guidance')?.assetId, SI, 'heard in the room');
+    cues.length = 0;
+    walkTo(rt, g.guestId, 'museumHallway', 3000);
+    assert.notEqual(rt.desiredCues(g.guestId).get('guidance')?.assetId, SI, 'not in the hallway');
+    assert.ok(cues.some((c) => c.kind === 'stopAudio' && c.assetId === SI), 'the phone is told to stop it');
+  });
+
+  it('is not heard over the next room\'s line', () => {
+    const { rt } = makeRuntime(null, { clipSeconds: () => 60 });
+    const g = intoMuseum(rt);
+    for (const r of ['museumHallway', 'southCorridor', 'dataCenter']) walkTo(rt, g.guestId, r, 3000);
+    const d = rt.desiredCues(g.guestId);
+    assert.notEqual(d.get('guidance')?.assetId, SI);
+    assert.equal(d.get('room')?.assetId, museum.rooms.dataCenter.cues.active.audio);
+  });
+});
