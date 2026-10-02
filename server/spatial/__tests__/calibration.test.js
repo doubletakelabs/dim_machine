@@ -790,6 +790,43 @@ describe('pre-calibration, always heard to its end (2026-10-02)', () => {
     assert.deepEqual(heard(cues), [PRE]);
   });
 
+  it('holds the entrance hallway\'s line until it ends, then plays that from its top', () => {
+    const HALL = museum.rooms.entranceHallway.cues.idle.audio;
+    const { rt, cues } = makeRuntime(null, io);
+    const g = pressed(rt);
+    const startedAt = rt.now();
+    walkTo(rt, g.guestId, 'calibration');
+    walkTo(rt, g.guestId, 'entranceHallway');
+    const room = () => rt.desiredCues(g.guestId).get('room');
+    assert.equal(room(), null, 'the hallway waits while pre-calibration plays');
+    assert.equal(cues.some((c) => c.kind === 'audio' && c.assetId === HALL), false);
+
+    rt.testAdvanceTime(startedAt + 14_400 - rt.now());
+    assert.equal(room()?.assetId, HALL, 'then speaks');
+    assert.equal(room().startAt, startedAt + 14_400, 'from its top, as pre-calibration ends');
+    const sent = cues.filter((c) => c.kind === 'audio' && c.assetId === HALL);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].startAt, startedAt + 14_400);
+
+    rt.testAdvanceTime(5000);
+    assert.equal(room()?.startAt, startedAt + 14_400, 'and is not restarted after');
+  });
+
+  it('leaves the hallway\'s line alone for a guest who heard pre-calibration out', () => {
+    const HALL = museum.rooms.entranceHallway.cues.idle.audio;
+    const { rt } = makeRuntime(null, io);
+    const g = pressed(rt);
+    rt.testAdvanceTime(20_000);
+    walkTo(rt, g.guestId, 'calibration');
+    rt.testAdvanceTime(2100);
+    for (const input of ['tap', 'swipe', 'drag']) rt.guestInput(g.guestId, input);
+    walkTo(rt, g.guestId, 'entranceHallway');
+    const room = rt.desiredCues(g.guestId).get('room');
+    assert.equal(room?.assetId, HALL);
+    const arrived = rt.coordinator.getRoomOccupants('entranceHallway').find((o) => o.guestId === g.guestId).sinceTs;
+    assert.equal(room.startAt, arrived, 'on arrival, as ever');
+  });
+
   it('plays a phone that reconnects partway the rest of it, from where it has got to', () => {
     const { rt, cues } = makeRuntime(null, io);
     const g = pressed(rt);

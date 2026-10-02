@@ -1296,7 +1296,9 @@ MAD-DIM's pre-calibration does this. A guest who walks into calibration
 before it ends waits in `walkedInEarly` until `PRECALIBRATION_ENDED`, then the
 2 s `settling`, so calibration1 always starts 2 s after pre-calibration ends.
 One who reaches the entrance hallway first hears the rest of it there and
-skips calibration. `walkedInEarly` gives up after 15 s, in case the server
+skips calibration. The hallway's own line waits for it to end, then starts
+from its top. Any room line that would begin under a `finish` clip does the
+same. `walkedInEarly` gives up after 15 s, in case the server
 running the show predates `finish`. A cue with `preload: true` is listed in
 `welcome.warm` (and `assets.warm`), and the phone fetches and decodes it
 before START DIM is pressed. Calibration is its own stage after the front desk, so a phone

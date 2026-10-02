@@ -117,6 +117,8 @@ export class SpatialRuntime {
      * still playing — though the guest's state may have moved on without it.
      */
     this._finishing = new Map();
+    /** guestId → when their last `finish` clip ended: a room line held for it starts here. */
+    this._finishedAt = new Map();
     /** guestId → roomId → { arrivedAt, passes, plays }: which visits hear its guidance (`audio.every`). */
     this._roomGuidance = new Map();
     /** guestId → { roomId, key, side }: which half of a piece's screen is theirs (`sides`), as of which step. */
@@ -350,6 +352,7 @@ export class SpatialRuntime {
     this.beaconHolds.clear();
     for (const f of this._finishing.values()) this.clock.clearTimeout(f.handle);
     this._finishing.clear();
+    this._finishedAt.clear();
     for (const link of this.experiences.values()) link.stop();
     for (const actor of this.guestActors.values()) actor.stop();
     this.startedAt = null;
@@ -478,6 +481,7 @@ export class SpatialRuntime {
     this._unlockWakes.delete(guestId);
     this.clock.clearTimeout(this._finishing.get(guestId)?.handle);
     this._finishing.delete(guestId);
+    this._finishedAt.delete(guestId);
     this._sequencesSeen.delete(guestId);
     this._sides.delete(guestId);
     this._roomGuidance.delete(guestId);
@@ -1391,9 +1395,15 @@ export class SpatialRuntime {
       resolved[region] = guestCueFor(this.def, region, regions[region], actor.regionSince(region));
     }
     // A `finish` clip plays to its end wherever the guest has got to, and
-    // nothing else speaks to them until it has (see trackFinishing).
+    // nothing else speaks to them until it has (see trackFinishing). A room's
+    // line that would have begun under it — the entrance hallway's, for a guest
+    // who hurried through calibration — waits, then starts from its top.
     const finishing = this._finishing.get(guestId);
     if (finishing && this.now() < finishing.endsAt) resolved.guidance = finishing.cue;
+    const voiceFreeAt = finishing?.endsAt ?? this._finishedAt.get(guestId);
+    if (resolved.room?.audio && voiceFreeAt != null && resolved.room.startAt < voiceFreeAt) {
+      resolved.room = this.now() < voiceFreeAt ? null : { ...resolved.room, startAt: voiceFreeAt };
+    }
 
     for (const slot of AUDIO_CUE_SLOTS) desired.set(slot, audioPart(resolved[slot]));
 
@@ -1840,6 +1850,7 @@ export class SpatialRuntime {
     const f = this._finishing.get(guestId);
     if (f?.handle !== handle) return;
     this._finishing.delete(guestId);
+    this._finishedAt.set(guestId, f.endsAt);
     const actor = this.guestActors.get(guestId);
     if (!actor || !this.running) return;
     this.append({ type: 'guest.clipFinished', guestId, assetId: f.cue.audio });
