@@ -182,8 +182,13 @@ app.get('/api/content', async (_req, res) => {
       .filter(Boolean)
       .sort((a, b) => a.path.localeCompare(b.path));
     const beacons = runtime.def?.beacons ?? null;
+    // The files only (2026-10-02). Beacons used to count too, so moving one in
+    // the zone editor marked every phone off its charger out of date — START
+    // DIM red until it went back on. They reach phones without it: live, with
+    // the show (`welcome`), and with every sync, which saves the latest list
+    // whether or not the version moved.
     const version = createHash('sha256')
-      .update(JSON.stringify({ files: files.map((f) => [f.path, f.sha256]), beacons }))
+      .update(JSON.stringify({ files: files.map((f) => [f.path, f.sha256]) }))
       .digest('hex').slice(0, 16);
     res.json({ version, showId: runtime.def?.showId ?? null, beacons, files });
   } catch (err) {
