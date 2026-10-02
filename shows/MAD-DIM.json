@@ -135,8 +135,8 @@
         "maxDrivers": 8,
         "gesturesToShow": true,
         "sides": {
-          "49152": "left",
-          "46849": "right"
+          "46849": "right",
+          "49152": "left"
         },
         "sideAfterMs": 3000,
         "keepDriverMs": 15000
@@ -2200,7 +2200,7 @@
         494
       ],
       "room": "maskRoom",
-      "rssi": -74
+      "rssi": -77
     },
     "47616": {
       "at": [
@@ -2320,7 +2320,7 @@
         631
       ],
       "room": "hallOfHeroes",
-      "rssi": -50
+      "rssi": -55
     },
     "51456": {
       "at": [
@@ -2417,14 +2417,6 @@
       ],
       "rssi": -70,
       "door": "consumption1-door"
-    },
-    "56576": {
-      "at": [
-        454,
-        497
-      ],
-      "room": "hallOfHeroes",
-      "rssi": -40
     },
     "56832": {
       "at": [
@@ -2527,13 +2519,13 @@
       "room": "faerie",
       "rssi": -74
     },
-    "60416": {
+    "60672": {
       "at": [
-        419,
-        529
+        416,
+        432
       ],
-      "room": "hallOfHeroes",
-      "rssi": -40
+      "room": "entranceHallway",
+      "rssi": -70
     },
     "60673": {
       "at": [
@@ -2541,7 +2533,7 @@
         564
       ],
       "room": "maskRoom",
-      "rssi": -74
+      "rssi": -75
     },
     "60928": {
       "at": [
@@ -2565,7 +2557,7 @@
         619
       ],
       "room": "maskRoom",
-      "rssi": -70
+      "rssi": -73
     },
     "61186": {
       "at": [
