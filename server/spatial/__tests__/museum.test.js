@@ -677,3 +677,18 @@ describe('a room that waits for its piece (Kin, museum.waitFor)', () => {
     assert.match(errorsFor({ waitMaxMs: 0 }), /waitMaxMs must be a positive number/);
   });
 });
+
+describe('MAD-DIM: a room\'s spoken guidance plays once', () => {
+  // Every museum room's guidance clip was its in_room stem, which loops for as
+  // long as the guest stays: lingering guests heard it again and again
+  // (2026-10-02). Spoken lines are entrance stems; in_room is for beds.
+  it('no room loops a guidance clip as its in_room bed', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const show = JSON.parse(readFileSync(fileURLToPath(new URL('../../../shows/MAD-DIM.json', import.meta.url)), 'utf8'));
+    const looping = Object.entries(show.museum?.roomStems ?? {})
+      .filter(([, stems]) => String(stems.inRoom ?? '').startsWith('audio/guidance/'))
+      .map(([roomId]) => roomId);
+    assert.deepEqual(looping, []);
+  });
+});
