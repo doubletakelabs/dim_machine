@@ -384,6 +384,10 @@ export class MuseumLayer {
       };
       if (!cues.room.assetId) cues.room = null;
     }
+    // Outside its rooms the museum has no say over the room slot: a line
+    // still carrying from the last exhibit plays on, and the room they are in
+    // — the Data Center, a hallway — keeps its own (2026-10-02).
+    if (!inMuseumRoom) delete cues.room;
     return cues;
   }
 

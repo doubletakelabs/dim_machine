@@ -1413,7 +1413,7 @@ export class SpatialRuntime {
     // wins over the authored cues; everywhere else the show is untouched.
     const museum = this.museum?.guestCues(guestId, here?.roomId ?? null);
     if (museum) {
-      desired.set('room', museum.room ? audioPart(museum.room) : null);
+      if ('room' in museum) desired.set('room', museum.room ? audioPart(museum.room) : null);
       if (museum.guidance) desired.set('guidance', audioPart(museum.guidance));
     }
 

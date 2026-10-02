@@ -844,3 +844,20 @@ describe('pre-calibration, always heard to its end (2026-10-02)', () => {
     assert.deepEqual(rt.warmAudio(), [PRE]);
   });
 });
+
+describe('the rooms after the museum speak (2026-10-02)', () => {
+  it('a museum room\'s spoken line does not silence the rooms the guest walks into after', () => {
+    const { rt } = makeRuntime(null, { clipSeconds: () => 10 });
+    const g = rt.spawnGuest();
+    walkTo(rt, g.guestId, 'frontDesk');
+    rt.guestStarted(g.guestId);
+    rt.testAdvanceTime(20_000);
+    for (const r of ['calibration', 'entranceHallway', 'maskRoom', 'hallOfHeroes', 'cyclorama', 'museumHallway', 'slop']) {
+      walkTo(rt, g.guestId, r, 6000);
+    }
+    assert.ok(rt.museum.guests.get(g.guestId)?.voice, 'slop spoke to them');
+    for (const r of ['museumHallway', 'southCorridor', 'dataCenter']) walkTo(rt, g.guestId, r, 6000);
+    assert.equal(guidance(rt, g.guestId), 'museum', 'still in the museum phase');
+    assert.equal(rt.desiredCues(g.guestId).get('room')?.assetId, museum.rooms.dataCenter.cues.active.audio);
+  });
+});
