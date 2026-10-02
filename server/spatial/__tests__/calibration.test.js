@@ -569,10 +569,12 @@ describe('the lobby, driven from calibration', () => {
     rt.sendGuestToRoom(g.guestId, 'entranceHallway');
     rt.testAdvanceTime(3000);
     assert.deepEqual(listed(), [first], 'still on the piece while away');
+    assert.equal(lobby.last('drivers').drivers[0].away, true, 'marked away, so the piece can fade their box now');
     rt.sendGuestToRoom(g.guestId, 'calibration');
     rt.testAdvanceTime(3000);
     assert.equal(driverId(), first, 'the same driver: same box, same place');
     assert.deepEqual(listed(), [first]);
+    assert.equal(lobby.last('drivers').drivers[0].away, undefined, 'and back');
   });
 
   it('lets them go once they have been away longer', () => {

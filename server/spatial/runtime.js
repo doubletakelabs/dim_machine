@@ -1600,10 +1600,17 @@ export class SpatialRuntime {
       const tracks = this.def?.rooms?.[roomId]?.tracks?.list;
       link.reconcile({
         lifecycle: this.experienceLifecycle(roomId),
-        drivers: this.experienceDrivers(roomId).map(({ driverId, hue, secret, guestId }) => {
+        drivers: this.experienceDrivers(roomId).map(({ driverId, hue, secret, guestId, leftAt }) => {
           const side = this._sides.get(guestId);
-          // `place` changes with each new pick: the piece places the guest afresh.
-          return { driverId, hue, secret, ...(side?.roomId === roomId ? { side: side.side, place: side.key } : {}) };
+          return {
+            driverId, hue, secret,
+            // `place` changes with each new pick: the piece places the guest afresh.
+            ...(side?.roomId === roomId ? { side: side.side, place: side.key } : {}),
+            // Out of the room, held a while in case it was a flicker
+            // (keepDriverMs): the piece can let their things go now, and
+            // still know them if they come straight back.
+            ...(leftAt != null ? { away: true } : {}),
+          };
         }),
         ...(Array.isArray(tracks) ? { tracks: tracks.map(({ n, seconds }) => ({ n, seconds })) } : {}),
       });
