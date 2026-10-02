@@ -111,6 +111,11 @@ export class SpatialRuntime {
     this._sequencesSeen = new Map();
     /** Clips whose length could not be read, warned about once each. */
     this._unmeasuredClips = new Set();
+    /**
+     * guestId → { cue, endsAt, handle }: a guidance clip declared `finish`,
+     * still playing — though the guest's state may have moved on without it.
+     */
+    this._finishing = new Map();
     /** guestId → { roomId, key, side }: which half of a piece's screen is theirs (`sides`), as of which step. */
     this._sides = new Map();
     /**
@@ -340,6 +345,8 @@ export class SpatialRuntime {
     this.layerSince.clear();
     this.roomResume.clear();
     this.beaconHolds.clear();
+    for (const f of this._finishing.values()) this.clock.clearTimeout(f.handle);
+    this._finishing.clear();
     for (const link of this.experiences.values()) link.stop();
     for (const actor of this.guestActors.values()) actor.stop();
     this.startedAt = null;
@@ -413,7 +420,10 @@ export class SpatialRuntime {
       roomSnapshot: (roomId) => this.rooms.get(roomId)?.snapshot() ?? null,
       assignPath: (from, strategy) => this.nextPath(from, strategy),
       appendEvent: (event) => this.append(event),
-      onStateChange: () => this.notifyChange(),
+      onStateChange: () => {
+        this.trackFinishing(guestId);
+        this.notifyChange();
+      },
     });
     this.guestActors.set(guestId, actor);
     if (this.running) actor.start();
@@ -463,6 +473,8 @@ export class SpatialRuntime {
     this._heldGestures.delete(guestId);
     this.clock.clearTimeout(this._unlockWakes.get(guestId)?.handle);
     this._unlockWakes.delete(guestId);
+    this.clock.clearTimeout(this._finishing.get(guestId)?.handle);
+    this._finishing.delete(guestId);
     this._sequencesSeen.delete(guestId);
     this._sides.delete(guestId);
     // The museum remembers rooms per guestId, and a phone's guestId outlives
@@ -1373,6 +1385,10 @@ export class SpatialRuntime {
     for (const region of AUTHORED_GUEST_REGIONS) {
       resolved[region] = guestCueFor(this.def, region, regions[region], actor.regionSince(region));
     }
+    // A `finish` clip plays to its end wherever the guest has got to, and
+    // nothing else speaks to them until it has (see trackFinishing).
+    const finishing = this._finishing.get(guestId);
+    if (finishing && this.now() < finishing.endsAt) resolved.guidance = finishing.cue;
 
     for (const slot of AUDIO_CUE_SLOTS) desired.set(slot, audioPart(resolved[slot]));
 
@@ -1767,6 +1783,51 @@ export class SpatialRuntime {
     this.append({ type: 'guest.started', guestId, roomId: here ?? null });
     this.notifyChange();
     return true;
+  }
+
+  /**
+   * A guidance cue declared `finish` (the pre-calibration clip, 2026-10-02)
+   * plays to its end even after its state is left: a guest who walks into
+   * calibration halfway through hears the rest of it, and calibration's own
+   * lines wait (desiredCues). When it ends, the guide hears the cue's
+   * `endedEvent`, if it names one, so a state can wait for it. A clip whose
+   * length cannot be read counts as already over — the old behaviour, logged.
+   */
+  trackFinishing(guestId) {
+    const actor = this.guestActors.get(guestId);
+    if (!actor || !this.running || this._finishing.has(guestId)) return;
+    const cue = guestCueFor(this.def, 'guidance', actor.regions().guidance, actor.regionSince('guidance'));
+    if (!cue?.finish || !cue.audio) return;
+    const seconds = this.io.clipSeconds?.(cue.audio);
+    if (!(seconds > 0) && !this._unmeasuredClips.has(cue.audio)) {
+      this._unmeasuredClips.add(cue.audio);
+      this.io.log?.(`finish: cannot read the length of ${cue.audio}; what follows it may cut it short`);
+    }
+    const endsAt = cue.startAt + (seconds > 0 ? Math.round(seconds * 1000) : 0);
+    const handle = this.clock.setTimeout(() => this.finished(guestId, handle), Math.max(0, endsAt - this.now()));
+    this._finishing.set(guestId, { cue, endsAt, handle });
+  }
+
+  /** A `finish` clip has played out: tell the guide, and let what waited on it speak. */
+  finished(guestId, handle) {
+    const f = this._finishing.get(guestId);
+    if (f?.handle !== handle) return;
+    this._finishing.delete(guestId);
+    const actor = this.guestActors.get(guestId);
+    if (!actor || !this.running) return;
+    this.append({ type: 'guest.clipFinished', guestId, assetId: f.cue.audio });
+    if (f.cue.endedEvent && actor.canAccept(f.cue.endedEvent)) actor.send(f.cue.endedEvent);
+    else this.notifyChange();
+  }
+
+  /**
+   * Guidance clips a phone should have decoded before START DIM is pressed
+   * (`preload` on the cue), so the first words come the moment it is.
+   */
+  warmAudio() {
+    return Object.values(this.def?.guest?.cues ?? {})
+      .filter((cue) => cue?.preload && cue.audio)
+      .map((cue) => cue.audio);
   }
 
   /**

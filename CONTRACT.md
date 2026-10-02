@@ -1287,7 +1287,19 @@ already stands in is said again (`entered.<room>`), so a guide that moves on
 room entry is never left waiting. MAD-DIM's prologue begins in `waiting`;
 `STARTED` takes it to `arrive`, whose cue is the pre-calibration clip, from
 its top. Walking into calibration then holds 2 s (`settling`) before
-calibration1. Calibration is its own stage after the front desk, so a phone
+calibration1.
+
+**Pre-calibration plays to its end (2026-10-02).** A guidance cue may declare
+`finish: true`: it plays to its end even after its state is left, and no other
+guidance line is sent until it has. Its `endedEvent` then goes to the guide.
+MAD-DIM's pre-calibration does this. A guest who walks into calibration
+before it ends waits in `walkedInEarly` until `PRECALIBRATION_ENDED`, then the
+2 s `settling`, so calibration1 always starts 2 s after pre-calibration ends.
+One who reaches the entrance hallway first hears the rest of it there and
+skips calibration. `walkedInEarly` gives up after 15 s, in case the server
+running the show predates `finish`. A cue with `preload: true` is listed in
+`welcome.warm` (and `assets.warm`), and the phone fetches and decodes it
+before START DIM is pressed. Calibration is its own stage after the front desk, so a phone
 reading the desk again is refused rather than playing the desk over it.
 
 `{ "type": "faerieFlash" }`, sent to a phone, plays the `purr` (2026-09-27):

@@ -1879,6 +1879,21 @@
               },
               "arrive": {
                 "on": {
+                  "PRECALIBRATION_ENDED": "heard",
+                  "entered.calibration": "walkedInEarly"
+                }
+              },
+              "walkedInEarly": {
+                "after": {
+                  "15000": "settling"
+                },
+                "on": {
+                  "PRECALIBRATION_ENDED": "settling",
+                  "entered.entranceHallway": "done"
+                }
+              },
+              "heard": {
+                "on": {
                   "entered.calibration": "settling"
                 }
               },
@@ -1950,7 +1965,10 @@
         "audio": "chime.wav"
       },
       "guidance.prologue.arrive": {
-        "audio": "audio/guidance/1-precalibration.mp3"
+        "audio": "audio/guidance/1-precalibration.mp3",
+        "finish": true,
+        "endedEvent": "PRECALIBRATION_ENDED",
+        "preload": true
       }
     }
   },

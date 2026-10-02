@@ -599,6 +599,7 @@ function sendAssetsToPhones() {
   broadcast({
     type: 'assets',
     assets: currentAssets(),
+    warm: runtime.warmAudio(),
     audioLayers: runtime.def?.guest?.audioLayers ?? null,
     input: runtime.def?.guest?.input ?? null,
     beacons: runtime.def?.beacons ?? null,
@@ -1110,6 +1111,8 @@ wss.on('connection', (ws) => {
           label: label(token),
           serverTime: Date.now(),
           assets: currentAssets(),
+          // Clips to decode before START DIM, so the first words are not a wait.
+          warm: runtime.warmAudio(),
           // How this show mixes: duck depth and crossfade length (CONTRACT §8.1).
           audioLayers: runtime.def?.guest?.audioLayers ?? null,
           // How the handset is worn: mirrorY flips up and down (§8.1).

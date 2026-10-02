@@ -401,7 +401,7 @@ async function decodeOne(id) {
     // One at a time means one stuck fetch would hold up every clip after it.
     const res = await fetch(`assets/${id}`, { signal: AbortSignal.timeout(AUDIO_FETCH_TIMEOUT_MS) });
     if (!res.ok) throw new Error(res.status);
-    const buffer = await ctx.decodeAudioData(await res.arrayBuffer());
+    const buffer = await (ctx ?? warmDecoder()).decodeAudioData(await res.arrayBuffer());
     audioBuffers.set(id, buffer);
     trimAudio();
     return buffer;
@@ -411,6 +411,26 @@ async function decodeOne(id) {
   } finally {
     audioLoading.delete(id);
   }
+}
+
+/**
+ * Decodes before START DIM, when there is no AudioContext yet (one needs the
+ * press). An AudioBuffer plays in any context, resampled if the rates differ.
+ */
+let offlineDecoder = null;
+function warmDecoder() {
+  const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  offlineDecoder ??= new Offline(2, 1, 48000);
+  return offlineDecoder;
+}
+
+/**
+ * The clips the show wants ready before the press (`warm`: pre-calibration,
+ * 2026-10-02), fetched and decoded while the handset waits at the desk, so
+ * pressing START DIM is heard at once rather than after a download.
+ */
+function warmAudio(ids) {
+  for (const id of ids ?? []) loadAudio(id, 0);
 }
 
 /** Let go of the least recently used clips nothing needs, down to the budget. */
@@ -1207,6 +1227,7 @@ function connect() {
         mixer = mixerConfig(msg.audioLayers);
         mirrorY = msg.input?.mirrorY === true;
         applySnapshot(msg.snapshot);
+        warmAudio(msg.warm);
         // The app re-sends location on this; beacons is forwarded if the server
         // provides the show's map (not yet — the app falls back to its own copy).
         tellNative('onWelcome', msg.guestId ?? '', msg.label ?? '');
@@ -1227,6 +1248,7 @@ function connect() {
         break;
       case 'assets':
         assetList = msg.assets ?? [];
+        warmAudio(msg.warm);
         // A show reload may retune the mixer along with the asset list.
         mixer = mixerConfig(msg.audioLayers);
         mirrorY = msg.input?.mirrorY === true;

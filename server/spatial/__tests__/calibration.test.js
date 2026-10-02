@@ -224,7 +224,9 @@ describe('the calibration sequence, running', () => {
     walkTo(rt, g.guestId, 'frontDesk');
     walkTo(rt, g.guestId, 'calibration', 5000);
     rt.guestStarted(g.guestId);
-    assert.equal(guidance(rt, g.guestId), 'prologue.settling');
+    assert.equal(guidance(rt, g.guestId), 'prologue.walkedInEarly', 'pre-calibration first, where they stand');
+    rt.testAdvanceTime(2100); // no clip lengths here: it counts as already over
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1');
   });
 
   it('cannot go back to the front desk from calibration', () => {
@@ -729,5 +731,79 @@ describe('Help Me, in the runtime', () => {
     rt.removeGuest('mad0098');
     const next = rt.spawnGuest({ kind: 'phone', guestId: 'mad0098' });
     assert.equal(row(rt, next.guestId).help, null);
+  });
+});
+
+describe('pre-calibration, always heard to its end (2026-10-02)', () => {
+  const PRE = 'audio/guidance/1-precalibration.mp3';
+  const io = { clipSeconds: (clip) => (clip === PRE ? 14.4 : CLIP_SECONDS[clip] ?? null) };
+  const pressed = (rt) => {
+    const g = rt.spawnGuest();
+    walkTo(rt, g.guestId, 'frontDesk');
+    rt.guestStarted(g.guestId);
+    return g;
+  };
+  const stopped = (cues, asset) => cues.some((c) => c.kind === 'stopAudio' && c.assetId === asset);
+
+  it('plays on when the guest walks into calibration partway through', () => {
+    const { rt, cues } = makeRuntime(null, io);
+    const g = pressed(rt);
+    const startedAt = rt.now();
+    walkTo(rt, g.guestId, 'calibration'); // in, ~2.6 s after the press
+    assert.equal(guidance(rt, g.guestId), 'prologue.walkedInEarly');
+    assert.equal(stopped(cues, PRE), false, 'not cut off by walking in');
+    assert.equal(rt.desiredCues(g.guestId).get('guidance')?.assetId, PRE, 'still what they hear');
+
+    rt.testAdvanceTime(startedAt + 14_400 - rt.now() - 10);
+    assert.deepEqual(heard(cues), [PRE], 'nothing of calibration while it plays');
+    rt.testAdvanceTime(10);
+    assert.equal(guidance(rt, g.guestId), 'prologue.settling', 'then the usual moment');
+    rt.testAdvanceTime(1990);
+    assert.deepEqual(heard(cues), [PRE]);
+    rt.testAdvanceTime(10);
+    assert.equal(guidance(rt, g.guestId), 'prologue.calibration.step1');
+    assert.deepEqual(heard(cues), [PRE, 'audio/guidance/1A-calibration1.mp3'], 'two seconds after it ended');
+  });
+
+  it('leaves calibration to start two seconds after walking in, for a guest who heard it all at the desk', () => {
+    const { rt, cues } = makeRuntime(null, io);
+    const g = pressed(rt);
+    rt.testAdvanceTime(20_000);
+    assert.equal(guidance(rt, g.guestId), 'prologue.heard');
+    walkTo(rt, g.guestId, 'calibration');
+    assert.equal(guidance(rt, g.guestId), 'prologue.settling');
+    rt.testAdvanceTime(2100);
+    assert.deepEqual(heard(cues), [PRE, 'audio/guidance/1A-calibration1.mp3']);
+  });
+
+  it('finishes for a guest who walks straight through to the hallway, and calibration is skipped', () => {
+    const { rt, cues } = makeRuntime(null, io);
+    const g = pressed(rt);
+    walkTo(rt, g.guestId, 'calibration');
+    walkTo(rt, g.guestId, 'entranceHallway');
+    assert.equal(guidance(rt, g.guestId), 'prologue.done');
+    assert.equal(stopped(cues, PRE), false, 'still playing in the hallway');
+    assert.equal(rt.desiredCues(g.guestId).get('guidance')?.assetId, PRE);
+    rt.testAdvanceTime(15_000);
+    assert.equal(guidance(rt, g.guestId), 'prologue.done');
+    assert.equal(rt.desiredCues(g.guestId).get('guidance'), null, 'over, and nothing of calibration');
+    assert.deepEqual(heard(cues), [PRE]);
+  });
+
+  it('plays a phone that reconnects partway the rest of it, from where it has got to', () => {
+    const { rt, cues } = makeRuntime(null, io);
+    const g = pressed(rt);
+    const startedAt = rt.now();
+    walkTo(rt, g.guestId, 'calibration');
+    cues.length = 0;
+    rt.resyncCues(g.guestId);
+    const pre = cues.find((c) => c.kind === 'audio' && c.slot === 'guidance');
+    assert.equal(pre.assetId, PRE);
+    assert.equal(pre.startAt, startedAt, 'on the clock of the press, not restarted');
+  });
+
+  it('tells the phone to have it decoded before the press', () => {
+    const { rt } = makeRuntime(null, io);
+    assert.deepEqual(rt.warmAudio(), [PRE]);
   });
 });
