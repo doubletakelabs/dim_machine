@@ -651,6 +651,18 @@ describe('the Android app locating a phone', () => {
     assert.match(content.version, /^[0-9a-f]{16}$/);
     const again = await (await fetch(`${server.url}/api/content`)).json();
     assert.equal(again.version, content.version, 'nothing changed, same version');
+
+    // A beacon moved in the zone editor is not new content: phones off their
+    // chargers must not turn out of date over it (2026-10-02).
+    const saveBeacons = (beacons) => fetch(`${server.url}/api/shows/MAD-DIM.json/zones`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ zones: {}, beacons }),
+    });
+    const moved = { ...content.beacons, 801: { ...content.beacons['801'], rssi: -61 } };
+    assert.equal((await saveBeacons(moved)).status, 200);
+    const afterMove = await (await fetch(`${server.url}/api/content`)).json();
+    assert.equal(afterMove.beacons['801'].rssi, -61, 'the new beacons are served');
+    assert.equal(afterMove.version, content.version, 'but the version stays');
+    assert.equal((await saveBeacons(content.beacons)).status, 200); // as it was
     op.close();
   });
 });
