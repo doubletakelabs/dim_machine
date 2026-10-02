@@ -32,6 +32,7 @@ const DRIVING_STANDINGS = ['holder', 'participant', 'present'];
  * hold — at 250ms it was a visible quarter-second of "why has nothing happened".
  */
 const TICK_MS = 100;
+
 const EVENT_LOG_CAP = 500;
 const OUTPUT_LOG_CAP = 200;
 
@@ -116,6 +117,8 @@ export class SpatialRuntime {
      * still playing — though the guest's state may have moved on without it.
      */
     this._finishing = new Map();
+    /** guestId → roomId → { arrivedAt, passes, plays }: which visits hear its guidance (`audio.every`). */
+    this._roomGuidance = new Map();
     /** guestId → { roomId, key, side }: which half of a piece's screen is theirs (`sides`), as of which step. */
     this._sides = new Map();
     /**
@@ -477,6 +480,7 @@ export class SpatialRuntime {
     this._finishing.delete(guestId);
     this._sequencesSeen.delete(guestId);
     this._sides.delete(guestId);
+    this._roomGuidance.delete(guestId);
     // The museum remembers rooms per guestId, and a phone's guestId outlives
     // the visit: left here, a reset handset would come back to its rooms
     // already spent, hearing returns instead of the rooms themselves.
@@ -1374,7 +1378,8 @@ export class SpatialRuntime {
           ? room.stateSince
           : this.resumedStart(guestId, here.roomId, def, room, arrived,
             Math.max(arrived ?? room.stateSince, room.stateSince));
-        resolved.room = roomCueFor(def, room.state, here.standing, startAt);
+        resolved.room = this.guidanceFor(guestId, here.roomId, def, arrived,
+          roomCueFor(def, room.state, here.standing, startAt));
         const stateBg = roomBgFor(def, room.state);
         if (stateBg != null) {
           roomBg = { bg: stateBg, since: audioTiming(def) === 'together' ? room.stateSince : null };
@@ -1429,6 +1434,28 @@ export class SpatialRuntime {
    * they heard to the end stays finished. The room moving to a new state
    * while they are in it starts that state's clip afresh, as ever.
    */
+  /**
+   * A room's guidance on every n-th visit only (`audio.every`, 2026-10-02): the
+   * 1st, then the (n+1)th, and so on. For hallways — MAD-DIM's are crossed
+   * between almost every exhibit, so theirs play every 3rd time through. A
+   * visit is one arrival (the coordinator's `sinceTs`); within it the cue is
+   * left alone. Without `every`, a room plays its guidance every visit.
+   */
+  guidanceFor(guestId, roomId, def, arrived, cue) {
+    const every = def.audio?.every ?? 1;
+    if (every <= 1 || !cue?.audio || arrived == null) return cue;
+    let rooms = this._roomGuidance.get(guestId);
+    if (!rooms) this._roomGuidance.set(guestId, (rooms = new Map()));
+    let rec = rooms.get(roomId);
+    if (!rec) rooms.set(roomId, (rec = { arrivedAt: null, passes: 0, plays: false }));
+    if (rec.arrivedAt !== arrived) {
+      rec.arrivedAt = arrived;
+      rec.passes += 1;
+      rec.plays = (rec.passes - 1) % every === 0;
+    }
+    return rec.plays ? cue : null;
+  }
+
   resumedStart(guestId, roomId, def, room, arrived, fresh) {
     if (!def.audio?.resume || arrived == null) return fresh;
     let rooms = this.roomResume.get(guestId);

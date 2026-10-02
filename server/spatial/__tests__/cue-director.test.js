@@ -386,3 +386,39 @@ describe('a room clip that picks up where they left it (audio.resume)', () => {
     assert.match(validateShowDefinition(def).errors.join('\n'), /audio\.resume must be true or false/);
   });
 });
+
+describe('guidance on every n-th visit (audio.every)', () => {
+  const roomCue = (rt, g) => rt.desiredCues(g.guestId).get('room');
+  const pass = (rt, g) => { walk(rt, g.guestId, AT.out); rt.testAdvanceTime(20_000); walk(rt, g.guestId, AT.hallway); };
+
+  it('plays on the 1st, 4th and 7th time through, and leaves a playing one alone', () => {
+    const { rt } = makeRuntime((show) => { show.rooms.hallway.audio = { every: 3 }; });
+    const g = rt.spawnGuest();
+    walk(rt, g.guestId, AT.hallway);
+    const heard = [roomCue(rt, g) != null];
+    rt.testAdvanceTime(10_000);
+    assert.ok(roomCue(rt, g), 'still playing later in the same pass');
+    for (let i = 2; i <= 7; i++) { pass(rt, g); heard.push(roomCue(rt, g) != null); }
+    assert.deepEqual(heard, [true, false, false, true, false, false, true]);
+  });
+
+  it('without it, every visit', () => {
+    const { rt } = makeRuntime();
+    const g = rt.spawnGuest();
+    walk(rt, g.guestId, AT.hallway);
+    pass(rt, g);
+    assert.ok(roomCue(rt, g));
+  });
+});
+
+describe('MAD-DIM: guidance that repeats only where it should', () => {
+  it('no room guidance loops, and the hallways speak every 3rd time through', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const show = JSON.parse(readFileSync(fileURLToPath(new URL('../../../shows/MAD-DIM.json', import.meta.url)), 'utf8'));
+    const looping = Object.entries(show.rooms).flatMap(([id, r]) => Object.entries(r.cues ?? {})
+      .flatMap(([state, c]) => [].concat(c).filter((x) => x?.loop && String(x.audio ?? '').startsWith('audio/guidance/')).map(() => `${id}.${state}`)));
+    assert.deepEqual(looping, []);
+    for (const h of ['entranceHallway', 'museumHallway', 'westHallway']) assert.equal(show.rooms[h].audio?.every, 3, h);
+  });
+});

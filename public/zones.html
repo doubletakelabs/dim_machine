@@ -490,13 +490,15 @@ let audioFiles = [];
 const touched = new Set();
 
 /**
- * The museum stems this panel edits. The museum has more (server/spatial/
- * museum.js ROOM_STEMS: entrance, the returns, the out-of-rooms lines), but
- * MAD-DIM uses only in room (2026-09-28), so the panel shows only that; any
- * other a show has set is kept as it is, just not shown here.
+ * The museum stems this panel edits: a room's guidance, its `entrance` stem —
+ * spoken, once, the first time a guest walks in (2026-10-02). It used to offer
+ * only `inRoom`, labelled "In room", which loops for as long as they stay: it
+ * is a second background, and guidance picked there repeated. `inRoom` is
+ * still shown for a room that has one, marked as the loop it is. The museum's
+ * other stems (the returns, the out-of-rooms lines) are kept as set, not shown.
  */
 const ROOM_STEMS = [
-  ['inRoom', 'In room', 'plays while the room is running for them'],
+  ['entrance', 'Guidance', 'Spoken. Plays once, the first time they walk in.'],
 ];
 
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -656,10 +658,11 @@ function renderDetails() {
     <button class="tiny" data-door-add>+ door</button>
 
     ${museumRoom ? `
-      <h3>Clips for ${esc(room.name ?? roomId)}</h3>
-      <div class="note">Blank uses the shared museum clip.</div>
+      <h3>Guidance in ${esc(room.name ?? roomId)}</h3>
       ${ROOM_STEMS.map(([stem, label, note]) => clipField(label, `data-stem="${stem}"`, own[stem],
-        shared[stem] ? `shared: ${shared[stem]}` : 'shared (none set)', note, shared[stem])).join('')}` : ''}`;
+        shared[stem] ? `shared: ${shared[stem]}` : 'none — silence', note, shared[stem])).join('')}
+      ${own.inRoom || shared.inRoom ? clipField('Extra loop', 'data-stem="inRoom"', own.inRoom,
+        shared.inRoom ? `shared: ${shared.inRoom}` : 'none', '⚠ Loops for as long as they stay, after the guidance — a second background. Not for spoken lines.', shared.inRoom) : ''}` : ''}`;
 }
 
 /**
@@ -674,12 +677,12 @@ function roomBackground(roomId, room) {
   const tracks = room.tracks?.folder ? ` Its tracks (${room.tracks.folder}) play over this when chosen.` : '';
   return `
     <h3>Background in ${esc(room.name ?? roomId)}</h3>
-    ${clipField('bg', 'data-bg', current, 'none — silence', `Loops while a guest is in the room${fade}.${tracks}`)}`;
+    ${clipField('Background', 'data-bg', current, 'none — silence', `Loops while a guest is in the room${fade}.${tracks}`)}`;
 }
 
 /**
  * What plays while a guest is in a room that is not a museum room (those play
- * the museum clips): one clip, "In room". Behind it is the room state that
+ * the museum clips): one clip, "Guidance", spoken once. Behind it is the room state that
  * runs while a guest is inside — `idle` for a hallway (it has no other),
  * `active` for every other room — so nobody has to know the state names.
  * Any other state that already has a clip (a room whose piece moves it
@@ -697,16 +700,16 @@ function roomAudio(roomId, room) {
   const rows = [main, ...others].flatMap((state) => {
     const cue = room.cues?.[state];
     const entries = Array.isArray(cue) ? cue.map((c, i) => [c, i]) : [[cue ?? null, -1]];
-    const label = state === main ? 'In room' : state;
+    const label = state === main ? 'Guidance' : state;
     return entries.map(([c, i]) => `
       ${clipField(`${label}${i >= 0 ? ` · ${c?.audience ?? 'default'}` : ''}`,
-        `data-cue-state="${esc(state)}" data-cue-index="${i}" data-cue-field="audio"`, c?.audio, 'silence',
-        state === main && i < 0 ? 'Plays once as they come in; tick loop to repeat it.' : null)}
+        `data-cue-state="${esc(state)}" data-cue-index="${i}" data-cue-field="audio"`, c?.audio, 'none — silence',
+        state === main && i < 0 ? `Spoken. Plays once as they come in${room.audio?.every > 1 ? ` — every ${room.audio.every}${room.audio.every === 2 ? 'nd' : room.audio.every === 3 ? 'rd' : 'th'} time (the 1st, ${1 + room.audio.every}th, …)` : ''}.` : null)}
       <div class="field"><span></span>
-        <label class="muted"><input type="checkbox" data-cue-state="${esc(state)}" data-cue-index="${i}" data-cue-field="loop"${c?.loop ? ' checked' : ''}${c?.audio ? '' : ' disabled'}> loop</label><span></span></div>`);
+        <label class="muted"${c?.loop ? ' style="color:#e8a33a"' : ''}><input type="checkbox" data-cue-state="${esc(state)}" data-cue-index="${i}" data-cue-field="loop"${c?.loop ? ' checked' : ''}${c?.audio ? '' : ' disabled'}> loop${c?.loop ? ' — ⚠ repeats for as long as they stay' : ' (repeats it — not for spoken lines)'}</label><span></span></div>`);
   });
   return `
-    <h3>Clip in ${esc(room.name ?? roomId)}</h3>
+    <h3>Guidance in ${esc(room.name ?? roomId)}</h3>
     ${rows.join('')}`;
 }
 

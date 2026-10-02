@@ -189,7 +189,10 @@
           "audio": "audio/guidance/2-entry_hall.mp3"
         }
       },
-      "bg": "audio/bg/M_DIM HALLWAY.mp3"
+      "bg": "audio/bg/M_DIM HALLWAY.mp3",
+      "audio": {
+        "every": 3
+      }
     },
     "maskRoom": {
       "name": "Mask Room",
@@ -559,6 +562,9 @@
         "idle": {
           "audio": "audio/guidance/6-dim-wall.mp3"
         }
+      },
+      "audio": {
+        "every": 3
       }
     },
     "automation": {
@@ -1568,8 +1574,7 @@
       },
       "cues": {
         "active": {
-          "audio": "audio/guidance/_19-datacenter.mp3",
-          "loop": true
+          "audio": "audio/guidance/_19-datacenter.mp3"
         }
       },
       "bg": "audio/bg/M_DATA CENTER.mp3"
@@ -1770,6 +1775,9 @@
         "idle": {
           "audio": "audio/guidance/023-west_hallway.mp3"
         }
+      },
+      "audio": {
+        "every": 3
       }
     },
     "griefbot": {
@@ -2012,34 +2020,34 @@
     "stems": {},
     "roomStems": {
       "slop": {
-        "inRoom": "audio/guidance/09-slop.mp3"
+        "entrance": "audio/guidance/09-slop.mp3"
       },
       "influence": {
-        "inRoom": "audio/guidance/1201-Influence.mp3"
+        "entrance": "audio/guidance/1201-Influence.mp3"
       },
       "kin": {
-        "inRoom": "audio/guidance/012-kin.mp3"
+        "entrance": "audio/guidance/012-kin.mp3"
       },
       "consumption1": {
-        "inRoom": "audio/guidance/08-consumption1.mp3"
+        "entrance": "audio/guidance/08-consumption1.mp3"
       },
       "superintelligence": {
-        "inRoom": "audio/guidance/018-superintelligence.mp3"
+        "entrance": "audio/guidance/018-superintelligence.mp3"
       },
       "automation": {
-        "inRoom": "audio/guidance/07-piss.mp3"
+        "entrance": "audio/guidance/07-piss.mp3"
       },
       "saas": {
-        "inRoom": "audio/guidance/011-saas.mp3"
+        "entrance": "audio/guidance/011-saas.mp3"
       },
       "consumption3": {
-        "inRoom": "audio/guidance/08B-consumption3.mp3"
+        "entrance": "audio/guidance/08B-consumption3.mp3"
       },
       "consumption2": {
-        "inRoom": "audio/guidance/08A-consumption2.mp3"
+        "entrance": "audio/guidance/08A-consumption2.mp3"
       },
       "faerie": {
-        "inRoom": "audio/guidance/016-faerie.mp3"
+        "entrance": "audio/guidance/016-faerie.mp3"
       }
     }
   },
