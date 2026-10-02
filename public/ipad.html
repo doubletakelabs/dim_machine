@@ -32,10 +32,13 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
     -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; overflow: hidden; }
 
-  #app { display: grid; grid-template-columns: minmax(0, auto) minmax(230px, 1fr); height: 100%;
+  /* The map takes the space left of the list and the SVG letterboxes itself
+     (viewBox, meet). Sizing its column from the SVG's aspect-ratio instead
+     collapsed it to nothing in iPad Safari. */
+  #app { display: grid; grid-template-columns: minmax(0, 1fr) clamp(260px, 36vw, 440px); grid-template-rows: minmax(0, 1fr); height: 100%;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-  #mapWrap { position: relative; height: 100%; padding: 12px 0 12px 12px; display: flex; align-items: center; justify-content: center; min-width: 0; }
-  #map { height: 100%; max-width: 100%; display: block; }
+  #mapWrap { position: relative; min-width: 0; min-height: 0; }
+  #map { position: absolute; top: 12px; left: 12px; width: calc(100% - 12px); height: calc(100% - 24px); display: block; }
 
   #side { display: flex; flex-direction: column; min-height: 0; padding: 14px 14px 12px; gap: 12px; }
   header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
@@ -58,6 +61,7 @@
   #list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; }
   #list li { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 10px;
     padding: 10px 2px; border-bottom: 1px solid var(--line); }
+  #list li#empty { display: block; }
   #list li.help { color: var(--help); }
   .num { width: 40px; height: 40px; border-radius: 50%; background: var(--dot); color: var(--dot-ink);
     display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; }
@@ -170,7 +174,6 @@ function drawPlan() {
   const w = fp?.width ?? (fp?.extent ? fp.extent.maxX + 40 : 800);
   const h = fp?.height ?? (fp?.extent ? fp.extent.maxY + 40 : 1200);
   svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-  svg.style.aspectRatio = `${w} / ${h}`;
   if (fp?.image) {
     const img = document.createElementNS(SVG_NS, 'image');
     img.setAttribute('href', `/assets/${fp.image}`);
