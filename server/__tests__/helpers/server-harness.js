@@ -27,6 +27,8 @@ import { fork } from 'node:child_process';
 import { WebSocket } from 'ws';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const entry = join(root, 'server/index.js');
@@ -57,6 +59,8 @@ export async function startServer(opts = {}) {
       ...(opts.installation ? {} : { INSTALLATION: '' }),
       // Every test starts from an empty server, not from the venue's show.
       SHOW: '',
+      // Visits and receipts go to a scratch folder, never the venue's data/.
+      VISIT_LOG_DIR: mkdtempSync(join(tmpdir(), 'dim-visits-')),
       ...(opts.env ?? {}),
     },
   });

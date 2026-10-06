@@ -16,3 +16,6 @@ handover.zip
 # Show audio is local to each machine: large, re-cut often, and copied in by
 # hand. The short fixture sounds in public/assets itself stay tracked.
 public/assets/audio/
+
+# Visit log and saved receipts: the venue's records, not code.
+data/

@@ -947,3 +947,109 @@ describe('saving zones', () => {
     assert.deepEqual(await onDisk(), before, 'a refused save writes nothing');
   });
 });
+
+describe('the visit log (2026-10-06)', () => {
+  let server;
+  let dir;
+  before(async () => {
+    const { mkdtempSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    dir = mkdtempSync(join(tmpdir(), 'dim-visits-'));
+    server = await startServer({ env: { VISIT_LOG_DIR: dir } });
+  });
+  after(async () => { await server?.stop(); });
+
+  const lines = async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    return readdirSync(dir).filter((f) => f.startsWith('visits-'))
+      .flatMap((f) => readFileSync(join(dir, f), 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)));
+  };
+  const until = async (test, what) => {
+    for (let i = 0; i < 50; i++) {
+      const found = (await lines()).find(test);
+      if (found) return found;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error(`no visit line: ${what}`);
+  };
+
+  it('writes a line when a visitor reaches the Library, with their rooms and gestures', async () => {
+    const op = await openOperator(server);
+    await runShow(op);
+    const phone = await openPhone(server, undefined, { device: 'mad0951' });
+    phone.send({ type: 'setRoom', roomId: 'frontDesk' });
+    await phone.waitFor((m) => m.type === 'state' && /^frontDesk/.test(m.state), { describe: 'at the desk' });
+    phone.send({ type: 'ready' }); // START DIM
+    phone.send({ type: 'telemetry', counts: { taps: 7, swipes: 2, drags: 1, holds: 0, dragMs: 1500 } });
+    phone.send({ type: 'setRoom', roomId: 'calibration' });
+    await phone.waitFor((m) => m.type === 'state' && /^calibration/.test(m.state), { describe: 'in calibration' });
+    phone.send({ type: 'setRoom', roomId: 'library' });
+
+    const v = await until((l) => l.phone === 'mad0951', 'the finished visit');
+    assert.equal(v.finished, true);
+    assert.equal(v.reason, 'finished');
+    assert.deepEqual(v.rooms.map((r) => r.room), ['frontDesk', 'calibration', 'library']);
+    assert.equal(v.gestures.taps, 7);
+    assert.equal(v.gestures.swipes, 2);
+
+    // Back in the Library later: still the one line.
+    phone.send({ type: 'setRoom', roomId: 'calibration' });
+    phone.send({ type: 'setRoom', roomId: 'library' });
+    await new Promise((r) => setTimeout(r, 400));
+    assert.equal((await lines()).filter((l) => l.phone === 'mad0951').length, 1);
+    phone.close();
+    op.close();
+  });
+
+  it('writes an unfinished visit when the phone is handed on, and nothing for a phone that never pressed START', async () => {
+    const op = await openOperator(server);
+    await runShow(op);
+    const started = await openPhone(server, undefined, { device: 'mad0952' });
+    started.send({ type: 'setRoom', roomId: 'frontDesk' });
+    await started.waitFor((m) => m.type === 'state' && /^frontDesk/.test(m.state), { describe: 'at the desk' });
+    started.send({ type: 'ready' });
+    await new Promise((r) => setTimeout(r, 200));
+    started.close();
+    const idle = await openPhone(server, undefined, { device: 'mad0953' });
+    idle.close();
+
+    // Handed on: the app wipes the token, so the next hello has none.
+    (await openPhone(server, undefined, { device: 'mad0952' })).close();
+    (await openPhone(server, undefined, { device: 'mad0953' })).close();
+
+    const v = await until((l) => l.phone === 'mad0952', 'the handed-on visit');
+    assert.equal(v.finished, false);
+    assert.equal(v.reason, 'handedOn');
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal((await lines()).some((l) => l.phone === 'mad0953'), false, 'never started: not a visitor');
+    op.close();
+  });
+});
+
+describe('the visit log when the server stops', () => {
+  it('writes the visits in progress on Ctrl-C', async () => {
+    const { mkdtempSync, readdirSync, readFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'dim-visits-'));
+    const server = await startServer({ env: { VISIT_LOG_DIR: dir } });
+    try {
+      const op = await openOperator(server);
+      await runShow(op);
+      const phone = await openPhone(server, undefined, { device: 'mad0961' });
+      phone.send({ type: 'setRoom', roomId: 'frontDesk' });
+      await phone.waitFor((m) => m.type === 'state' && /^frontDesk/.test(m.state), { describe: 'at the desk' });
+      phone.send({ type: 'ready' });
+      await new Promise((r) => setTimeout(r, 200));
+      const exited = new Promise((r) => server.child.once('exit', r));
+      server.child.kill('SIGINT');
+      await exited;
+      const lines = readdirSync(dir).flatMap((f) => readFileSync(join(dir, f), 'utf8').trim().split('\n').map((l) => JSON.parse(l)));
+      assert.deepEqual(lines.map((l) => [l.phone, l.reason]), [['mad0961', 'serverStopped']]);
+    } finally {
+      await server.stop();
+    }
+  });
+});

@@ -15,6 +15,7 @@ import { execFileSync } from 'node:child_process';
 import * as relay from './relay.js';
 import { clipSeconds } from './clip-seconds.js';
 import { buildReceipt, sendToPrinter } from './receipt.js';
+import { VisitLog, visitRecord } from './visit-log.js';
 
 // Not 4000: dim_central (the deploy dashboard) runs there on the same machine.
 const PORT = process.env.PORT || 4100;
@@ -573,6 +574,8 @@ function loadShow(file) {
   def = audio.def;
   for (const { from, to } of audio.swaps) opLog(`audio: ${from} → ${to}`);
 
+  // Loading a show ends every visit in it: write them while they are known.
+  for (const token of users.keys()) logVisit(token, 'showLoaded');
   const result = runtime.load(def);
   for (const w of result.warnings ?? []) opLog(`⚠ ${w}`);
   if (!result.ok) {
@@ -839,13 +842,90 @@ async function printReceipt(token) {
     visit: visitWords.get(visitId) ?? [],
     counts: users.get(token)?.counts ?? {},
   });
+  let printed = false;
   try {
     await sendToPrinter(RECEIPT.printer, receipt.bytes);
+    printed = true;
     opLog(`receipt printed for ${guest.label}: ${receipt.headline}`);
   } catch (err) {
     printedVisits.delete(visitId);
     opLog(`receipt for ${guest.label} did not print: ${err.message}`);
   }
+  // Kept whether or not it printed — once per visit, as first made.
+  if (!savedReceipts.has(visitId)) {
+    savedReceipts.add(visitId);
+    visitLog.writeReceipt({
+      at: Date.now(), startedAt: guest.startedAt, phone: guest.label ?? guest.guestId, visitId, printed, text: receipt.text,
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The visit log (2026-10-06)
+//
+// One line per visit that pressed START DIM, in data/visits-<day>.jsonl
+// (server/visit-log.js): written when they reach the end (the receipt room),
+// or — for a visit that never got there — when the phone is handed on, its
+// guest cleared, or the server stops. Receipts are kept beside it.
+// ---------------------------------------------------------------------------
+const visitLog = new VisitLog(
+  process.env.VISIT_LOG_DIR ? resolve(process.env.VISIT_LOG_DIR) : join(root, 'data'),
+  (line) => opLog(line),
+);
+/** The visit's end: the receipt room, or the companion's closing room. */
+const FINISH_ROOM = RECEIPT?.room ?? installation?.receipt?.room ?? 'library';
+/** visitId → [{ roomId, at }]: rooms in the order the guest walked into them. */
+const visitTrails = new Map();
+/** visitIds whose line is written, so each visit is one line. */
+const loggedVisits = new Set();
+/** visitIds whose receipt is saved. */
+const savedReceipts = new Set();
+
+function trailStep(token, roomId) {
+  const visitId = runtime.getGuestByToken(token)?.visitId;
+  if (!visitId) return;
+  if (!visitTrails.has(visitId)) visitTrails.set(visitId, []);
+  visitTrails.get(visitId).push({ roomId, at: Date.now() });
+}
+
+/**
+ * Write this phone's visit to the log, once. A phone that never pressed START
+ * DIM — on the charger, or a staff check — is not a visitor and writes nothing.
+ */
+function logVisit(token, reason) {
+  const guest = runtime.getGuestByToken(token);
+  const visitId = guest?.visitId;
+  if (!visitId || guest.startedAt == null || loggedVisits.has(visitId)) return;
+  loggedVisits.add(visitId);
+  const now = Date.now();
+  // Where they were when they pressed START counts from the press.
+  const all = visitTrails.get(visitId) ?? [];
+  const before = all.filter((s) => s.at <= guest.startedAt).at(-1);
+  const trail = [
+    ...(before ? [{ roomId: before.roomId, at: guest.startedAt }] : []),
+    ...all.filter((s) => s.at > guest.startedAt),
+  ];
+  visitLog.writeVisit(visitRecord({
+    visitId,
+    phone: guest.label ?? guest.guestId,
+    startedAt: guest.startedAt,
+    finishedAt: reason === 'finished' ? now : null,
+    trail,
+    counts: users.get(token)?.counts ?? {},
+    words: visitWords.get(visitId)?.length ?? 0,
+    receipt: savedReceipts.has(visitId),
+    reason,
+    now,
+  }));
+  visitTrails.delete(visitId);
+}
+
+// Stopping the server (Ctrl-C, or closing its window) writes what is in hand.
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.once(signal, () => {
+    for (const token of users.keys()) logVisit(token, 'serverStopped');
+    process.exit(0);
+  });
 }
 
 /**
@@ -860,7 +940,9 @@ function pushPhoneStates() {
     const room = phoneRoom(token);
     if (room && lastPhoneRoom.get(token) !== room) {
       showRoomWord(token, room);
-      if (room === RECEIPT?.room) printReceipt(token);
+      trailStep(token, room);
+      if (room === RECEIPT?.room) printReceipt(token).finally(() => { if (room === FINISH_ROOM) logVisit(token, 'finished'); });
+      else if (room === FINISH_ROOM) logVisit(token, 'finished');
     }
     if (room) lastPhoneRoom.set(token, room);
     const phase = companionPhase(token);
@@ -936,6 +1018,7 @@ function ensurePhoneSession(token, device = null) {
 function endVisit(guestId, except) {
   for (const [t, u] of users.entries()) {
     if (u.guestId !== guestId) continue;
+    logVisit(t, 'handedOn');
     if (u.ws && u.ws !== except) {
       try {
         send(u.ws, { type: 'displaced' });
@@ -1004,6 +1087,7 @@ function clearOfflinePhones() {
     const offlineMs = Date.now() - (u.disconnectedAt ?? Date.now());
     if (offlineMs <= OFFLINE_HIDE_MS) continue;
     const guest = runtime.getGuestByToken(token);
+    logVisit(token, 'cleared');
     if (guest) runtime.removeGuest(guest.guestId);
     notifyRelayPeerLeft(token);
     users.delete(token);
