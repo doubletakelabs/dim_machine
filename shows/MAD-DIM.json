@@ -192,6 +192,9 @@
       "bg": "audio/bg/M_DIM HALLWAY.mp3",
       "audio": {
         "every": 3
+      },
+      "haptic": {
+        "firstEntry": "heartbeat"
       }
     },
     "maskRoom": {
@@ -442,6 +445,9 @@
       "bg": "audio/bg/M_CYC.mp3",
       "audio": {
         "resume": true
+      },
+      "haptic": {
+        "firstEntry": "heartbeat"
       }
     },
     "museumHallway": {
@@ -706,6 +712,9 @@
           "tap"
         ],
         "maxDrivers": 1
+      },
+      "haptic": {
+        "firstEntry": "heartbeat"
       }
     },
     "influence": {
@@ -790,6 +799,9 @@
       "bg": {
         "audio": "audio/bg/M_INFLUENCE.mp3",
         "crossfadeMs": 3000
+      },
+      "haptic": {
+        "firstEntry": "heartbeat"
       }
     },
     "slop": {
@@ -896,6 +908,9 @@
         "folder": "audio/bg/slop",
         "in": "active",
         "crossfadeMs": 0
+      },
+      "haptic": {
+        "firstEntry": "heartbeat"
       }
     },
     "kin": {
@@ -1251,6 +1266,9 @@
       "bg": {
         "audio": "audio/bg/M_CONSUMPTION II.mp3",
         "crossfadeMs": 3000
+      },
+      "haptic": {
+        "firstEntry": "heartbeat"
       }
     },
     "consumption3": {
@@ -1951,19 +1969,22 @@
                     "audio": "audio/guidance/1A-calibration1.mp3",
                     "advance": "tap",
                     "listenFrom": 47,
-                    "playThrough": true
+                    "playThrough": true,
+                    "haptic": "heartbeat"
                   },
                   {
                     "audio": "audio/guidance/1B-calibration2.mp3",
                     "advance": "swipe",
                     "listenFrom": 3,
-                    "playThrough": true
+                    "playThrough": true,
+                    "haptic": "heartbeat"
                   },
                   {
                     "audio": "audio/guidance/1C-calibration3.mp3",
                     "advance": "drag",
                     "listenFrom": 6,
-                    "playThrough": true
+                    "playThrough": true,
+                    "haptic": "heartbeat"
                   },
                   {
                     "audio": "audio/guidance/1D-calibration4.mp3",

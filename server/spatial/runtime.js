@@ -106,6 +106,9 @@ export class SpatialRuntime {
     this._roomStateWas = new Map();
     /** guestId → { key, handle }: a gesture waiting for its step's clip to end (playThrough). */
     this._heldGestures = new Map();
+    /** guestId → { key, since, handle }: the step whose haptic is due or done (stepHaptics). */
+    this._stepHaptics = new Map();
+    this._hapticSeq = 0;
     /** guestId → { at, handle }: when the guest's next gesture unlocks, to re-cue then. */
     this._unlockWakes = new Map();
     /** guestId → sequences they have stepped through, for what they have been taught. */
@@ -428,6 +431,7 @@ export class SpatialRuntime {
       appendEvent: (event) => this.append(event),
       onStateChange: () => {
         this.trackFinishing(guestId);
+        this.trackStepHaptic(guestId);
         this.notifyChange();
       },
     });
@@ -477,6 +481,8 @@ export class SpatialRuntime {
     this.roomResume.delete(guestId);
     this.clock.clearTimeout(this._heldGestures.get(guestId)?.handle);
     this._heldGestures.delete(guestId);
+    this.clock.clearTimeout(this._stepHaptics.get(guestId)?.handle);
+    this._stepHaptics.delete(guestId);
     this.clock.clearTimeout(this._unlockWakes.get(guestId)?.handle);
     this._unlockWakes.delete(guestId);
     this.clock.clearTimeout(this._finishing.get(guestId)?.handle);
@@ -1141,6 +1147,7 @@ export class SpatialRuntime {
       if (left) left.played[left.state] = Math.max(0, event.timestamp - left.startAt);
     }
     this.guests.get(event.guestId)?.applyOccupancy(event);
+    this.firstEntryHaptic(event);
     // Rooms react first — a departure has to settle the room they left before
     // the guest actor decides anything about the room they entered.
     this.fanoutSpatialEvent(event);
@@ -1932,6 +1939,61 @@ export class SpatialRuntime {
       return 0;
     }
     return Math.max(0, Math.round(seconds * 1000) - (this.now() - actor.regionSince('guidance')));
+  }
+
+  // ── haptics ──────────────────────────────────────────────────────────────
+
+  /**
+   * A named vibration on one guest's phone, now. A moment, not a state: sent
+   * straight to the phone rather than reconciled, so a phone that reconnects
+   * is not buzzed again for something that already happened.
+   */
+  playHaptic(guestId, effect, why) {
+    this.io.onCue?.(guestId, { cueId: `haptic-${++this._hapticSeq}`, kind: 'haptic', effect });
+    this.append({ type: 'guest.haptic', guestId, effect, why });
+  }
+
+  /**
+   * A sequence step's `haptic` (stepHaptics), timed to when the step starts
+   * taking its gesture — its listenFrom, or its start without one. Once per
+   * arrival at the step: a guest who stays on it is not buzzed again, and one
+   * who has moved on before it opens is not buzzed at all.
+   */
+  trackStepHaptic(guestId) {
+    const actor = this.guestActors.get(guestId);
+    if (!actor || !this.running) return;
+    const key = this.guidanceKey(actor);
+    const since = actor.regionSince('guidance');
+    const pending = this._stepHaptics.get(guestId);
+    if (pending && pending.key === key && pending.since === since) return;
+    if (pending) this.clock.clearTimeout(pending.handle);
+    this._stepHaptics.delete(guestId);
+    const effect = key ? this.def?.guest?.stepHaptics?.[key] : null;
+    if (!effect) return;
+    const opensAt = since + (this.def?.guest?.stepInputs?.[key]?.fromMs ?? 0);
+    const entry = { key, since, handle: null };
+    entry.handle = this.clock.setTimeout(() => {
+      if (this._stepHaptics.get(guestId) !== entry) return;
+      entry.handle = null; // done; kept so the step is not scheduled again
+      const now = this.guestActors.get(guestId);
+      if (!now || !this.running || this.guidanceKey(now) !== key || now.regionSince('guidance') !== since) return;
+      this.playHaptic(guestId, effect, key);
+    }, Math.max(0, opensAt - this.now()));
+    this._stepHaptics.set(guestId, entry);
+  }
+
+  /**
+   * A room's `haptic.firstEntry`: felt on the guest's first confirmed entry
+   * to it — their visit count, just updated, is one. Every guest, whatever
+   * the room then is to them.
+   */
+  firstEntryHaptic(event) {
+    if (!this.running || event.occupancy !== 'inside' || !event.roomId) return;
+    if (event.roomId === event.previousRoomId) return;
+    const effect = this.def?.rooms?.[event.roomId]?.haptic?.firstEntry;
+    if (!effect) return;
+    const visits = this.guests.get(event.guestId)?.visitHistory?.[event.roomId]?.visits;
+    if (visits === 1) this.playHaptic(event.guestId, effect, `firstEntry:${event.roomId}`);
   }
 
   /**

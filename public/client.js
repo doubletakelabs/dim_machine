@@ -675,12 +675,14 @@ function clearImage(assetId) {
 let shownImage = null;
 
 /**
- * Named vibrations. In the app each is a waveform the app holds, with
- * strength (`DIMNative.haptic`); elsewhere, the same rhythm on and off.
- * `purr` is the faerie room's flash (2026-09-27): a rough, uneven second.
+ * Named vibrations (contract HAPTIC_EFFECTS). In the app each is a waveform
+ * the app holds, with strength (`DIMNative.haptic`); elsewhere, the same
+ * rhythm on and off. `purr` is the faerie room's flash (2026-09-27): a rough,
+ * uneven second. `heartbeat` is lub-dub, twice (2026-10-13).
  */
 const HAPTIC_EFFECTS = {
   purr: Array.from({ length: 20 }, () => 50),
+  heartbeat: [60, 110, 90, 500, 60, 110, 90],
 };
 
 function haptic(pattern, effect = null) {
@@ -688,6 +690,7 @@ function haptic(pattern, effect = null) {
     try { if (nativeApp?.haptic?.(effect)) return; } catch { /* fall back */ }
     pattern = HAPTIC_EFFECTS[effect] ?? pattern;
   }
+  if (!pattern) return;
   try { navigator.vibrate?.(pattern); } catch {}
 }
 

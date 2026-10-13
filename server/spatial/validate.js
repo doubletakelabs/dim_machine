@@ -20,6 +20,7 @@ import {
   ROOM_KINDS,
   OFF_PATH_ACTIVATION_EVENT,
   AUTHORED_GUEST_REGIONS,
+  HAPTIC_EFFECTS,
   enteredEvent,
 } from './contract.js';
 import { IMPLEMENTED_ELIGIBILITY_STRATEGIES } from './eligibility.js';
@@ -446,6 +447,29 @@ function checkRoom(roomId, room, errors, warnings) {
   checkRevisitVariants(roomId, room, errors);
   checkRoomCues(roomId, room, path, errors, warnings);
   checkRoomExperience(roomId, room, path, errors, warnings);
+  checkRoomHaptic(room, path, errors, warnings);
+}
+
+/**
+ * `haptic`: a named vibration a room gives a guest — today only `firstEntry`,
+ * felt on their first confirmed entry to it (2026-10-13: the rooms with
+ * something to do on the phone).
+ */
+function checkRoomHaptic(room, path, errors, warnings) {
+  if (room.haptic == null) return;
+  if (!isObject(room.haptic)) {
+    errors.push(`${path}.haptic must be an object, e.g. { "firstEntry": "heartbeat" }`);
+    return;
+  }
+  for (const [key, effect] of Object.entries(room.haptic)) {
+    if (key !== 'firstEntry') {
+      warnings.push(`${path}.haptic.${key} is not a haptic moment (firstEntry)`);
+      continue;
+    }
+    if (!HAPTIC_EFFECTS.includes(effect)) {
+      errors.push(`${path}.haptic.firstEntry must be one of ${HAPTIC_EFFECTS.join(', ')}`);
+    }
+  }
 }
 
 /**

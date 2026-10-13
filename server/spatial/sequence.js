@@ -36,7 +36,7 @@
  * or a slice of a longer recording via `offset`/`duration`.
  */
 
-import { INPUT_KINDS } from './contract.js';
+import { INPUT_KINDS, HAPTIC_EFFECTS } from './contract.js';
 
 /** `..._ontap.png` → tap, `..._ondelay2500.png` → a 2500ms hold. */
 const ADVANCE_PATTERN = /_on([a-z]+?)(\d+)?(?=\.[^.]*$)/i;
@@ -167,6 +167,19 @@ function expandOne(state, path, { cues, guest, bindings, errors, warnings }) {
         errors.push(`${stepAt}.listenFrom must be a number of seconds, 0 or more`);
       } else {
         guest.inputGates = { ...(guest.inputGates ?? {}), [`${at}.${stepId(i)}`]: Math.round(step.listenFrom * 1000) };
+      }
+    }
+
+    // `haptic`: a named vibration the moment the step starts taking its
+    // gesture — at its listenFrom, or as it begins without one (calibration,
+    // 2026-10-13: a heartbeat as tap, swipe and drag each open). Kept on the
+    // guest as `stepHaptics`, step state → effect; the runtime plays it once
+    // per arrival at the step.
+    if (step.haptic != null) {
+      if (!HAPTIC_EFFECTS.includes(step.haptic)) {
+        errors.push(`${stepAt}.haptic must be one of ${HAPTIC_EFFECTS.join(', ')}`);
+      } else {
+        guest.stepHaptics = { ...(guest.stepHaptics ?? {}), [`${at}.${stepId(i)}`]: step.haptic };
       }
     }
 

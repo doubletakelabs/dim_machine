@@ -90,6 +90,13 @@ export const REVISIT_EVENTS = {
  */
 export const OFF_PATH_ACTIVATION_EVENT = 'ACTIVATE_OFFPATH';
 
+/**
+ * The named vibrations a show may ask a phone for. Each is a waveform the
+ * Android app holds (`Haptics.kt`); a name the app does not know plays
+ * nothing there, so adding one here means an app release too.
+ */
+export const HAPTIC_EFFECTS = ['purr', 'heartbeat'];
+
 /** Room entry, as the guest machine hears it. Dotted, so `entered.*` works. */
 export const enteredEvent = (roomId) => `entered.${roomId}`;
 
