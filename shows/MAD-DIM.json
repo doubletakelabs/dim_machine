@@ -833,14 +833,29 @@
           "active": {
             "initial": "base",
             "on": {
-              "RELEASE": "idle",
+              "RELEASE": "settling",
               "TRACK_STOP": ".base"
             },
             "states": {
-              "base": {}
+              "base": {},
+              "last": {
+                "type": "history"
+              }
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active.last",
+              "RESUME": "active.last"
             }
           }
         }
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 5000,
+        "resumeIfReturned": true
       },
       "multiGuest": {
         "policy": "collaborative",
@@ -870,7 +885,8 @@
           "hold",
           "swipe"
         ],
-        "maxDrivers": 1
+        "maxDrivers": 1,
+        "keepDriverMs": 5000
       },
       "bg": {
         "audio": "audio/bg/M_SLOP.mp3",
@@ -1188,10 +1204,22 @@
           },
           "active": {
             "on": {
-              "RELEASE": "idle"
+              "RELEASE": "settling"
+            }
+          },
+          "settling": {
+            "on": {
+              "RESET": "idle",
+              "ACTIVATE": "active",
+              "RESUME": "active"
             }
           }
         }
+      },
+      "exit": {
+        "policy": "resetAfter",
+        "graceMs": 5000,
+        "resumeIfReturned": true
       },
       "multiGuest": {
         "policy": "collaborative",
@@ -1217,7 +1245,8 @@
           "tap",
           "hold"
         ],
-        "maxDrivers": 4
+        "maxDrivers": 4,
+        "keepDriverMs": 5000
       },
       "bg": {
         "audio": "audio/bg/M_CONSUMPTION II.mp3",
