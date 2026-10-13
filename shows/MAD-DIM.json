@@ -145,12 +145,39 @@
     },
     "entranceHallway": {
       "name": "Entrance Hallway",
-      "kind": "hallway",
+      "kind": "shared",
       "adjacent": [
         "calibration",
         "maskRoom"
       ],
       "stage": 3,
+      "machine": {
+        "id": "entranceHallway",
+        "initial": "idle",
+        "states": {
+          "idle": {
+            "on": {
+              "ACTIVATE": "active"
+            }
+          },
+          "active": {
+            "initial": "main",
+            "on": {
+              "RELEASE": "idle"
+            },
+            "states": {
+              "main": {}
+            }
+          }
+        }
+      },
+      "ineligible": {
+        "policy": "ignore"
+      },
+      "seen": {
+        "dwellMs": 8000,
+        "accumulate": true
+      },
       "zones": {
         "entranceHallway": {
           "polygon": [
@@ -184,8 +211,19 @@
       "thresholds": {
         "entranceHallway-door": {}
       },
+      "experience": {
+        "experienceId": "entrance-hollow-box",
+        "inputMode": "stream",
+        "inputs": [
+          "drag",
+          "release",
+          "tap"
+        ],
+        "maxDrivers": 4,
+        "keepDriverMs": 5000
+      },
       "cues": {
-        "idle": {
+        "active": {
           "audio": "audio/guidance/2-entry_hall.mp3"
         }
       },
