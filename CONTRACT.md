@@ -150,6 +150,7 @@ is allowed in — that keeps them portable across shows (spec §3.1).
 | `stage` | the room's place in the way through the building: a whole number from 1, shared by rooms guests move between freely (§4.2d) | **live** |
 | `thresholds` | the room's doorways, each `{}` — heard for `location.doorDwellMs` it enters the room; doors play nothing (§4.2c) | **live** |
 | `location` | per-room `entryConfirmMs` / `exitConfirmMs` overrides | **live** |
+| `haptic` | `{ "firstEntry": "heartbeat" }` — a named vibration on each guest's first confirmed entry to the room, whatever it then is to them (2026-10-13: the rooms with something to do on the phone) | **live** |
 
 Unknown keys are preserved and ignored, so authoring can run ahead of the runtime.
 
@@ -1173,6 +1174,13 @@ gesture then moves them on at once. The clip's length is read from the file
 (WAV, or MP3 by its VBR header or bitrate); if it cannot be, the gesture acts at
 once and the operator log says so.
 
+`"haptic": "heartbeat"` on a step vibrates the phone the moment the step starts
+taking its gesture — at its `listenFrom`, or as the step begins without one
+(calibration, 2026-10-13: as tap, swipe and drag each open). Once per arrival
+at the step; a guest who has moved on before it opens feels nothing, and a
+reconnecting phone is not buzzed again. The name must be one of the
+contract's `HAPTIC_EFFECTS` (below).
+
 A room experience with `"gesturesToShow": true` (the lobby, driven from
 calibration) is driven while the show teaches its gestures. The phone sends
 each tap, swipe and drag both to the piece and to the show's steps, and the
@@ -1261,7 +1269,15 @@ Unchanged from v0.2. Actions of the form
 | `playAudio` | `assetId`, `gain?` (0–1), `loop?`, `leadTimeMs?` |
 | `stopAudio` | `assetId?` (default `"*"`), `fadeMs?` |
 | `playVideo` | `assetId`, `loop?`, `leadTimeMs?` |
-| `haptic` | `pattern` (ms array), or `effect` — a named vibration: `"purr"` |
+| `haptic` | `pattern` (ms array), or `effect` — a named vibration: `"purr"`, `"heartbeat"` |
+
+**Named vibrations** (`HAPTIC_EFFECTS` in `server/spatial/contract.js`) are
+waveforms the Android app holds (`Haptics.kt`), so a new name is an app release
+as well as a contract change. A step's or a room's `haptic` is sent as a cue
+`{ kind: "haptic", effect }` straight to the phone — a moment, not reconciled
+state — and logged as `guest.haptic`. On a phone whose app does not know the
+name, the page plays the same rhythm on and off where the browser can vibrate,
+and nothing where it cannot.
 
 **The companion screen (2026-09-27).** The phone page's own screen
 (`public/companion.js`): the pulsing DIM, then an idle word on a cycling
