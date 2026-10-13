@@ -791,7 +791,7 @@ describe('pre-calibration, always heard to its end (2026-10-02)', () => {
   });
 
   it('holds the entrance hallway\'s line until it ends, then plays that from its top', () => {
-    const HALL = museum.rooms.entranceHallway.cues.idle.audio;
+    const HALL = museum.rooms.entranceHallway.cues.active.audio;
     const { rt, cues } = makeRuntime(null, io);
     const g = pressed(rt);
     const startedAt = rt.now();
@@ -813,7 +813,7 @@ describe('pre-calibration, always heard to its end (2026-10-02)', () => {
   });
 
   it('leaves the hallway\'s line alone for a guest who heard pre-calibration out', () => {
-    const HALL = museum.rooms.entranceHallway.cues.idle.audio;
+    const HALL = museum.rooms.entranceHallway.cues.active.audio;
     const { rt } = makeRuntime(null, io);
     const g = pressed(rt);
     rt.testAdvanceTime(20_000);
@@ -892,5 +892,28 @@ describe('a museum room\'s line stays in its room (2026-10-02)', () => {
     const d = rt.desiredCues(g.guestId);
     assert.notEqual(d.get('guidance')?.assetId, SI);
     assert.equal(d.get('room')?.assetId, museum.rooms.dataCenter.cues.active.audio);
+  });
+});
+
+describe('the Hollow Box, driven from the entrance hallway (2026-10-13)', () => {
+  // The address comes from the installation; any will do here.
+  const installed = (show) => { show.rooms.entranceHallway.experience.endpoint = 'ws://192.168.3.31:8080'; };
+
+  it('is a shared room, so a guest standing in it drives the box', () => {
+    const { rt, cues } = makeRuntime(installed);
+    const g = arrive(rt, cues);
+    walkTo(rt, g.guestId, 'entranceHallway');
+    const link = cues.filter((c) => c.kind === 'experience' && c.guestId === g.guestId).at(-1);
+    assert.ok(link, 'the phone is handed the box');
+    assert.equal(link.experienceId, 'entrance-hollow-box');
+    assert.deepEqual(link.inputs, ['drag', 'release', 'tap']);
+    assert.equal(link.endpoint, 'ws://192.168.3.31:8080');
+  });
+
+  it('still plays its line, as a room does on arrival', () => {
+    const { rt, cues } = makeRuntime(installed);
+    const g = arrive(rt, cues);
+    walkTo(rt, g.guestId, 'entranceHallway');
+    assert.ok(cues.some((c) => c.kind === 'audio' && c.assetId === museum.rooms.entranceHallway.cues.active.audio));
   });
 });
